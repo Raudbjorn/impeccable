@@ -435,6 +435,13 @@ const ANTIPATTERNS = [
       'Interactive and content-bearing UI text (links, buttons, nav items, labels, table cells, meta rows, timecodes) below 11px is a legibility failure, not a style choice. WCAG sets no absolute pixel floor, but functional text under 11px is a defensible quality bar: it fails on high-DPI and small viewports and it degrades tap and read targets. The 11px floor holds even inside a footer; only non-interactive legal smallprint gets the softer 10px floor. Being ON the DESIGN.md size ramp does not exempt a value here: adding 8px to the ramp launders the token but not the legibility problem, and that is exactly the escape hatch this rule closes. Exempts sup/sub, visually-hidden (sr-only) text, and code/terminal contexts. Decorative letterspaced micro-labels are still functional and stay in scope.',
   },
   {
+    id: 'label-line-height',
+    category: 'quality',
+    name: 'Oversized line-height on small text',
+    description:
+      'UI labels, chips, badges and small text elements should not inherit large body-text line heights. Use a tighter line-height so spacing is controlled by padding.',
+  },
+  {
     id: 'all-caps-body',
     category: 'quality',
     scopes: ['type'],
