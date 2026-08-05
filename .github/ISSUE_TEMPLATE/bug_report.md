@@ -29,6 +29,15 @@ assignees: ''
 
 <!-- What did you expect to happen? -->
 
+## How did you run impeccable?
+
+<!--
+  Confirm you used impeccable the way the docs describe: slash commands like
+  /impeccable audit inside your agent, or the npx impeccable CLI. If you drove
+  it through a custom script, wrapper, or automation instead, say so here.
+  Keep this short; do not paste the script.
+-->
+
 ## Provider & environment
 
 - **Provider** (Cursor / Claude Code / Gemini CLI / Codex / Copilot / Kiro / OpenCode):

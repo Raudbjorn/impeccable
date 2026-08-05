@@ -5,20 +5,17 @@ import { dirname, join } from 'node:path';
 
 import {
   AI_LABEL,
-  CLOSE_MARKER,
   GATE_LABEL,
   GATE_MARKER,
   REJECT_MARKER,
   evaluateComment,
   evaluateIssue,
-  evaluateSweep,
   loadTemplates,
   parseArgs,
   proseWordCount,
 } from '../scripts/github/issue-gate.mjs';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const NOW = '2026-08-05T12:00:00Z';
 
 let templates;
 before(() => {
@@ -37,6 +34,10 @@ Running the detect command against a directory crashes with a TypeError.
 ## Expected behavior
 
 A findings report.
+
+## How did you run impeccable?
+
+Via \`npx impeccable detect\` as documented.
 
 ## Provider & environment
 
@@ -76,7 +77,12 @@ describe('issue gate templates', () => {
   it('derives required sections from the real templates', () => {
     const bug = templates.find((template) => template.file === 'bug_report.md');
     const feature = templates.find((template) => template.file === 'feature_request.md');
-    assert.deepEqual(bug.requiredSections, ['what happened', 'steps to reproduce', 'provider & environment']);
+    assert.deepEqual(bug.requiredSections, [
+      'what happened',
+      'steps to reproduce',
+      'how did you run impeccable',
+      'provider & environment',
+    ]);
     assert.deepEqual(feature.requiredSections, ['what problem does this solve', 'proposed solution']);
   });
 });
@@ -117,10 +123,7 @@ describe('issue body gate', () => {
     assert.ok(plan.comment.includes(REJECT_MARKER));
   });
 
-  it('flags untouched template placeholders as empty sections', () => {
-    const bugTemplate = templates.find((template) => template.file === 'bug_report.md');
-    const untouched = [...bugTemplate.scaffoldLines].length > 0;
-    assert.ok(untouched);
+  it('accepts headings without judging the content under them', () => {
     const plan = evaluateIssue(issue({
       body: [
         '## What happened?',
@@ -133,6 +136,8 @@ describe('issue body gate', () => {
         '2. ',
         '3. ',
         '',
+        '## How did you run impeccable?',
+        '',
         '## Provider & environment',
         '',
         '- **Provider** (Cursor / Claude Code / Gemini CLI / Codex / Copilot / Kiro / OpenCode):',
@@ -140,19 +145,19 @@ describe('issue body gate', () => {
         '- **OS**: ',
       ].join('\n'),
     }), { templates });
-    assert.equal(plan.verdict, 'needs-work');
-    assert.equal(plan.reasons.length, 3);
-    assert.match(plan.reasons[0], /section "what happened" is empty/);
-    assert.equal(plan.shouldClose, false);
-    assert.deepEqual(plan.labelsToAdd, [GATE_LABEL]);
+    assert.equal(plan.verdict, 'pass');
   });
 
-  it('names a missing required section', () => {
+  it('names missing required sections', () => {
     const plan = evaluateIssue(issue({
       body: [
         '## What happened?',
         '',
         'The build fails.',
+        '',
+        '## How did you run impeccable?',
+        '',
+        'As documented, via /impeccable audit.',
         '',
         '## Provider & environment',
         '',
@@ -179,7 +184,7 @@ describe('issue body gate', () => {
     assert.equal(plan.verdict, 'pass');
   });
 
-  it('treats author sub-headings as section content, not section boundaries', () => {
+  it('ignores author sub-headings between template sections', () => {
     const plan = evaluateIssue(issue({
       body: [
         '## What happened?',
@@ -195,6 +200,10 @@ describe('issue body gate', () => {
         '### B. Another provider already installed',
         '',
         '1. Seed a Claude install first, then run the same command.',
+        '',
+        '## How did you run impeccable?',
+        '',
+        'CLI, as documented.',
         '',
         '## Provider & environment',
         '',
@@ -218,6 +227,17 @@ describe('issue body gate', () => {
     assert.equal(maintainer.exempt, true);
     const member = evaluateIssue(issue({ authorAssociation: 'COLLABORATOR', body: 'quick note' }), { templates });
     assert.equal(member.exempt, true);
+  });
+
+  it('warns a needs-work issue only once', () => {
+    const plan = evaluateIssue(issue({
+      body: FILLED_BUG_BODY + '\n' + words(700),
+      labels: [GATE_LABEL],
+      comments: [comment('github-actions[bot]', '2026-08-01T01:00:00Z', GATE_MARKER)],
+    }), { templates });
+    assert.equal(plan.verdict, 'needs-work');
+    assert.equal(plan.shouldComment, false);
+    assert.deepEqual(plan.labelsToAdd, []);
   });
 
   it('comments only once per issue', () => {
@@ -258,45 +278,6 @@ describe('issue body gate', () => {
       labels: [GATE_LABEL],
     }), { templates });
     assert.equal(plan.shouldReopen, false);
-  });
-});
-
-describe('sweep', () => {
-  it('closes an issue still failing five days after the warning', () => {
-    const plan = evaluateSweep(issue({
-      body: 'still no structure',
-      labels: [GATE_LABEL],
-      comments: [comment('github-actions[bot]', '2026-07-30T12:00:00Z', GATE_MARKER)],
-    }), { templates, now: NOW });
-    assert.equal(plan.shouldSweepClose, false);
-
-    const oversized = evaluateSweep(issue({
-      body: FILLED_BUG_BODY + '\n' + words(700),
-      labels: [GATE_LABEL],
-      comments: [comment('github-actions[bot]', '2026-07-30T12:00:00Z', GATE_MARKER)],
-    }), { templates, now: NOW });
-    assert.equal(oversized.shouldSweepClose, true);
-    assert.match(oversized.sweepComment, /failing for 6 days/);
-    assert.ok(oversized.sweepComment.includes(CLOSE_MARKER));
-  });
-
-  it('does not close before the warning has aged past close-days', () => {
-    const plan = evaluateSweep(issue({
-      body: FILLED_BUG_BODY + '\n' + words(700),
-      labels: [GATE_LABEL],
-      comments: [comment('github-actions[bot]', '2026-08-03T12:00:00Z', GATE_MARKER)],
-    }), { templates, now: NOW });
-    assert.equal(plan.shouldSweepClose, false);
-  });
-
-  it('lets a fixed issue pass instead of closing it', () => {
-    const plan = evaluateSweep(issue({
-      labels: [GATE_LABEL],
-      comments: [comment('github-actions[bot]', '2026-07-25T12:00:00Z', GATE_MARKER)],
-    }), { templates, now: NOW });
-    assert.equal(plan.verdict, 'pass');
-    assert.equal(plan.shouldSweepClose, false);
-    assert.deepEqual(plan.labelsToRemove, [GATE_LABEL]);
   });
 });
 

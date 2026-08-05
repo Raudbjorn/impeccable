@@ -2,23 +2,22 @@
 // Issue gate: deterministic slop control for GitHub issues.
 //
 // Three gates, all mechanical:
-//   1. Template structure: the body must contain the section headings from one
-//      of the issue templates, with real content under the required ones.
+//   1. Template structure: the body must contain the required section headings
+//      from one of the issue templates.
 //   2. Prose length: the body may not exceed a word budget once fenced code
 //      blocks and <details> blocks are excluded, so context dumps fail while
 //      long logs stay legal.
 //   3. Comment dumps: an oversized comment from the issue author within the
 //      first hour of the issue's life gets minimized as off-topic.
 //
-// Failing issues are labeled and warned once; a daily sweep closes issues that
-// still fail after --close-days. Every check re-runs on edit, and an issue the
-// gate closed is reopened automatically once it passes.
+// Issues with no template structure at all are closed immediately; partial
+// failures are labeled and warned once. Every check re-runs on edit, and an
+// issue the gate closed is reopened automatically once it passes.
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const MINUTE_MS = 60 * 1000;
 
 export const GATE_LABEL = 'policy: needs template';
@@ -31,7 +30,6 @@ export const LABEL_DEFS = [
 
 export const GATE_MARKER = '<!-- impeccable-issue-gate:needs-template -->';
 export const REJECT_MARKER = '<!-- impeccable-issue-gate:reject -->';
-export const CLOSE_MARKER = '<!-- impeccable-issue-gate:auto-close -->';
 
 const DEFAULT_MAINTAINERS = ['pbakaus', 'abdulwahabone'];
 const DEFAULT_TRUSTED_MARKER_AUTHORS = ['github-actions', 'github-actions[bot]'];
@@ -52,7 +50,6 @@ const OPTIONAL_SECTIONS = new Set([
 export const DEFAULT_MAX_PROSE_WORDS = 600;
 export const DEFAULT_COMMENT_MAX_PROSE_WORDS = 300;
 export const DEFAULT_COMMENT_WINDOW_MINUTES = 60;
-export const DEFAULT_CLOSE_DAYS = 5;
 
 // --- prose measurement -------------------------------------------------------
 
@@ -96,15 +93,11 @@ export function parseTemplate(fileName, raw) {
   const body = stripFrontmatter(raw);
   const nameMatch = raw.match(/^name:\s*(.+)$/m);
   const headings = extractHeadings(body);
-  const scaffoldLines = new Set(
-    body.split(/\r?\n/).map((line) => line.trim()).filter(Boolean),
-  );
   return {
     file: fileName,
     name: nameMatch ? nameMatch[1].trim() : fileName,
     headings,
     requiredSections: headings.filter((heading) => !OPTIONAL_SECTIONS.has(heading)),
-    scaffoldLines,
   };
 }
 
@@ -117,43 +110,11 @@ export function loadTemplates(dir) {
 
 // --- issue evaluation --------------------------------------------------------
 
-// Only headings that name a template section start a new section; authors use
-// other headings (sub-scenarios, log labels) as content inside a section.
-function splitSections(body, knownHeadings) {
-  const sections = new Map();
-  let current = null;
-  for (const line of String(body || '').split(/\r?\n/)) {
-    const match = line.match(/^#{2,3}\s+(.+)$/);
-    if (match && knownHeadings.has(normalizeHeading(match[1]))) {
-      current = normalizeHeading(match[1]);
-      if (!sections.has(current)) sections.set(current, []);
-      continue;
-    }
-    if (current) sections.get(current).push(line);
-  }
-  return sections;
-}
-
-// A section counts as filled when it contains at least one line the author
-// wrote: non-empty, not an HTML comment, and not copied verbatim from the
-// template scaffolding (numbered placeholders, field labels, unchecked boxes).
-function sectionIsFilled(lines, scaffoldLines) {
-  const withoutComments = stripNonProse(lines.join('\n'));
-  for (const rawLine of withoutComments.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line) continue;
-    if (scaffoldLines.has(line)) continue;
-    return true;
-  }
-  return false;
-}
-
 export function evaluateIssue(issue, options = {}) {
   const templates = options.templates || [];
   const maxProseWords = Number.isFinite(options.maxProseWords)
     ? options.maxProseWords
     : DEFAULT_MAX_PROSE_WORDS;
-  const closeDays = Number.isFinite(options.closeDays) ? options.closeDays : DEFAULT_CLOSE_DAYS;
   const maintainers = loginSet(options.maintainers || DEFAULT_MAINTAINERS);
   const trustedMarkerAuthors = loginSet(options.trustedMarkerAuthors || DEFAULT_TRUSTED_MARKER_AUTHORS);
   const repo = options.repo || '';
@@ -201,13 +162,9 @@ export function evaluateIssue(issue, options = {}) {
         matched: template.requiredSections.filter((section) => bodyHeadings.has(section)).length,
       }))
       .sort((a, b) => b.matched - a.matched)[0].template;
-    const knownHeadings = new Set(templates.flatMap((template) => template.headings));
-    const sections = splitSections(body, knownHeadings);
     for (const section of primary.requiredSections) {
       if (!bodyHeadings.has(section)) {
         reasons.push(`missing section "${section}" from the ${primary.name.toLowerCase()} template`);
-      } else if (!sectionIsFilled(sections.get(section) || [], primary.scaffoldLines)) {
-        reasons.push(`section "${section}" is empty or still contains only template placeholders`);
       }
     }
   }
@@ -227,8 +184,7 @@ export function evaluateIssue(issue, options = {}) {
 
   if (verdict === 'pass') {
     if (labels.has(GATE_LABEL)) plan.labelsToRemove.push(GATE_LABEL);
-    const closedByGate = hasMarker(comments, REJECT_MARKER, trustedMarkerAuthors)
-      || hasMarker(comments, CLOSE_MARKER, trustedMarkerAuthors);
+    const closedByGate = hasMarker(comments, REJECT_MARKER, trustedMarkerAuthors);
     plan.shouldReopen = issue.state === 'closed' && labels.has(GATE_LABEL) && closedByGate;
     return plan;
   }
@@ -243,31 +199,8 @@ export function evaluateIssue(issue, options = {}) {
   }
 
   plan.shouldComment = !hasMarker(comments, GATE_MARKER, trustedMarkerAuthors);
-  plan.comment = needsWorkComment(reasons, { repo, closeDays });
+  plan.comment = needsWorkComment(reasons, { repo });
   return plan;
-}
-
-export function evaluateSweep(issue, options = {}) {
-  const closeDays = Number.isFinite(options.closeDays) ? options.closeDays : DEFAULT_CLOSE_DAYS;
-  const trustedMarkerAuthors = loginSet(options.trustedMarkerAuthors || DEFAULT_TRUSTED_MARKER_AUTHORS);
-  const now = toDate(options.now || new Date());
-
-  const plan = evaluateIssue(issue, options);
-  if (plan.verdict === 'pass' || plan.verdict === 'reject') {
-    return { ...plan, shouldSweepClose: false, sweepComment: '' };
-  }
-
-  const warnedAt = latestMarkerAt(issue.comments || [], GATE_MARKER, trustedMarkerAuthors);
-  const failingDays = warnedAt
-    ? Math.floor((now.getTime() - warnedAt.getTime()) / DAY_MS)
-    : 0;
-  const shouldSweepClose = issue.state === 'open' && Boolean(warnedAt) && failingDays >= closeDays;
-  return {
-    ...plan,
-    shouldComment: plan.shouldComment && !shouldSweepClose,
-    shouldSweepClose,
-    sweepComment: shouldSweepClose ? sweepCloseComment(failingDays) : '',
-  };
 }
 
 // --- comment evaluation ------------------------------------------------------
@@ -311,14 +244,14 @@ function templatesUrl(repo) {
     : '.github/ISSUE_TEMPLATE';
 }
 
-export function needsWorkComment(reasons, { repo = '', closeDays = DEFAULT_CLOSE_DAYS } = {}) {
+export function needsWorkComment(reasons, { repo = '' } = {}) {
   return [
     GATE_MARKER,
     'Thanks for filing this. It does not pass the issue template checks yet:',
     '',
     ...reasons.map((reason) => `- ${reason}`),
     '',
-    `Please edit the issue body itself (not a new comment) to follow one of the [issue templates](${templatesUrl(repo)}). The checks run again on every edit and clear the label once they pass. Issues that still fail after ${closeDays} days are closed automatically.`,
+    `Please edit the issue body itself (not a new comment) to follow one of the [issue templates](${templatesUrl(repo)}). The checks run again on every edit and clear the label once they pass.`,
     '',
     'If AI helped write this issue, include the line `AI-assisted: yes` in the body.',
   ].join('\n');
@@ -332,15 +265,6 @@ export function rejectComment(repo = '') {
     `To continue, edit the issue body to follow one of the [issue templates](${templatesUrl(repo)}). The checks run again on every edit, and this issue is reopened automatically once they pass.`,
     '',
     'If AI helped write this issue, include the line `AI-assisted: yes` in the body.',
-  ].join('\n');
-}
-
-export function sweepCloseComment(failingDays) {
-  return [
-    CLOSE_MARKER,
-    `Closing this because the issue template checks have been failing for ${failingDays} days.`,
-    '',
-    'Edit the issue body to pass the checks and it is reopened automatically on the next edit.',
   ].join('\n');
 }
 
@@ -362,11 +286,6 @@ export async function main(argv = process.argv.slice(2)) {
     return;
   }
 
-  if (options.sweep) {
-    runSweep(repo, options);
-    return;
-  }
-
   if (options.issue) {
     const issue = fetchIssue(repo, options.issue);
     if (!issue) throw new Error(`Issue #${options.issue} not found.`);
@@ -376,7 +295,7 @@ export async function main(argv = process.argv.slice(2)) {
     return;
   }
 
-  throw new Error('Nothing to do. Pass --issue N, --issue N --comment-id ID, or --sweep.');
+  throw new Error('Nothing to do. Pass --issue N or --issue N --comment-id ID.');
 }
 
 function runCommentGate(repo, options) {
@@ -406,22 +325,6 @@ function runCommentGate(repo, options) {
   if (options.apply) minimizeComment(comment.nodeId);
 }
 
-function runSweep(repo, options) {
-  const issues = fetchGateLabeledIssues(repo);
-  for (const issue of issues) {
-    issue.comments = fetchIssueComments(repo, issue.number);
-    const plan = evaluateSweep(issue, options);
-    printPlan(plan, options);
-    if (!options.apply) continue;
-    applyIssuePlan(repo, plan);
-    if (plan.shouldSweepClose) {
-      postComment(repo, plan.number, plan.sweepComment);
-      closeIssue(repo, plan.number);
-    }
-  }
-  console.log(`${options.apply ? 'Applied' : 'Dry run'} issue-gate sweep for ${issues.length} labeled issue(s).`);
-}
-
 function applyIssuePlan(repo, plan) {
   if (plan.exempt) return;
   if (plan.shouldReopen) reopenIssue(repo, plan.number);
@@ -439,7 +342,6 @@ function printPlan(plan, { apply }) {
     plan.shouldComment ? 'comment' : '',
     plan.shouldClose ? 'close' : '',
     plan.shouldReopen ? 'reopen' : '',
-    plan.shouldSweepClose ? 'sweep-close' : '',
   ].filter(Boolean);
   console.log(`${apply ? 'apply' : 'dry-run'} #${plan.number} ${plan.title || ''}: ${changes.join(' ')}`);
   for (const reason of plan.reasons) console.log(`  - ${reason}`);
@@ -449,14 +351,12 @@ export function parseArgs(argv) {
   const options = {
     apply: false,
     ensureLabels: true,
-    sweep: false,
     issue: null,
     commentId: null,
     templatesDir: '.github/ISSUE_TEMPLATE',
     maxProseWords: DEFAULT_MAX_PROSE_WORDS,
     commentMaxProseWords: DEFAULT_COMMENT_MAX_PROSE_WORDS,
     windowMinutes: DEFAULT_COMMENT_WINDOW_MINUTES,
-    closeDays: DEFAULT_CLOSE_DAYS,
     maintainers: DEFAULT_MAINTAINERS,
     now: new Date(),
   };
@@ -465,7 +365,6 @@ export function parseArgs(argv) {
     const arg = argv[i];
     if (arg === '--apply') options.apply = true;
     else if (arg === '--dry-run') options.apply = false;
-    else if (arg === '--sweep') options.sweep = true;
     else if (arg === '--no-label-ensure') options.ensureLabels = false;
     else if (arg === '--repo') options.repo = requireValue(argv, ++i, arg);
     else if (arg === '--issue') options.issue = Number(requireValue(argv, ++i, arg));
@@ -474,7 +373,6 @@ export function parseArgs(argv) {
     else if (arg === '--max-words') options.maxProseWords = Number(requireValue(argv, ++i, arg));
     else if (arg === '--comment-max-words') options.commentMaxProseWords = Number(requireValue(argv, ++i, arg));
     else if (arg === '--comment-window-minutes') options.windowMinutes = Number(requireValue(argv, ++i, arg));
-    else if (arg === '--close-days') options.closeDays = Number(requireValue(argv, ++i, arg));
     else if (arg === '--maintainers') options.maintainers = splitList(requireValue(argv, ++i, arg));
     else if (arg === '--now') options.now = new Date(requireValue(argv, ++i, arg));
     else if (arg === '--help' || arg === '-h') {
@@ -490,9 +388,6 @@ export function parseArgs(argv) {
   }
   if (!Number.isFinite(options.maxProseWords) || options.maxProseWords <= 0) {
     throw new Error('--max-words must be a positive number.');
-  }
-  if (!Number.isFinite(options.closeDays) || options.closeDays < 1) {
-    throw new Error('--close-days must be at least 1.');
   }
   if (Number.isNaN(options.now.getTime())) throw new Error('--now must be a valid date.');
 
@@ -551,17 +446,6 @@ function fetchComment(repo, commentId) {
     authorLogin: raw.user?.login || '',
     authorAssociation: raw.author_association || '',
   };
-}
-
-function fetchGateLabeledIssues(repo) {
-  const pages = runGhJson([
-    'api',
-    '--paginate',
-    '--slurp',
-    `repos/${repo}/issues?state=open&labels=${encodeURIComponent(GATE_LABEL)}&per_page=100`,
-  ]);
-  const flat = Array.isArray(pages) ? pages.flat() : [];
-  return flat.map(normalizeIssue).filter((issue) => !issue.isPullRequest);
 }
 
 function ensureLabels(repo) {
@@ -637,17 +521,6 @@ function hasMarker(comments = [], marker, trustedAuthors) {
   return comments.some((comment) => isTrustedMarkerComment(comment, marker, trustedAuthors));
 }
 
-function latestMarkerAt(comments = [], marker, trustedAuthors) {
-  let latest = null;
-  for (const comment of comments) {
-    if (!isTrustedMarkerComment(comment, marker, trustedAuthors)) continue;
-    const date = toDate(comment.createdAt);
-    if (Number.isNaN(date.getTime())) continue;
-    if (!latest || date > latest) latest = date;
-  }
-  return latest;
-}
-
 function isTrustedMarkerComment(comment, marker, trustedAuthors) {
   if (typeof comment?.body !== 'string' || !comment.body.includes(marker)) return false;
   return trustedAuthors.has(normalizeLogin(comment.authorLogin));
@@ -709,7 +582,6 @@ Default mode is a dry run.
 Modes:
   --issue N                       evaluate one issue body (workflow: issues opened/edited)
   --issue N --comment-id ID       evaluate one comment (workflow: issue_comment created)
-  --sweep                         re-check all '${GATE_LABEL}' issues and close long-failing ones
 
 Options:
   --apply                         mutate labels, comments, and issue state
@@ -719,7 +591,6 @@ Options:
   --max-words n                   prose word budget for issue bodies (default: ${DEFAULT_MAX_PROSE_WORDS})
   --comment-max-words n           prose word budget for early self-replies (default: ${DEFAULT_COMMENT_MAX_PROSE_WORDS})
   --comment-window-minutes n      self-reply window after issue creation (default: ${DEFAULT_COMMENT_WINDOW_MINUTES})
-  --close-days n                  days a warned issue may keep failing before close (default: ${DEFAULT_CLOSE_DAYS})
   --maintainers a,b               logins exempt from all gates
   --no-label-ensure               skip creating gate labels
 `);
