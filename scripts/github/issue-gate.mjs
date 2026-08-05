@@ -139,11 +139,17 @@ export function evaluateIssue(issue, options = {}) {
     shouldReopen: false,
   };
 
+  // Disclosure labeling mirrors the body for every author, exempt or not; the
+  // exemption below only covers the template and length gates.
+  const body = String(issue.body || '');
+  base.aiAssisted = AI_DISCLOSURE.test(body);
+  if (base.aiAssisted && !labels.has(AI_LABEL)) base.labelsToAdd.push(AI_LABEL);
+  if (!base.aiAssisted && labels.has(AI_LABEL)) base.labelsToRemove.push(AI_LABEL);
+
   if (maintainers.has(author) || EXEMPT_ASSOCIATIONS.has(issue.authorAssociation)) {
     return { ...base, exempt: true };
   }
 
-  const body = String(issue.body || '');
   const bodyHeadings = new Set(extractHeadings(body));
   const anyTemplateHeading = templates.some(
     (template) => template.headings.some((heading) => bodyHeadings.has(heading)),
@@ -179,9 +185,6 @@ export function evaluateIssue(issue, options = {}) {
   if (verdict !== 'reject' && reasons.length > 0) verdict = 'needs-work';
 
   const plan = { ...base, verdict, reasons };
-  plan.aiAssisted = AI_DISCLOSURE.test(body);
-  if (plan.aiAssisted && !labels.has(AI_LABEL)) plan.labelsToAdd.push(AI_LABEL);
-  if (!plan.aiAssisted && labels.has(AI_LABEL)) plan.labelsToRemove.push(AI_LABEL);
 
   if (verdict === 'pass') {
     if (labels.has(GATE_LABEL)) plan.labelsToRemove.push(GATE_LABEL);
@@ -326,8 +329,8 @@ function runCommentGate(repo, options) {
   if (options.apply) minimizeComment(comment.nodeId);
 }
 
+// Exempt plans still reach here: they carry only disclosure-label actions.
 function applyIssuePlan(repo, plan) {
-  if (plan.exempt) return;
   if (plan.shouldReopen) reopenIssue(repo, plan.number);
   for (const label of plan.labelsToRemove) removeLabel(repo, plan.number, label);
   if (plan.labelsToAdd.length > 0) addLabels(repo, plan.number, plan.labelsToAdd);

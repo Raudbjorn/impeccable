@@ -238,6 +238,23 @@ describe('issue body gate', () => {
     assert.equal(member.exempt, true);
   });
 
+  it('still reconciles the AI label for exempt authors', () => {
+    const disclosed = evaluateIssue(issue({
+      authorLogin: 'pbakaus',
+      body: 'AI-assisted: yes\n\nquick note',
+    }), { templates });
+    assert.equal(disclosed.exempt, true);
+    assert.deepEqual(disclosed.labelsToAdd, [AI_LABEL]);
+
+    const undisclosed = evaluateIssue(issue({
+      authorLogin: 'pbakaus',
+      body: 'quick note',
+      labels: [AI_LABEL],
+    }), { templates });
+    assert.equal(undisclosed.exempt, true);
+    assert.deepEqual(undisclosed.labelsToRemove, [AI_LABEL]);
+  });
+
   it('warns a needs-work issue only once', () => {
     const plan = evaluateIssue(issue({
       body: FILLED_BUG_BODY + '\n' + words(700),
