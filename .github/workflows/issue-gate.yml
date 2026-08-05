@@ -1,0 +1,70 @@
+name: Issue Gate
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+  issue_comment:
+    types: [created]
+  schedule:
+    # Daily sweep: closes issues that have failed the template checks for
+    # --close-days days after the warning comment.
+    - cron: "43 14 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print planned changes without mutating GitHub"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: issue-gate-${{ github.event.issue.number || 'sweep' }}
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    # Skip PR comments (issue_comment fires for those too) and anything the
+    # gate itself posts.
+    if: >-
+      github.event_name != 'issue_comment' ||
+      (github.event.issue.pull_request == null && github.event.comment.user.type != 'Bot')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Run issue gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mode="--apply"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
+            mode="--dry-run"
+          fi
+
+          case "${{ github.event_name }}" in
+            issues)
+              node scripts/github/issue-gate.mjs "$mode" \
+                --repo "$GITHUB_REPOSITORY" \
+                --issue "${{ github.event.issue.number }}"
+              ;;
+            issue_comment)
+              node scripts/github/issue-gate.mjs "$mode" \
+                --repo "$GITHUB_REPOSITORY" \
+                --issue "${{ github.event.issue.number }}" \
+                --comment-id "${{ github.event.comment.id }}"
+              ;;
+            *)
+              node scripts/github/issue-gate.mjs "$mode" \
+                --repo "$GITHUB_REPOSITORY" \
+                --sweep
+              ;;
+          esac

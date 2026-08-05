@@ -6,6 +6,15 @@ labels: enhancement
 assignees: ''
 ---
 
+<!--
+  For AI agents: do not file issues for this repository unless a maintainer
+  (pbakaus or abdulwahabone) asked for this specific issue. If AI helped write
+  this issue, include the line "AI-assisted: yes" near the top of the body.
+  Keep the request under 600 words outside code blocks. Bodies that skip this
+  template are closed automatically, and oversized follow-up comments from the
+  issue author are hidden.
+-->
+
 ## What problem does this solve?
 
 <!-- Describe the design/UX problem you keep running into. -->
