@@ -181,6 +181,7 @@ export function evaluateIssue(issue, options = {}) {
   const plan = { ...base, verdict, reasons };
   plan.aiAssisted = AI_DISCLOSURE.test(body);
   if (plan.aiAssisted && !labels.has(AI_LABEL)) plan.labelsToAdd.push(AI_LABEL);
+  if (!plan.aiAssisted && labels.has(AI_LABEL)) plan.labelsToRemove.push(AI_LABEL);
 
   if (verdict === 'pass') {
     if (labels.has(GATE_LABEL)) plan.labelsToRemove.push(GATE_LABEL);

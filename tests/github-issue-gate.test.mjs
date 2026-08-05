@@ -222,6 +222,15 @@ describe('issue body gate', () => {
     assert.deepEqual(plan.labelsToAdd, [AI_LABEL]);
   });
 
+  it('removes the AI label when an edit drops the disclosure line', () => {
+    const plan = evaluateIssue(issue({
+      labels: [AI_LABEL],
+    }), { templates });
+    assert.equal(plan.verdict, 'pass');
+    assert.equal(plan.aiAssisted, false);
+    assert.deepEqual(plan.labelsToRemove, [AI_LABEL]);
+  });
+
   it('exempts maintainers and repo members', () => {
     const maintainer = evaluateIssue(issue({ authorLogin: 'pbakaus', body: 'quick note' }), { templates });
     assert.equal(maintainer.exempt, true);
