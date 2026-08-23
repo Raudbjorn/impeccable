@@ -1021,7 +1021,10 @@ describe('new-work-e2e: fake image generation', () => {
   it('reads, scans, and idempotently replaces the prompt embedded in a PNG', () => {
     const cwd = mkdtempSync(path.join(tmpdir(), 'new-work-img-'));
     try {
-      const image = makeFakeImage(cwd, 'synthetic source prompt', 'comp.png');
+      const image = makeFakeImage(cwd, 'synthetic IEND source prompt', 'comp.png');
+      const original = readFileSync(image);
+      assert.ok(original.indexOf(Buffer.from('IEND')) < original.lastIndexOf(Buffer.from('IEND')),
+        'the fixture carries IEND bytes in metadata before the real terminator chunk');
 
       const first = spawnSyncEmbed([image, '--prompt', 'first production prompt']);
       assert.equal(first.status, 0, first.stderr);

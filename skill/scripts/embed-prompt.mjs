@@ -139,14 +139,14 @@ if (!prompt) { console.error('embed-prompt: --prompt or --prompt-file required')
 
 if (type === 'png') {
   // Insert (or replace) our tEXt chunk immediately before IEND.
-  const iend = buf.indexOf(Buffer.from('IEND', 'ascii')) - 4;
+  const { chunks, prompt: existingPrompt } = parsePng(buf);
+  const iend = chunks.find((chunk) => chunk.type === 'IEND')?.offset ?? -1;
   if (iend < 8) { console.error('embed-prompt: malformed PNG'); process.exit(1); }
   // Drop any existing chunk with our keyword to keep embedding idempotent.
-  const { chunks, prompt: existingPrompt } = parsePng(buf);
   const replacing = existingPrompt != null;
   const body = replacing
     ? Buffer.concat(chunks
-      .filter((chunk) => chunk.offset < iend + 12 && chunk.type !== 'IEND' && !chunk.promptChunk)
+      .filter((chunk) => chunk.offset < iend && !chunk.promptChunk)
       .map((chunk) => chunk.bytes))
     : buf.subarray(8, iend);
   const promptChunk = pngChunk('tEXt', Buffer.concat([Buffer.from(KEYWORD, 'latin1'), Buffer.from([0]), Buffer.from(prompt, 'utf8')]));
