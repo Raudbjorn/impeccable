@@ -44,6 +44,15 @@ const SETUP_FALLBACK_TEXT =
 const SETUP_PLUGIN_TEXT =
   'Every `node "<skill-base-dir>/scripts/..."` command in this skill and its references resolves against that base directory.';
 
+// Agent files are subagent system prompts: a spawned agent never loads
+// SKILL.md, so Setup's <skill-base-dir> token is undefined in the one
+// context that must act on it (review finding). Claude Code substitutes
+// ${CLAUDE_PLUGIN_ROOT} inline anywhere in plugin skill and agent content
+// (code.claude.com/docs/en/plugins-reference), so agent instructions carry
+// the variable form; where a harness leaves it unsubstituted, the variable
+// still names the plugin install directory for the agent to locate.
+export const PLUGIN_AGENT_SCRIPTS_PATH = '${CLAUDE_PLUGIN_ROOT}/skills/impeccable/scripts';
+
 /**
  * Rewrite one markdown file's content for the plugin subtree. Pure, so the
  * unit suite can pin every rewrite without a build.
@@ -62,6 +71,21 @@ export function rewritePluginMarkdown(content) {
     // carries natively (Setup step 1). Runs after the path replacement so
     // one pattern covers both origins; already-quoted forms don't match.
     .replace(/node <skill-base-dir>\/scripts\/([^\s`"]+)/g, 'node "<skill-base-dir>/scripts/$1"');
+}
+
+/**
+ * Rewrite one agent file's content for the plugin subtree. Same quoting
+ * discipline as the skill rewrite, but the path is the plugin-root
+ * variable rather than the skill-base-dir token SKILL.md defines,
+ * because no SKILL.md travels with a spawned agent.
+ */
+export function rewritePluginAgentMarkdown(content) {
+  return content
+    .replaceAll(CLAUDE_PROJECT_SCRIPTS_PATH, PLUGIN_AGENT_SCRIPTS_PATH)
+    .replace(
+      /node \$\{CLAUDE_PLUGIN_ROOT\}\/skills\/impeccable\/scripts\/([^\s`"]+)/g,
+      'node "${CLAUDE_PLUGIN_ROOT}/skills/impeccable/scripts/$1"',
+    );
 }
 
 /**
@@ -98,20 +122,21 @@ export function verifyPluginSkillRewrite(skillMdPath) {
 }
 
 /**
- * Apply rewritePluginMarkdown to every .md file under dir, recursively.
+ * Apply a rewrite to every .md file under dir, recursively. Defaults to
+ * the skill rewrite; the agents directory passes rewritePluginAgentMarkdown.
  * Script files are left alone: the only project-relative paths in them
  * (hook-admin.mjs) install project-scoped hooks via ${CLAUDE_PROJECT_DIR},
  * which is that command's actual job.
  */
-export function rewritePluginMarkdownTree(dir) {
+export function rewritePluginMarkdownTree(dir, rewrite = rewritePluginMarkdown) {
   if (!fs.existsSync(dir)) return;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const entryPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      rewritePluginMarkdownTree(entryPath);
+      rewritePluginMarkdownTree(entryPath, rewrite);
     } else if (entry.name.endsWith('.md')) {
       const original = fs.readFileSync(entryPath, 'utf-8');
-      const rewritten = rewritePluginMarkdown(original);
+      const rewritten = rewrite(original);
       if (rewritten !== original) fs.writeFileSync(entryPath, rewritten);
     }
   }

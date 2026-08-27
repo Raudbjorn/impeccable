@@ -24,7 +24,11 @@ import { hooksJsonFor, buildClaudePluginHooksManifest } from './lib/transformers
 import { createAllZips, createProviderZip } from './lib/zip.js';
 import { collectPluginVersions } from './lib/validate-plugin-versions.js';
 import { collectPluginManifestFindings } from './lib/validate-plugin-manifest.js';
-import { rewritePluginMarkdownTree, verifyPluginSkillRewrite } from './lib/plugin-paths.js';
+import {
+  rewritePluginMarkdownTree,
+  rewritePluginAgentMarkdown,
+  verifyPluginSkillRewrite,
+} from './lib/plugin-paths.js';
 import { stageOpenAIPlugin } from './lib/openai-plugin.js';
 import { ANTIPATTERNS } from '../cli/engine/registry/antipatterns.mjs';
 // Sub-page generation is now handled by Astro content collections.
@@ -755,7 +759,9 @@ async function build() {
     // so a dual install silently runs the project's older skill copy (issue
     // #523). Rewrite the copied markdown to the skill-base-dir form.
     rewritePluginMarkdownTree(pluginSkillsDir);
-    rewritePluginMarkdownTree(pluginAgentsDir);
+    // Agents get the plugin-root variable, not the skill-base-dir token:
+    // a spawned agent never loads SKILL.md, so the token is undefined there.
+    rewritePluginMarkdownTree(pluginAgentsDir, rewritePluginAgentMarkdown);
     verifyPluginSkillRewrite(path.join(pluginSkillsDir, 'impeccable', 'SKILL.md'));
 
     // Ship the design detector as a plugin-packaged hook. Claude Code and

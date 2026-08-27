@@ -17,6 +17,7 @@ import os from 'os';
 import path from 'path';
 import {
   rewritePluginMarkdown,
+  rewritePluginAgentMarkdown,
   rewritePluginMarkdownTree,
   verifyPluginSkillRewrite,
   CLAUDE_PROJECT_SCRIPTS_PATH,
@@ -92,6 +93,26 @@ describe('rewritePluginMarkdown', () => {
   });
 });
 
+describe('rewritePluginAgentMarkdown', () => {
+  test('rewrites agent instructions to the quoted plugin-root variable form', () => {
+    // A spawned agent never loads SKILL.md, so the <skill-base-dir> token
+    // Setup defines is unresolvable in its prompt. Claude Code substitutes
+    // ${CLAUDE_PLUGIN_ROOT} inline in plugin agent content.
+    const input =
+      'run `node .claude/skills/impeccable/scripts/embed-prompt.mjs <asset> --prompt "<the prompt used>"`';
+    expect(rewritePluginAgentMarkdown(input)).toBe(
+      'run `node "${CLAUDE_PLUGIN_ROOT}/skills/impeccable/scripts/embed-prompt.mjs" <asset> --prompt "<the prompt used>"`',
+    );
+  });
+
+  test('never emits the skill-base-dir token into an agent file', () => {
+    const input = 'node .claude/skills/impeccable/scripts/embed-prompt.mjs asset.png';
+    const output = rewritePluginAgentMarkdown(input);
+    expect(output).not.toContain('<skill-base-dir>');
+    expect(output).not.toContain(CLAUDE_PROJECT_SCRIPTS_PATH);
+  });
+});
+
 describe('rewritePluginMarkdownTree', () => {
   let root;
 
@@ -127,6 +148,21 @@ describe('rewritePluginMarkdownTree', () => {
     );
     expect(fs.readFileSync(path.join(root, 'scripts/hook-admin.mjs'), 'utf-8')).toContain(
       '${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/hook.mjs',
+    );
+  });
+
+  test('applies the agent rewrite when passed for an agents tree', () => {
+    const agentsDir = path.join(root, 'agents');
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(agentsDir, 'impeccable-asset-producer.md'),
+      'run `node .claude/skills/impeccable/scripts/embed-prompt.mjs <asset>`',
+    );
+
+    rewritePluginMarkdownTree(agentsDir, rewritePluginAgentMarkdown);
+
+    expect(fs.readFileSync(path.join(agentsDir, 'impeccable-asset-producer.md'), 'utf-8')).toBe(
+      'run `node "${CLAUDE_PLUGIN_ROOT}/skills/impeccable/scripts/embed-prompt.mjs" <asset>`',
     );
   });
 
