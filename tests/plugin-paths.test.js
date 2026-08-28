@@ -20,7 +20,9 @@ import {
   rewritePluginAgentMarkdown,
   rewritePluginMarkdownTree,
   verifyPluginSkillRewrite,
+  verifyPluginAgentRewrite,
   CLAUDE_PROJECT_SCRIPTS_PATH,
+  AGENT_EMBED_FALLBACK,
 } from '../scripts/lib/plugin-paths.js';
 
 describe('rewritePluginMarkdown', () => {
@@ -94,22 +96,77 @@ describe('rewritePluginMarkdown', () => {
 });
 
 describe('rewritePluginAgentMarkdown', () => {
+  // The real source sentence shape: command, purpose clause, next sentence.
+  const sourceStep =
+    'after every generation, run `node .claude/skills/impeccable/scripts/embed-prompt.mjs <asset> ' +
+    '--prompt "<the prompt used>"` so the prompt lives inside the image itself. The build thread ' +
+    'composes what you made.';
+
   test('rewrites agent instructions to the quoted plugin-root variable form', () => {
     // A spawned agent never loads SKILL.md, so the <skill-base-dir> token
     // Setup defines is unresolvable in its prompt. Claude Code substitutes
     // ${CLAUDE_PLUGIN_ROOT} inline in plugin agent content.
-    const input =
-      'run `node .claude/skills/impeccable/scripts/embed-prompt.mjs <asset> --prompt "<the prompt used>"`';
-    expect(rewritePluginAgentMarkdown(input)).toBe(
+    const output = rewritePluginAgentMarkdown(sourceStep);
+    expect(output).toContain(
       'run `node "${CLAUDE_PLUGIN_ROOT}/skills/impeccable/scripts/embed-prompt.mjs" <asset> --prompt "<the prompt used>"`',
     );
   });
 
+  test('appends the sidecar fallback as its own sentence, not mid-sentence', () => {
+    const output = rewritePluginAgentMarkdown(sourceStep);
+    // The fallback follows the full embed sentence and precedes the next one.
+    expect(output).toContain(
+      `so the prompt lives inside the image itself.${AGENT_EMBED_FALLBACK} The build thread`,
+    );
+  });
+
   test('never emits the skill-base-dir token into an agent file', () => {
-    const input = 'node .claude/skills/impeccable/scripts/embed-prompt.mjs asset.png';
-    const output = rewritePluginAgentMarkdown(input);
+    const output = rewritePluginAgentMarkdown(sourceStep);
     expect(output).not.toContain('<skill-base-dir>');
     expect(output).not.toContain(CLAUDE_PROJECT_SCRIPTS_PATH);
+  });
+});
+
+describe('verifyPluginAgentRewrite', () => {
+  let root;
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-agent-verify-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  const writeAgent = (contents) => {
+    const p = path.join(root, 'agent.md');
+    fs.writeFileSync(p, contents);
+    return p;
+  };
+
+  const sourceStep =
+    'run `node .claude/skills/impeccable/scripts/embed-prompt.mjs <asset> --prompt "<p>"` ' +
+    'so the prompt lives inside the image itself. Next sentence.';
+
+  test('accepts a correctly rewritten agent file', () => {
+    const p = writeAgent(rewritePluginAgentMarkdown(sourceStep));
+    expect(() => verifyPluginAgentRewrite(p)).not.toThrow();
+  });
+
+  test('fails when an unresolvable path form survives', () => {
+    const p = writeAgent('run `node "<skill-base-dir>/scripts/embed-prompt.mjs"` please.');
+    expect(() => verifyPluginAgentRewrite(p)).toThrow(/cannot\s+resolve/);
+  });
+
+  test('fails when the embed instruction lost its fallback sentence', () => {
+    // Simulate a source rewording that breaks the fallback anchor: the
+    // sentence-splice regex no-ops when no period follows the command.
+    const reworded = sourceStep.replace(
+      ' so the prompt lives inside the image itself. Next sentence.',
+      ' -- no closing period',
+    );
+    const p = writeAgent(rewritePluginAgentMarkdown(reworded));
+    expect(() => verifyPluginAgentRewrite(p)).toThrow(/sidecar/);
   });
 });
 

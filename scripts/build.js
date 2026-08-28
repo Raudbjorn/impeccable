@@ -28,6 +28,7 @@ import {
   rewritePluginMarkdownTree,
   rewritePluginAgentMarkdown,
   verifyPluginSkillRewrite,
+  verifyPluginAgentRewrite,
 } from './lib/plugin-paths.js';
 import { stageOpenAIPlugin } from './lib/openai-plugin.js';
 import { ANTIPATTERNS } from '../cli/engine/registry/antipatterns.mjs';
@@ -763,6 +764,11 @@ async function build() {
     // a spawned agent never loads SKILL.md, so the token is undefined there.
     rewritePluginMarkdownTree(pluginAgentsDir, rewritePluginAgentMarkdown);
     verifyPluginSkillRewrite(path.join(pluginSkillsDir, 'impeccable', 'SKILL.md'));
+    if (fs.existsSync(pluginAgentsDir)) {
+      for (const agentFile of fs.readdirSync(pluginAgentsDir)) {
+        if (agentFile.endsWith('.md')) verifyPluginAgentRewrite(path.join(pluginAgentsDir, agentFile));
+      }
+    }
 
     // Ship the design detector as a plugin-packaged hook. Claude Code and
     // Grok Build both auto-discover `hooks/hooks.json` at the plugin root

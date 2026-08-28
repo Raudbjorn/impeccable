@@ -11,11 +11,13 @@ import path from 'path';
  * gets MODULE_NOT_FOUND, and a dual-install user silently runs the
  * project's (possibly older) skill copy.
  *
- * There is no literal path that works for plugins (CLAUDE_PLUGIN_ROOT is
- * hook-only), so the plugin's markdown uses the `<skill-base-dir>` form
- * SKILL.md's Setup step 1 already leads with: the runtime shows the
- * skill's loaded base directory when it loads the skill, and scripts
- * resolve against that.
+ * No literal path survives installation (the plugin cache location varies
+ * per machine and per plugin version), so skill and reference markdown
+ * uses the `<skill-base-dir>` form SKILL.md's Setup step 1 already leads
+ * with: the runtime shows the skill's loaded base directory when it loads
+ * the skill, and scripts resolve against that. Agent files cannot use the
+ * token (a spawned agent never loads SKILL.md) and get the
+ * ${CLAUDE_PLUGIN_ROOT} variable instead; see PLUGIN_AGENT_SCRIPTS_PATH.
  */
 
 // The resolved {{scripts_path}} in dist/claude-code output, fixed by the
@@ -48,10 +50,22 @@ const SETUP_PLUGIN_TEXT =
 // SKILL.md, so Setup's <skill-base-dir> token is undefined in the one
 // context that must act on it (review finding). Claude Code substitutes
 // ${CLAUDE_PLUGIN_ROOT} inline anywhere in plugin skill and agent content
-// (code.claude.com/docs/en/plugins-reference), so agent instructions carry
-// the variable form; where a harness leaves it unsubstituted, the variable
-// still names the plugin install directory for the agent to locate.
+// per the substitution table in code.claude.com/docs/en/plugins-reference.
+// (anthropics/claude-code#65768 observed subagents receiving the literal;
+// it was auto-closed stale and the docs table postdates it. Frontmatter
+// still has no variable, which is why the node pre-approval is dropped
+// rather than rewritten.) Grok Build reads this same subtree with its own
+// substitution behavior, so the embed instruction carries a sidecar
+// fallback for any harness that hands the agent the unexpanded literal.
 export const PLUGIN_AGENT_SCRIPTS_PATH = '${CLAUDE_PLUGIN_ROOT}/skills/impeccable/scripts';
+
+// Appended as its own sentence after the agent's embed instruction so
+// behavior is defined even where the variable reaches the agent
+// unexpanded: the prompt survives as a sidecar and the manifest tells the
+// parent, whose own thread can resolve the script and embed it properly.
+export const AGENT_EMBED_FALLBACK =
+  ' When that script path is unreachable in your environment, write the same prompt to ' +
+  '`<asset>.prompt.txt` beside the asset and note it in your manifest so the parent can embed it.';
 
 /**
  * Rewrite one markdown file's content for the plugin subtree. Pure, so the
@@ -85,7 +99,39 @@ export function rewritePluginAgentMarkdown(content) {
     .replace(
       /node \$\{CLAUDE_PLUGIN_ROOT\}\/skills\/impeccable\/scripts\/([^\s`"]+)/g,
       'node "${CLAUDE_PLUGIN_ROOT}/skills/impeccable/scripts/$1"',
+    )
+    // Anchors on the command this rewrite just produced plus the rest of
+    // its sentence, so the fallback lands as the following sentence rather
+    // than splicing into the middle of one.
+    .replace(
+      /(`node "\$\{CLAUDE_PLUGIN_ROOT\}\/skills\/impeccable\/scripts\/embed-prompt\.mjs"[^`]*`[^.]*\.)/g,
+      `$1${AGENT_EMBED_FALLBACK}`,
     );
+}
+
+/**
+ * Fail the build when an agent file's rewrite no longer holds: a
+ * project-relative scripts path or the skill-base-dir token survived, or
+ * an embed instruction lost its unexpanded-variable fallback because the
+ * source sentence the anchor keys on was reworded. Loud beats a silent
+ * no-op, same contract as verifyPluginSkillRewrite.
+ */
+export function verifyPluginAgentRewrite(agentPath) {
+  const content = fs.readFileSync(agentPath, 'utf-8');
+  if (content.includes(CLAUDE_PROJECT_SCRIPTS_PATH) || content.includes('<skill-base-dir>')) {
+    throw new Error(
+      `Plugin rewrite drift: ${agentPath} references a scripts path a spawned agent cannot ` +
+      'resolve (the project-relative form or the <skill-base-dir> token). Agent files must ' +
+      'carry the ${CLAUDE_PLUGIN_ROOT} form; see rewritePluginAgentMarkdown (issue #523).',
+    );
+  }
+  if (content.includes('embed-prompt.mjs') && !content.includes(AGENT_EMBED_FALLBACK)) {
+    throw new Error(
+      `Plugin rewrite drift: ${agentPath} carries an embed instruction without the sidecar ` +
+      "fallback sentence. The source sentence no longer matches the anchor in " +
+      'scripts/lib/plugin-paths.js (issue #523); update the fallback anchor to the new wording.',
+    );
+  }
 }
 
 /**
