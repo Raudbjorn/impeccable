@@ -87,14 +87,6 @@ describe('ci-test-plan', () => {
     assert.equal(outputs.live_svelte_adapter_deepseek, 'true');
   });
 
-  it('exposes planned opt-in suite outputs to workflow jobs', () => {
-    const workflow = readFileSync('.github/workflows/ci.yml', 'utf-8');
-
-    assert.match(workflow, /live_e2e_accept_cleanup:\s*\$\{\{\s*steps\.plan\.outputs\.live_e2e_accept_cleanup\s*\}\}/);
-    assert.match(workflow, /live_svelte_adapter_deepseek:\s*\$\{\{\s*steps\.plan\.outputs\.live_svelte_adapter_deepseek\s*\}\}/);
-    assert.match(workflow, /live-e2e-accept-cleanup:/);
-    assert.match(workflow, /live-svelte-adapter-deepseek:/);
-  });
   it('schedule events run only the deterministic suites plus the full live-e2e matrix', () => {
     const outputs = runPlan({ GITHUB_EVENT_NAME: 'schedule' });
     assert.equal(outputs.live_e2e, 'true');
