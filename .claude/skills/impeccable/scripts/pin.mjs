@@ -30,7 +30,7 @@ const OMP_HARNESSES = new Set(['.omp']);
 // Valid sub-command names
 const VALID_COMMANDS = [
   'craft', 'init', 'extract', 'document', 'shape',
-  'critique', 'audit',
+  'critique', 'design-context', 'audit',
   'polish', 'bolder', 'quieter', 'distill', 'harden', 'onboard', 'live',
   'animate', 'colorize', 'typeset', 'layout', 'delight', 'overdrive',
   'clarify', 'adapt', 'optimize',
