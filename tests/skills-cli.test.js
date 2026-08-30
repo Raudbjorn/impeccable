@@ -1692,7 +1692,7 @@ describe('hook manifest merge helpers', () => {
       'node .claude/skills/impeccable/scripts/hook.mjs',
     ]);
   });
-
+});
 
 // ─── Hook command path resolution (issue #399, part 1) ───────────────────────
 // The bundled Claude manifest ships a ${CLAUDE_PROJECT_DIR}-relative command.
@@ -1796,8 +1796,7 @@ describe('copyProviderHooks: hook command path resolution (#399)', () => {
     rmSync(tmp, { recursive: true, force: true });
     rmSync(skillHome, { recursive: true, force: true });
   });
-
-
+});
 
 // ─── Update scope resolution (issue #399, part 2) ────────────────────────────
 
