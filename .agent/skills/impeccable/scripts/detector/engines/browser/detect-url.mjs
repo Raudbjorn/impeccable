@@ -21,12 +21,9 @@ import { checkContentHiddenAtRest } from '../../rules/checks.mjs';
 // launch then also fails, surface the original system-Chrome error as the
 // cause so the real failure is not lost.
 async function launchBrowser(puppeteer, { headless = true, args = [] } = {}) {
-  let channelError;
-
   try {
     return await puppeteer.default.launch({ headless, args });
   } catch (err) {
-    if (channelError && err && err.cause === undefined) err.cause = channelError;
     throw err;
   }
 }

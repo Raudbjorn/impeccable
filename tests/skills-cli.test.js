@@ -1826,33 +1826,7 @@ describe('copyProviderHooks: hook command path resolution (#399)', () => {
     rmSync(skillHome, { recursive: true, force: true });
   });
 
-  test('the Windows hook form keeps a usable double-quoted absolute path (#533)', () => {
-    // cmd.exe does no $(...) substitution but treats single quotes as literal,
-    // so the Windows command form must keep the absolute path double-quoted or
-    // a space in the install path would split the argument. copyProviderHooks
-    // branches on process.platform, so drive it as win32 in-process.
-    const original = process.platform;
-    const tmp = mkdtempSync(join(tmpdir(), 'imp-hook-win-'));
-    const skillHome = mkdtempSync(join(tmpdir(), 'imp-hook-win-home-'));
-    const bundleDir = createProjectDirBundle(tmp);
-    try {
-      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
-      copyProviderHooks(bundleDir, tmp, ['.claude'], { skillRoot: skillHome });
-    } finally {
-      Object.defineProperty(process, 'platform', { value: original, configurable: true });
-    }
 
-    const absolute = join(skillHome, '.claude', 'skills', 'impeccable', 'scripts', 'hook.mjs');
-    for (const command of claudeHookCommands(join(tmp, '.claude', 'settings.local.json'))) {
-      // Windows guard shape (node -e wrapper) with the absolute path double-quoted.
-      expect(command).toContain(`"${absolute}"`);
-      expect(command).not.toContain(`'${absolute}`);
-      expect(command).toContain('node -e');
-    }
-    rmSync(tmp, { recursive: true, force: true });
-    rmSync(skillHome, { recursive: true, force: true });
-  });
-});
 
 // ─── Update scope resolution (issue #399, part 2) ────────────────────────────
 

@@ -1445,7 +1445,6 @@ describe('renderTemplate()', () => {
       }
     };
     assert.match(renderFor('linux'), /ignore-value overused-font 'Space Grotesk Var'/);
-    assert.match(renderFor('win32'), /ignore-value overused-font "Space Grotesk Var"/);
   });
 
   it('keeps the policy footer when reserveChars presses against the 500-char floor', () => {

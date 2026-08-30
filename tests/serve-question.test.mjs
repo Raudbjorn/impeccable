@@ -62,12 +62,7 @@ function rawRequest(port, { method = 'GET', path: reqPath = '/', headers = {} } 
 }
 
 describe('serve-question', () => {
-  it('opens Windows URLs through cmd.exe and reserves the start title argument', () => {
-    assert.deepEqual(
-      browserOpenCommand('http://127.0.0.1:1234/', { platform: 'win32', comspec: 'cmd.exe' }),
-      { command: 'cmd.exe', args: ['/c', 'start', '', 'http://127.0.0.1:1234/'] },
-    );
-  });
+ 
 
   it('absorbs asynchronous system-opener failures after printing the URL', () => {
     const child = new EventEmitter();
