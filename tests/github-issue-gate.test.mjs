@@ -179,7 +179,7 @@ describe('issue body gate', () => {
         '```',
       ].join('\n'),
     }), { templates });
-    assert.notEqual(plan.verdict, 'pass');
+    assert.equal(plan.verdict, 'reject');
   });
 
   it('flags an oversized prose body even when the structure passes', () => {
