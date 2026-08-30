@@ -136,6 +136,24 @@ function buildClaudeAgent(agent, body) {
   return `${generateYamlFrontmatter(frontmatter)}\n${body.trim()}\n`;
 }
 
+// oh-my-pi task agents are markdown with frontmatter, discovered from
+// `.omp/agents/*.md` (project) and `~/.omp/agent/agents/*.md` (user). Only
+// `name` and `description` are portable, plus `autoloadSkills`: oh-my-pi
+// injects the named skills into the spawned agent before its first prompt,
+// which is the documented answer to a subagent that would otherwise start
+// without the skill that defines its job. `tools` is omitted deliberately --
+// oh-my-pi's tool vocabulary differs from ours, and omitting it grants the
+// default set rather than an intersection we cannot verify.
+function buildOmpAgent(agent, body) {
+  const frontmatter = {
+    name: agent.name,
+    description: agent.description,
+    autoloadSkills: ['impeccable'],
+  };
+
+  return `${generateYamlFrontmatter(frontmatter)}\n${body.trim()}\n`;
+}
+
 // GitHub Copilot custom agents are markdown files named `<name>.agent.md`
 // (project scope: `.github/agents/`; user scope: `~/.copilot/agents/`). Only
 // the portable frontmatter fields are emitted: `name` and `description`.
@@ -180,6 +198,13 @@ function buildAgentFile(config, agent, body) {
     return {
       filename: `${agent.claudeName || agent.name}.md`,
       content: buildClaudeAgent(agent, body),
+    };
+  }
+
+  if (config.agentFormat === 'omp-md') {
+    return {
+      filename: `${agent.name}.md`,
+      content: buildOmpAgent(agent, body),
     };
   }
 

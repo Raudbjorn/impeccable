@@ -88,6 +88,10 @@ Notes:
 
 All harnesses support the `{skill-name}/SKILL.md` directory structure with optional `reference/`, `scripts/`, and `assets/` subdirectories.
 
+### Plugin channel
+
+oh-my-pi installs plugins with `omp plugin marketplace add <owner/repo>`, reading `.omp-plugin/plugin.json` first and falling back to `.claude-plugin/plugin.json`. The committed `./plugin` subtree satisfies that fallback and its `skills/<name>/SKILL.md` layout, so it is installable through that channel; skills sourced this way are discovered at priority 90, below a native `.omp` install. We do not ship a second `.omp-plugin` manifest, since the fallback is documented and a duplicate would be one more file to keep in sync. One limitation: the plugin subtree's agents resolve scripts against `${CLAUDE_PLUGIN_ROOT}`, which oh-my-pi does not substitute, so the native `.omp/agents/` install above is the supported path for subagents there. `tests/omp-plugin-layout.test.mjs` pins the structure.
+
 ## Native Subagent Directory Structure (Impeccable emission targets)
 
 > **Scope:** this table is **where Impeccable emits native subagent files**, not a
@@ -100,7 +104,9 @@ All harnesses support the `{skill-name}/SKILL.md` directory structure with optio
 | Claude Code | `.claude/agents/` (installed plugin) | Markdown with YAML frontmatter |
 | Codex CLI | `<skill>/agents/` (nested, auto-discovered) | TOML |
 
-oh-my-pi also has a documented format (`.omp/agents/*.md` project, `~/.omp/agent/agents/*.md` user, markdown with frontmatter including `autoloadSkills`), but Impeccable does not emit there yet.
+| oh-my-pi | `.omp/agents/` (project), `~/.omp/agent/agents/` (user) | Markdown with YAML frontmatter |
+
+oh-my-pi's agents carry `autoloadSkills: [impeccable]`, which injects the skill into the spawned agent before its first prompt. That is the documented answer to a subagent that would otherwise start without the skill defining its job. `tools` is deliberately not emitted: oh-my-pi's tool vocabulary differs from ours, and omitting it grants the default set rather than an intersection we cannot verify.
 
 Impeccable keeps canonical agent prompts under `skill/agents/` and emits provider-native files only for harnesses with a documented on-disk subagent format. Claude reads its agents from the installed plugin; Codex auto-discovers the TOML bundled inside the installed skill's own `agents/` folder, so the normal skills install carries it with no separate sidecar.
 

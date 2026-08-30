@@ -44,6 +44,7 @@
     "build:skills:release": "bun run scripts/build.js",
     "build": "bun run build:skills && mkdir -p build/_data && rm -rf build/_data/dist && cp -R dist build/_data/dist",
     "build:release": "bun run build:skills:release && mkdir -p build/_data && rm -rf build/_data/dist && cp -R dist build/_data/dist",
+    "check:generated": "node scripts/check-generated.mjs",
     "build:browser": "node scripts/build-browser-detector.js",
     "build:extension": "node scripts/build-extension.js",
     "clean": "rm -rf dist build",

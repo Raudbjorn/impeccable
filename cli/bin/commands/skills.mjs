@@ -1237,6 +1237,15 @@ const PROVIDER_AGENT_ARTIFACTS = {
     userDir: home => join(home, '.copilot', 'agents'),
     userShadowsProject: true,
   },
+  // oh-my-pi discovers task agents from `.omp/agents/` (project) and
+  // `~/.omp/agent/agents/` (user), the same `agent` segment its user skills
+  // dir uses. Project and user roots are both scanned, so a user file does
+  // not shadow a project one.
+  '.omp': {
+    ext: '.md',
+    userDir: home => join(home, '.omp', 'agent', 'agents'),
+    userShadowsProject: false,
+  },
 };
 
 function providerAgentsUpToDate(bundleDir, root, provider, scope) {
@@ -1617,6 +1626,16 @@ function copyProviderHooks(bundleDir, root, providers, { force = false, skillRoo
             /^import \{ fileURLToPath \} from "node:url";\nimport \{ dirname, join \} from "node:path";\n\nconst HOOK_SCRIPT = .*$/m,
             `const HOOK_SCRIPT = ${JSON.stringify(hookScript)};`,
           );
+          // The rewrite is a pattern match against generated text. If the
+          // generator's shape ever drifts, the replace silently no-ops and we
+          // would install a module whose self-relative walk points at a skill
+          // that is not there, while still reporting success. Fail loudly
+          // instead; buildOmpHookModule() is the other half of this contract.
+          if (content.includes('import.meta.url') || !content.includes(hookScript)) {
+            throw new Error(
+              `Could not resolve the hook script path in ${src}. The generated oh-my-pi module no longer matches the shape this installer rewrites; update buildOmpHookModule() and this branch together.`,
+            );
+          }
         }
         if (existsSync(dest) && !isImpeccableHookModule(readFileSync(dest, 'utf-8'))) {
           if (!force) {

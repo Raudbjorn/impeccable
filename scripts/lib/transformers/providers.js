@@ -113,6 +113,7 @@ export const PROVIDERS = {
     // install under ~/.omp/agent/skills. It promised a gate that does not
     // exist and named a path that may not.
     frontmatterFields: ['license', 'compatibility', 'metadata'],
+    agentFormat: 'omp-md',
     emitHooks: 'omp',
     hooksManifestRel: 'hooks/post/impeccable.js',
   }
