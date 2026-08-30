@@ -1,41 +1,6 @@
-import { describe, test, expect, afterEach } from 'bun:test';
+import { describe, test, expect } from 'bun:test';
 import http from 'node:http';
-import { launchBrowser, detectUrl, splitScanUrl } from '../cli/engine/engines/browser/detect-url.mjs';
-
-// The function takes the puppeteer module as a
-// parameter, so a fake lets us assert the launch strategy without a real
-// browser or a real OS.
-
-const realPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
-
-function setPlatform(value) {
-  Object.defineProperty(process, 'platform', { value, configurable: true });
-}
-
-afterEach(() => {
-  Object.defineProperty(process, 'platform', realPlatform);
-});
-
-function makePuppeteer({ failChannel = false } = {}) {
-  const calls = [];
-  const fakeBrowser = { __fake: true };
-  return {
-    calls,
-    fakeBrowser,
-    mod: {
-      default: {
-        async launch(opts) {
-          calls.push(opts);
-          if (failChannel && opts.channel === 'chrome') {
-            throw new Error('Could not find Chrome (channel: chrome)');
-          }
-          return fakeBrowser;
-        },
-      },
-    },
-  };
-}
-
+import { detectUrl, splitScanUrl } from '../cli/engine/engines/browser/detect-url.mjs';
 
 
 describe('splitScanUrl', () => {

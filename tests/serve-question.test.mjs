@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EventEmitter } from 'node:events';
 
-import { browserOpenCommand, openSystemBrowser } from '../skill/scripts/lib/open-system-browser.mjs';
+import { openSystemBrowser } from '../skill/scripts/lib/open-system-browser.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCRIPT = path.join(ROOT, 'skill', 'scripts', 'serve-question.mjs');
