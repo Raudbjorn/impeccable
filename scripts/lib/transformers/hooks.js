@@ -248,7 +248,13 @@ export default function impeccableHook(pi) {
       tool_input: { file_path: filePath },
       cwd: ctx.cwd,
     });
-    if (text) return { content: text };
+    if (!text) return;
+    // ToolResultEventResult.content is a replacement content-block array, not
+    // a string: the runner takes \`result.content ?? tool.content\`, so a bare
+    // string both discards the edit's own output and hands back a shape the
+    // provider cannot render. Append a text block to what the tool produced.
+    const blocks = Array.isArray(event.content) ? event.content : [];
+    return { content: [...blocks, { type: "text", text }] };
   });
 
   pi.on("session_stop", async (event, ctx) => {
@@ -257,7 +263,10 @@ export default function impeccableHook(pi) {
       stop_hook_active: event.stop_hook_active === true,
       cwd: ctx.cwd,
     });
-    if (text) return { additionalContext: text };
+    // additionalContext alone is dropped. The runner only carries it into a
+    // continuation when \`continue: true\` (or a blocking decision) rides along,
+    // so without this the Stop findings are discarded as the session settles.
+    if (text) return { continue: true, additionalContext: text };
   });
 }
 `;
