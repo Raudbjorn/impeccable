@@ -2,14 +2,12 @@
 /**
  * Impeccable design hook — PostToolUse + Stop entry point.
  *
- * Reads the Claude Code / Codex / Cursor / Grok Build hook event from stdin
- * and routes by Stop vs everything else. Claude uses `hook_event_name:
- * "Stop"`; Grok uses `hookEventName: "stop"`.
+ * Reads the Claude Code / Codex / Cursor hook event from stdin and routes by
+ * Stop vs everything else. Claude uses `hook_event_name: "Stop"`.
  *
  *   - PostToolUse: runs the immediate-tier detector rules against the touched
  *     file and emits a system reminder via
- *     `hookSpecificOutput.additionalContext` when findings exist. Grok
- *     discards that stdout; the scan still warms the session cache for Stop.
+ *     `hookSpecificOutput.additionalContext` when findings exist.
  *   - Stop: runs the FULL detector rule set over every UI file touched this
  *     session (the deep pass), deduped against what the per-edit pass already
  *     surfaced, and emits once via the harness-specific continuation channel.

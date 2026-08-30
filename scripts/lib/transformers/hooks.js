@@ -7,12 +7,9 @@
  *      - Claude Code: `.claude/settings.json`   (${CLAUDE_PROJECT_DIR}-relative)
  *      - Codex:       `.codex/hooks.json`
  *      - Cursor:      `.cursor/hooks.json`
- *      - Grok Build:  `.grok/hooks/impeccable.json`
  *
  * 2. Claude Code plugin package (the marketplace / `/plugin install` path):
  *      - `plugin/hooks/hooks.json`              (${CLAUDE_PLUGIN_ROOT}-relative)
- *        Also consumed by Grok Build via Claude Code plugin compatibility
- *        (`CLAUDE_PLUGIN_ROOT` is aliased to `GROK_PLUGIN_ROOT`).
  *
  * 3. OpenAI plugin package:
  *      - `hooks/hooks.json`                     (${PLUGIN_ROOT}-relative)
@@ -71,9 +68,6 @@ const NODE_MAJOR_FLOOR = 22;
 //   Claude Code / Codex: `systemMessage` on stdout is shown to the user -> notice
 //   Cursor: preToolUse output is permission-shaped and its `user_message`
 //     renders only on DENY, so warning would block the edit    -> probe only
-//   Grok Build: PostToolUse stdout is ignored; Stop additionalContext
-//     reaches the model, but the node-version notice has no systemMessage
-//     channel on this harness                                 -> probe only
 //   Copilot: output contract unconfirmed; do not guess a shape -> probe only
 //
 // The clamp avoids `<` and `>` deliberately: Volta's Windows shims run through
@@ -133,9 +127,6 @@ const CODEX_PLUGIN_HOOK = '${PLUGIN_ROOT}/skills/impeccable/scripts/hook.mjs';
 const codexProjectHook = (skillDir) => `${skillDir}/skills/impeccable/scripts/hook.mjs`;
 const CURSOR_BEFORE_EDIT_SCRIPT = '.cursor/skills/impeccable/scripts/hook-before-edit.mjs';
 const GITHUB_PROJECT_HOOK = '$(git rev-parse --show-toplevel)/.github/skills/impeccable/scripts/hook.mjs';
-// Grok project hooks are relative to the git/workspace root. Claude tool names
-// in the matcher (Edit|Write|MultiEdit) alias to Grok's search_replace family.
-const GROK_PROJECT_HOOK = '.grok/skills/impeccable/scripts/hook.mjs';
 
 export function buildClaudeSettingsManifest() {
   return {
@@ -232,17 +223,6 @@ export function buildGitHubHooksManifest() {
   };
 }
 
-// Grok Build discovers project hooks from `.grok/hooks/*.json` and requires
-// folder trust (`/hooks-trust` or `--trust`) before they run. Event schema is
-// Claude-compatible (PostToolUse / Stop / PreToolUse); Claude tool names in
-// matchers are aliased to Grok tools (Edit|Write|MultiEdit → search_replace).
-// https://docs.x.ai/build/features/hooks
-export function buildGrokHooksManifest() {
-  return {
-    hooks: buildClaudeCompatibleHooks('Edit|Write|MultiEdit', GROK_PROJECT_HOOK),
-  };
-}
-
 export function hooksJsonFor(provider, options = {}) {
   switch (provider) {
     case 'claude':
@@ -253,8 +233,6 @@ export function hooksJsonFor(provider, options = {}) {
       return buildCursorHooksManifest();
     case 'github':
       return buildGitHubHooksManifest();
-    case 'grok':
-      return buildGrokHooksManifest();
     default:
       return null;
   }

@@ -522,7 +522,7 @@ describe('checkHookInstallation', () => {
   });
 
   it('never reports missing for plugin-root placeholders the doctor cannot map', () => {
-    for (const token of ['${CLAUDE_PLUGIN_ROOT}', '${PLUGIN_ROOT}', '${GROK_PLUGIN_ROOT}']) {
+    for (const token of ['${CLAUDE_PLUGIN_ROOT}', '${PLUGIN_ROOT}']) {
       fs.rmSync(path.join(scratch, '.claude'), { recursive: true, force: true });
       write('.claude/settings.json', JSON.stringify({
         hooks: { Stop: [{ hooks: [{ command: `node "${token}/skills/impeccable/scripts/hook.mjs"` }] }] },

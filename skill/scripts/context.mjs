@@ -1250,7 +1250,6 @@ const HOOK_MANIFESTS_BY_PROVIDER = Object.freeze({
   agents: ['.codex/hooks.json'],
   cursor: ['.cursor/hooks.json'],
   github: ['.github/hooks/impeccable.json'],
-  grok: ['.grok/hooks/impeccable.json'],
 });
 
 function truthyEnv(value) {
@@ -1279,7 +1278,7 @@ function hookEnabledAt(root) {
   return enabled;
 }
 
-const STOP_REVIEW_PROVIDERS = new Set(['claude-code', 'codex', 'agents', 'grok']);
+const STOP_REVIEW_PROVIDERS = new Set(['claude-code', 'codex', 'agents']);
 
 function automaticHookMode(ctx) {
   if (ctx.platform === 'ios' || ctx.platform === 'android' || ctx.platform === 'adaptive') {

@@ -16,7 +16,6 @@ import {
   buildCodexPluginHooksManifest,
   buildCursorHooksManifest,
   buildGitHubHooksManifest,
-  buildGrokHooksManifest,
   hooksJsonFor,
 } from '../scripts/lib/transformers/hooks.js';
 
@@ -172,32 +171,11 @@ describe('hook manifest builders', () => {
     assert.equal(manifest.hooks.preToolUse, undefined);
   });
 
-  it('builds Grok Build project hooks for the real detector hook', () => {
-    const manifest = buildGrokHooksManifest();
-    const group = manifest.hooks.PostToolUse[0];
-    const handler = group.hooks[0];
-
-    // Claude-compatible schema; Claude tool names alias to Grok tools at runtime.
-    assert.equal(group.matcher, 'Edit|Write|MultiEdit');
-    assert.equal(handler.type, 'command');
-    assert.equal(handler.timeout, 5);
-    assert.equal(handler.statusMessage, 'Checking UI changes');
-    expectCommand(handler.command, '.grok/skills/impeccable/scripts/hook.mjs');
-    assert.ok(!handler.command.includes('${CLAUDE_PROJECT_DIR}'));
-    assert.ok(!handler.command.includes('${GROK_PLUGIN_ROOT}'));
-    assert.equal(manifest.hooks.SessionStart, undefined);
-
-    const stop = manifest.hooks.Stop[0].hooks[0];
-    assert.equal(stop.timeout, 30);
-    assert.equal(stop.statusMessage, 'Design deep pass');
-    expectCommand(stop.command, '.grok/skills/impeccable/scripts/hook.mjs');
-  });
-
   it('probes the node runtime everywhere, and notices only where a channel exists', () => {
     // Claude Code and Codex render a `systemMessage` from hook stdout, so their
     // manifests carry the one-time unsupported-runtime notice. Cursor (output is
-    // permission-shaped; a message would block the edit), Grok (stdout ignored),
-    // and Copilot (contract unconfirmed) get the silent probe only.
+    // permission-shaped; a message would block the edit) and Copilot (contract
+    // unconfirmed) get the silent probe only.
     const withNotice = [
       buildClaudeSettingsManifest(),
       buildClaudePluginHooksManifest(),
@@ -207,7 +185,6 @@ describe('hook manifest builders', () => {
     const probeOnly = [
       buildCursorHooksManifest(),
       buildGitHubHooksManifest(),
-      buildGrokHooksManifest(),
     ];
     for (const manifest of [...withNotice, ...probeOnly]) {
       for (const command of manifestCommands(manifest)) {
@@ -240,7 +217,6 @@ describe('hook manifest builders', () => {
     assert.ok(hooksJsonFor('codex'));
     assert.ok(hooksJsonFor('cursor'));
     assert.ok(hooksJsonFor('github'));
-    assert.ok(hooksJsonFor('grok'));
     assert.equal(hooksJsonFor('gemini'), null);
   });
 });

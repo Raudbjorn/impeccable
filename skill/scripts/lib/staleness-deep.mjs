@@ -25,7 +25,6 @@ const HOOK_MANIFESTS_BY_PROVIDER = Object.freeze({
   agents: ['.codex/hooks.json'],
   cursor: ['.cursor/hooks.json'],
   github: ['.github/hooks/impeccable.json'],
-  grok: ['.grok/hooks/impeccable.json'],
 });
 
 const HOOK_SCRIPT_MARKERS = [
@@ -277,9 +276,9 @@ function hookScriptTokenFrom(command) {
 //                            Not doing so was the #402 bug: the literal
 //                            `${CLAUDE_PROJECT_DIR}/...` string never exists.
 //   ${CLAUDE_PLUGIN_ROOT}  → plugin-package install dir, set by the harness to
-//   ${PLUGIN_ROOT}           wherever the plugin/codex/grok bundle was unpacked
-//   ${GROK_PLUGIN_ROOT}      (grok aliases CLAUDE_PLUGIN_ROOT). The doctor has no
-//                            way to know that location → SKIP (return null).
+//   ${PLUGIN_ROOT}           wherever the plugin/codex bundle was unpacked. The
+//                            doctor has no way to know that location → SKIP
+//                            (return null).
 //   $(...) / backticks     → command substitution, e.g. GitHub's
 //                            `$(git rev-parse --show-toplevel)`. Not statically
 //                            resolvable → SKIP.

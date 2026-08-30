@@ -3,7 +3,7 @@
 Source of truth for what each AI coding harness supports in terms of agent skills.
 Used to inform provider configs in `scripts/lib/transformers/providers.js`.
 
-Last verified: 2026-04-28 (subagent landscape spot-checked 2026-06-28; Mistral Vibe row verified 2026-07-16; Grok Build skills row verified 2026-07-21; Grok Build hook stdin captured 2026-08-24)
+Last verified: 2026-04-28 (subagent landscape spot-checked 2026-06-28; Mistral Vibe row verified 2026-07-16)
 
 > This file is point-in-time. Capabilities move fast; verify live before relying
 > on any "only X supports Y" claim. Notably, the subagent table below lists
@@ -22,7 +22,6 @@ Last verified: 2026-04-28 (subagent landscape spot-checked 2026-06-28; Mistral V
 | OpenCode | https://opencode.ai/docs/skills/ |
 | Pi | https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/skills.md |
 | Mistral Vibe | https://docs.mistral.ai/vibe/code/cli/skills |
-| Grok Build | https://docs.x.ai/build/features/skills-plugins-marketplaces |
 | Antigravity | https://antigravity.google/docs/skills |
 
 ## Spec Compliance
@@ -35,28 +34,27 @@ Provider-specific extensions beyond the spec: `user-invocable`, `argument-hint`,
 
 Fields marked with * are spec-standard. Others are provider extensions.
 
-| Field | Claude Code | Cursor | Gemini | Codex | Copilot | Grok | Kiro | OpenCode | Pi | Mistral Vibe | Antigravity |
-|-------|:-----------:|:------:|:------:|:-----:|:-------:|:----:|:----:|:--------:|:--:|:------------:|:-----------:|
-| `name`* | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| `description`* | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| `license`* | Yes | Yes | Ignored | No | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| `compatibility`* | Yes | Yes | Ignored | No | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| `metadata`* | Yes | Yes | Ignored | No | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| `allowed-tools`* | Yes | No | Ignored | No | No | Yes | No | Yes | Yes | Yes | Yes |
-| `user-invocable` | Yes | No | No | No | Yes | Yes | No | Yes | No | Yes | No |
-| `argument-hint` | Yes | No | No | No | Yes | Yes | No | Yes | No | No | No |
-| `disable-model-invocation` | Yes | Yes | No | No | Yes | Yes | No | Yes | Yes | No | No |
-| `model` | Yes | No | No | No | No | Yes | No | Yes | No | No | No |
-| `effort` | Yes | No | No | No | No | Yes | No | No | No | No | No |
-| `context` | Yes | No | No | No | No | No | No | No | No | No | No |
-| `agent` | Yes | No | No | No | No | No | No | Yes | No | No | No |
-| `hooks` | Yes | No | No | Yes | No | Yes | No | No | No | No | No |
+| Field | Claude Code | Cursor | Gemini | Codex | Copilot | Kiro | OpenCode | Pi | Mistral Vibe | Antigravity |
+|-------|:-----------:|:------:|:------:|:-----:|:-------:|:----:|:--------:|:--:|:------------:|:-----------:|
+| `name`* | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `description`* | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `license`* | Yes | Yes | Ignored | No | Yes | Yes | Yes | Yes | Yes | Yes |
+| `compatibility`* | Yes | Yes | Ignored | No | Yes | Yes | Yes | Yes | Yes | Yes |
+| `metadata`* | Yes | Yes | Ignored | No | Yes | Yes | Yes | Yes | Yes | Yes |
+| `allowed-tools`* | Yes | No | Ignored | No | No | No | Yes | Yes | Yes | Yes |
+| `user-invocable` | Yes | No | No | No | Yes | No | Yes | No | Yes | No |
+| `argument-hint` | Yes | No | No | No | Yes | No | Yes | No | No | No |
+| `disable-model-invocation` | Yes | Yes | No | No | Yes | No | Yes | Yes | No | No |
+| `model` | Yes | No | No | No | No | No | Yes | No | No | No |
+| `effort` | Yes | No | No | No | No | No | No | No | No | No |
+| `context` | Yes | No | No | No | No | No | No | No | No | No |
+| `agent` | Yes | No | No | No | No | No | Yes | No | No | No |
+| `hooks` | Yes | No | No | Yes | No | No | No | No | No | No |
 
 Notes:
 - Gemini CLI validates only `name` and `description`; other spec fields are parsed but ignored.
 - Codex CLI uses a separate `agents/openai.yaml` sidecar for skill metadata (icons, branding, MCP tools, invocation control). Codex also auto-discovers subagents bundled inside an installed skill's `agents/` folder (TOML), which is how Impeccable ships its asset-producer. Standalone custom agents can still live under `.codex/agents/` or `~/.codex/agents/`, but Impeccable no longer installs anything there.
 - Codex CLI hooks ship under `[features].hooks = true` (still flagged), require `/hooks` trust ceremony per-update, and are disabled on Windows.
-- Grok Build is Claude Code compatible with zero config: it also reads `.claude/skills/`, `.claude/settings.json` hooks, and Claude plugin layouts. Native paths are `.grok/skills/`, `.grok/hooks/*.json`, and `.grok/agents/`. Skill frontmatter supports `when-to-use` in addition to the fields above. Project hooks require `/hooks-trust` (or `--trust`). See https://docs.x.ai/build/features/skills-plugins-marketplaces and https://docs.x.ai/build/features/hooks.
 - Kiro recognizes `user-invocable` and `disable-model-invocation` per community reports but does not formally document them.
 - Antigravity supports standard Agent Skills spec frontmatter fields (`name`, `description`, `license`, `compatibility`, `metadata`, `allowed-tools`).
 - Unknown fields are silently ignored by all harnesses.
@@ -68,7 +66,6 @@ Notes:
 | Claude Code | Yes (`PostToolUse`) | No | `.claude/settings.json` | Project-local settings entry installed by `npx impeccable skills install/update`. Runs `.claude/skills/impeccable/scripts/hook.mjs`. |
 | Codex CLI | Yes (`PostToolUse`) | No | `.codex/hooks.json` | Project-local manifest installed with the `.agents/skills/impeccable` payload. Runs `.agents/skills/impeccable/scripts/hook.mjs` from the git root. Requires normal `/hooks` trust approval. |
 | Cursor | Yes (`preToolUse`) | No | `.cursor/hooks.json` | Project-level manifest installed with `.cursor/skills/impeccable`. Runs `hook-before-edit.mjs` to block bad proposed writes before they land. Reloads on save; restart Cursor if hooks do not pick up. |
-| Grok Build | Yes (`PostToolUse`) | No | `.grok/hooks/impeccable.json` | Project-local manifest installed with `.grok/skills/impeccable`. Claude-compatible matchers (`Edit\|Write\|MultiEdit`) alias to Grok `search_replace`. PostToolUse runs the scan and warms the session cache; Grok ignores that stdout. Stop `additionalContext` is the user-visible pass. Ignore Grok's observe-only Stop with `reason: "shutdown"`. Requires `/hooks-trust` or `--trust`. Plugin installs use `plugin/hooks/hooks.json` with `${CLAUDE_PLUGIN_ROOT}` (aliased to `GROK_PLUGIN_ROOT`). |
 | All other harnesses | No | No | n/a | No documented hook surface today. Skill and commands still ship. |
 
 ## Skill Directory Structure
@@ -101,7 +98,7 @@ All harnesses support the `{skill-name}/SKILL.md` directory structure with optio
 | Claude Code | `.claude/agents/` (installed plugin) | Markdown with YAML frontmatter |
 | Codex CLI | `<skill>/agents/` (nested, auto-discovered) | TOML |
 
-Impeccable keeps canonical agent prompts under `skill/agents/` and emits provider-native files only for harnesses with a documented on-disk subagent format. Claude reads its agents from the installed plugin; Grok reads the same markdown agents from the plugin package and from project `.grok/agents/`; Codex auto-discovers the TOML bundled inside the installed skill's own `agents/` folder, so the normal skills install carries it with no separate sidecar.
+Impeccable keeps canonical agent prompts under `skill/agents/` and emits provider-native files only for harnesses with a documented on-disk subagent format. Claude reads its agents from the installed plugin; Codex auto-discovers the TOML bundled inside the installed skill's own `agents/` folder, so the normal skills install carries it with no separate sidecar.
 
 **Spawn / permission model** (matters more than directory support when building skills):
 

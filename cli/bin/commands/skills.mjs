@@ -1334,7 +1334,7 @@ function hookScriptPathForProvider(skillRoot, provider) {
   if (provider === '.cursor') {
     return join(skillRoot, provider, 'skills', 'impeccable', 'scripts', 'hook-before-edit.mjs');
   }
-  if (provider === '.claude' || provider === '.agents' || provider === '.grok') {
+  if (provider === '.claude' || provider === '.agents') {
     return join(skillRoot, provider, 'skills', 'impeccable', 'scripts', 'hook.mjs');
   }
   return null;

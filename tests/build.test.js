@@ -665,7 +665,6 @@ describe('agent bodies resolve placeholders on every surface that ships them', (
     // Native agent files.
     ['claude-code/.claude/agents/impeccable-asset-producer.md', '.claude/skills/impeccable/scripts'],
     ['github/.github/agents/impeccable-asset-producer.agent.md', '.github/skills/impeccable/scripts'],
-    ['grok/.grok/agents/impeccable-asset-producer.md', '.grok/skills/impeccable/scripts'],
     // Degraded fallback reference generated from the same agent definition.
     ['codex/.codex/skills/impeccable/reference/degraded/asset-producer.md', '.codex/skills/impeccable/scripts'],
   ];
@@ -678,7 +677,6 @@ describe('agent bodies resolve placeholders on every surface that ships them', (
     transformers.transformAgents(skills, DIST);
     transformers.transformClaudeCode(skills, DIST);
     transformers.transformGitHub(skills, DIST);
-    transformers.transformGrok(skills, DIST);
   });
 
   afterEach(() => {
