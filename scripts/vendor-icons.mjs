@@ -12,7 +12,7 @@
  * picker and offline once it is there.
  */
 
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -523,16 +523,25 @@ for (const result of results) {
   console.log(`  ${pack.glyphs.map((glyph) => `${glyph.concept}=${glyph.name}`).join('  ')}`);
 }
 
-if (!dryRun && packs.length) {
+// A run where one pack misses still walks every other pack to completion and
+// prints their reports, which is useful output; it must not publish, since a
+// partial catalog would silently overwrite a committed good one with a
+// degraded one under the same exit-1 that a skimmed CI log can miss.
+if (!dryRun && packs.length && !failed) {
   const payload = {
     generated: new Date().toISOString().slice(0, 10),
     concepts: CONCEPTS,
     packs,
   };
   await mkdir(path.dirname(outputPath), { recursive: true });
-  await writeFile(outputPath, `${JSON.stringify(payload)}\n`);
-  const bytes = Buffer.byteLength(JSON.stringify(payload));
+  const serialized = `${JSON.stringify(payload)}\n`;
+  const temporary = `${outputPath}.tmp`;
+  await writeFile(temporary, serialized);
+  await rename(temporary, outputPath);
+  const bytes = Buffer.byteLength(serialized);
   console.log(`\nWrote ${path.relative(root, outputPath)} (${(bytes / 1024).toFixed(0)} KB)`);
+} else if (!dryRun && packs.length && failed) {
+  console.log(`\nNot writing ${path.relative(root, outputPath)}: at least one pack missed above. Fix it and re-run; the committed catalog is untouched.`);
 }
 
 process.exit(failed ? 1 : 0);

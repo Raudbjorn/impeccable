@@ -126,6 +126,15 @@ for (;;) {
   try {
     const response = await fetch(`${base}/doc/poll?token=${encodeURIComponent(info.token)}&timeout=${slice}`);
     payload = await response.json();
+    // A non-2xx response (bad token, session shutting down mid-request) is
+    // an error body shaped { error }, not a poll event: reading it as one
+    // would hand the agent a payload with no recognized `type`, which falls
+    // through every branch below and gets echoed back as if it were a real
+    // event.
+    if (!response.ok) {
+      console.log(JSON.stringify({ type: 'exit', reason: 'error', status: response.status, message: payload?.error }));
+      process.exit(0);
+    }
   } catch {
     /* The session process exited between polls. */
     console.log(JSON.stringify({ type: 'exit', reason: 'session-gone' }));

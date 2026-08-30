@@ -94,9 +94,17 @@ picker/scripts/
 
 Three ownership rules keep this correct as it grows.
 
-**store.mjs is the single writer of store files.** Server, session, and import
-all go through it. Every write is atomic: write a temporary file beside the
-target, then rename over it, so a reader never sees a torn file.
+**store.mjs is the single writer of the store's JSON records.**
+`answers.json`, `context.json`, `cues.json`, `fonts.json`, `runtime/session.json`,
+and the journal all go through its `writeJsonAtomic`: write a temporary file
+beside the target, then rename over it, so a reader never sees a torn file.
+Binary and prose payloads -- font files, `cue.png`, imported assets,
+`DESIGN.md` -- are written directly by the picker server, the doc session, and
+`portability.mjs` with plain `writeFile`/`copyFile`, not through store.mjs and
+not atomically. That's deliberate, not an oversight: these are write-once
+blobs a later step overwrites wholesale rather than patches, and a torn write
+just fails to parse or decode on the next read rather than corrupting shared
+state -- but a reader relying on atomicity for these paths would be wrong.
 
 **Reads come off disk per request.** Files are the truth. Process memory is a
 cache at best. This is live mode's stat-keyed cache rule in its simplest form,
@@ -169,6 +177,8 @@ EDIT
   and re-renders
 
 EXPORT AND IMPORT
-  the store compiles to a readable markdown document plus a lossless bundle
+  the store compiles to a readable markdown document plus a bundle; any file
+  over 8 MiB, or that would push the bundle past 20 MiB total, is skipped and
+  listed in the bundle's own `skipped` array rather than silently dropped
   importing a bundle rebuilds a working store in another project
 ```

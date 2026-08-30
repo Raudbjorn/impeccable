@@ -332,8 +332,8 @@ Same done-condition as Step 3, over all six personas.
 
 Before anything else, two gates on the reported heroes:
 
-- **Unique**: hash every reported hero (`md5 [paths]`); each must be unique. Two identical heroes mean two subagents raced on a shared default output filename; re-spawn one of the pair and take its fresh file before compiling.
-- **Square**: check every reported hero's dimensions (`sips -g pixelWidth -g pixelHeight [paths]` on macOS); width must equal height. The compile script rejects non-square inputs, and squaring after the fact is off the table (cropping eats scene, padding invents background), so a non-square hero is a failed generation: re-spawn that persona once and take the fresh file. Still non-square after the re-spawn: drop the cue.
+- **Unique**: `node {{scripts_path}}/visual-cues.mjs hash [paths]` prints one sha256 per file; each must be unique. Two identical heroes mean two subagents raced on a shared default output filename; re-spawn one of the pair and take its fresh file before compiling.
+- **Square**: width must equal height. Compile enforces this itself (it decodes every hero and rejects a non-square one before writing anything), so there is nothing to pre-check here; squaring after the fact is off the table anyway (cropping eats scene, padding invents background), so a compile rejection is a failed generation: re-spawn that persona once and take the fresh file. Still non-square after the re-spawn: drop the cue.
 
 A gate re-spawn follows Step 3's retry pattern: the original spawn task plus the report's PALETTE line (its palette was fine; only the image failed the gate) and the resume instruction, so the retry regenerates the hero without recomposing.
 
