@@ -79,7 +79,6 @@ export function runInstall(tmp, command, { timeoutMs = readTimeoutEnv('IMPECCABL
   const installArgs = addNpmInstallDefaults(cmd, args);
   try {
     execFileSync(cmd, installArgs, { cwd: tmp, stdio: 'inherit', timeout: timeoutMs });
-    repairMissingRollupOptionalBinary(tmp, { timeoutMs });
   } catch (err) {
     if (err.signal === 'SIGTERM' || err.signal === 'SIGKILL' || err.killed) {
       err.message = `fixture dependency install timed out after ${timeoutMs}ms: ${cmd} ${installArgs.join(' ')}`;
@@ -88,17 +87,6 @@ export function runInstall(tmp, command, { timeoutMs = readTimeoutEnv('IMPECCABL
   }
 }
 
-function repairMissingRollupOptionalBinary(tmp, { timeoutMs }) {
-  if (process.platform !== 'darwin' || process.arch !== 'arm64') return;
-  const rollupPackage = join(tmp, 'node_modules', 'rollup', 'package.json');
-  const nativePackage = join(tmp, 'node_modules', '@rollup', 'rollup-darwin-arm64', 'package.json');
-  if (!existsSync(rollupPackage) || existsSync(nativePackage)) return;
-  const version = JSON.parse(readFileSync(rollupPackage, 'utf-8')).version;
-  execFileSync('npm', [
-    'install', '--no-save', '--no-audit', '--no-fund', '--no-progress',
-    `@rollup/rollup-darwin-arm64@${version}`,
-  ], { cwd: tmp, stdio: 'inherit', timeout: timeoutMs });
-}
 
 function addNpmInstallDefaults(cmd, args) {
   if (cmd !== 'npm') return args;

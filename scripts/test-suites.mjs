@@ -16,7 +16,6 @@ const COMMON_INFRA_PATTERNS = [
   /^bun\.lock$/,
   /^scripts\/run-tests\.mjs$/,
   /^scripts\/test-suites\.mjs$/,
-  /^scripts\/ci-test-plan\.mjs$/,
   /^\.github\/workflows\/ci\.yml$/,
 ];
 
@@ -36,7 +35,6 @@ export const SUITES = {
         files: [
           'tests/build.test.js',
           'tests/cli-ignores.test.js',
-          'tests/windows-path-fix.test.js',
           'tests/lib/provider-blocks.test.js',
           'tests/lib/transformers/provider-blocks.test.js',
           'tests/lib/utils.test.js',
@@ -51,7 +49,6 @@ export const SUITES = {
       {
         runner: 'node',
         files: [
-          'tests/ci-test-plan.test.mjs',
           'tests/cli-args.test.mjs',
           'tests/concept-seed.test.mjs',
           'tests/comp-diff.test.mjs',

@@ -62,7 +62,7 @@
  * the register, and the rendered seed says how many actually matched so a
  * borrowed structure is never mistaken for a supplied one.
  *
- * --platform names the delivery target (web, ios, android). Unlike grain this is
+ * --platform names the delivery target (web, android). Unlike grain this is
  * a hard filter: a composition that needs hover or a pointer does not degrade on
  * a phone, it stops working. --mode also gates which worlds are eligible, for
  * worlds whose reviewer marked them as carrying only some modes.
@@ -781,10 +781,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     process.exitCode = 1;
   }
   // A raced-out fetch may still hold a socket; exit explicitly so the CLI
-  // never lingers on a dead network path after output is written. Destroy
-  // fetch's global undici dispatcher first: process.exit() with a live
-  // keep-alive socket trips a libuv assertion on Windows and aborts the
-  // process after a successful roll (nodejs/node#56645).
+  // never lingers on a dead network path after output is written.
   const dispatcher = globalThis[Symbol.for('undici.globalDispatcher.1')];
   if (dispatcher && typeof dispatcher.destroy === 'function') {
     try { await dispatcher.destroy(); } catch { /* exit regardless */ }

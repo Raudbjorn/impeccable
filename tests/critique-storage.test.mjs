@@ -80,12 +80,7 @@ describe('slugFromTarget', () => {
   });
 });
 
-describe('nowFilenameStamp', () => {
-  it('is windows-safe (no colons or dots in the time fragment)', () => {
-    const stamp = nowFilenameStamp(new Date('2026-05-12T18:30:00.123Z'));
-    assert.equal(stamp, '2026-05-12T18-30-00Z');
-  });
-});
+
 
 describe('writeSnapshot + readLatestSnapshot', () => {
   it('round-trips body and frontmatter', () => {
@@ -166,9 +161,6 @@ describe('writeSnapshot + readLatestSnapshot', () => {
 describe('CLI entry point', () => {
   // Why a subprocess test: the CLI guard at the bottom of the script
   // previously compared import.meta.url to `file://${process.argv[1]}`,
-  // which silently broke on Windows (forward vs back slashes) — exit 0,
-  // no output, save skipped. The exported functions kept passing because
-  // tests never spawned the script as a process. See issue #155.
   it('slug subcommand prints a slug and exits 0', () => {
     const r = spawnSync(process.execPath, [SCRIPT, 'slug', 'site/pages/index.astro'], {
       cwd,

@@ -49,7 +49,7 @@ export const COMPOSITION_GRAINS = [
 //
 // A composition that leans on hover, a pointer, or a wide viewport does not
 // survive a phone, and nothing in the schema could say so before this.
-export const COMPOSITION_PLATFORMS = ['web', 'ios', 'android'];
+export const COMPOSITION_PLATFORMS = ['web', 'android'];
 
 // Both fields are optional and absence means eligible everywhere, so no entry
 // has to be backfilled before this ships and no existing roll changes.

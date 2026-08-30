@@ -7,34 +7,11 @@ import { profileFindingsAsync, profileStep, profileStepAsync } from '../../profi
 import { captureVisualContrastCandidate } from '../visual/screenshot-contrast.mjs';
 import { checkContentHiddenAtRest } from '../../rules/checks.mjs';
 
-// On Windows, puppeteer's bundled Chrome lives in a user-writable cache
-// directory. Its GPU process can be denied (STATUS_ACCESS_DENIED) by security
-// software or the GPU sandbox because it launches from an untrusted path.
-// Chrome then crash-loops the GPU process, and each relaunch briefly flashes a
-// compositor surface, the black window users report during `detect <url>`
-// (issue #372). The system-installed Chrome runs from a trusted location with a
-// healthy GPU, so channel:'chrome' avoids the crash entirely; both use hardware
-// GPU, so contrast measurement is unaffected. Scope this to Windows only: other
-// platforms do not have the bug, so they keep the pinned bundled build for
-// consistent measurement across machines. Fall back to bundled when the switch
-// fails (Chrome not installed, or channel resolution fails). If the bundled
-// launch then also fails, surface the original system-Chrome error as the
-// cause so the real failure is not lost.
+
 async function launchBrowser(puppeteer, { headless = true, args = [] } = {}) {
-  let channelError;
-  if (process.platform === 'win32') {
-    try {
-      return await puppeteer.default.launch({ channel: 'chrome', headless, args });
-    } catch (err) {
-      // System Chrome unavailable or unlaunchable; fall through to the bundled
-      // browser, but keep the error in case the fallback fails too.
-      channelError = err;
-    }
-  }
   try {
     return await puppeteer.default.launch({ headless, args });
   } catch (err) {
-    if (channelError && err && err.cause === undefined) err.cause = channelError;
     throw err;
   }
 }
@@ -162,7 +139,68 @@ async function runVisualContrastFallback(page, serializedGroups, options, profil
 // Puppeteer detection (for URLs)
 // ---------------------------------------------------------------------------
 
-async function detectUrl(url, options = {}) {
+function decodeUrlComponent(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function splitScanUrl(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return { href: url, credentials: null };
+  }
+  if (!parsed.username && !parsed.password) {
+    return { href: url, credentials: null };
+  }
+  const credentials =
+    parsed.protocol === 'http:' || parsed.protocol === 'https:'
+      ? {
+          username: decodeUrlComponent(parsed.username),
+          password: decodeUrlComponent(parsed.password),
+        }
+      : null;
+  parsed.username = '';
+  parsed.password = '';
+  return { href: parsed.href, credentials };
+}
+
+function basicAuthHeader(credentials) {
+  return `Basic ${Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64')}`;
+}
+
+// page.authenticate is page-wide: a cross-origin redirect that then 401s
+// would receive these credentials. Attach Authorization only to the scan origin.
+async function applyOriginScopedAuth(page, href, credentials) {
+  if (!credentials) return;
+  let origin = '';
+  try {
+    origin = new URL(href).origin;
+  } catch {
+    return;
+  }
+  if (!origin) return;
+  const header = basicAuthHeader(credentials);
+  await page.setRequestInterception(true);
+  page.on('request', (request) => {
+    let headers;
+    try {
+      if (new URL(request.url()).origin === origin) {
+        headers = { ...request.headers(), authorization: header };
+      }
+    } catch {
+      // invalid request URL: continue without auth
+    }
+    void request.continue(headers ? { headers } : undefined).catch(() => {});
+  });
+}
+
+async function detectUrl(rawUrl, options = {}) {
+  const { href: url, credentials } = splitScanUrl(rawUrl);
   const profile = options?.profile;
   const waitUntil = options?.waitUntil || 'networkidle0';
   const settleMs = Number.isFinite(options?.settleMs) ? options.settleMs : 0;
@@ -238,6 +276,7 @@ async function detectUrl(url, options = {}) {
       ruleId: 'set-viewport',
       target: url,
     }, () => page.setViewport(viewport));
+    await applyOriginScopedAuth(page, url, credentials);
     await profileStepAsync(profile, {
       engine: 'browser',
       phase: 'load',
@@ -369,4 +408,4 @@ async function createBrowserDetector(options = {}) {
   };
 }
 
-export { runVisualContrastFallback, detectUrl, createBrowserDetector, launchBrowser };
+export { runVisualContrastFallback, detectUrl, createBrowserDetector, launchBrowser, splitScanUrl };
