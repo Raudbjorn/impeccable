@@ -193,6 +193,21 @@ describe('verifyPluginAgentRewrite', () => {
     const p = writeAgent(rewritePluginAgentMarkdown(reworded));
     expect(() => verifyPluginAgentRewrite(p)).toThrow(/sidecar/);
   });
+  test('rejects a script path a replacement truncated mid-command', () => {
+    // The embed fallback anchors on "closing backtick, then up to the first
+    // period". A second `node ...` command in the same sentence puts that
+    // period inside its own `.mjs`, so the fallback lands mid-command and
+    // eats the script name. The fallback is still present, so the check for
+    // it passes; only a path-shape check catches this.
+    const file = path.join(root, 'truncated.md');
+    fs.writeFileSync(
+      file,
+      'run `node "${CLAUDE_PLUGIN_ROOT}/skills/impeccable/scripts/embed-prompt.mjs" <a>`, then '
+      + '`node "${CLAUDE_PLUGIN_ROOT}/skills/impeccable/scripts/generate-image.'
+      + AGENT_EMBED_FALLBACK,
+    );
+    expect(() => verifyPluginAgentRewrite(file)).toThrow(/truncated script path/);
+  });
 });
 
 describe('rewritePluginMarkdownTree', () => {

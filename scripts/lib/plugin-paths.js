@@ -148,6 +148,21 @@ export function verifyPluginAgentRewrite(agentPath) {
       'carry the ${CLAUDE_PLUGIN_ROOT} form; see rewritePluginAgentMarkdown (issue #523).',
     );
   }
+  // The fallback anchor keys on "closing backtick, then text up to the first
+  // period". A sentence that puts a second `node ...` command after the embed
+  // command has its first period inside that command's `.mjs`, so the fallback
+  // splices into the middle of it and truncates the script name. The fallback
+  // is still present, so the check below cannot see it; this one can.
+  for (const match of content.matchAll(/\$\{CLAUDE_PLUGIN_ROOT\}\/skills\/impeccable\/scripts\/(\S*)/g)) {
+    if (!/^[A-Za-z0-9._-]+\.mjs"/.test(match[1])) {
+      throw new Error(
+        `Plugin rewrite drift: ${agentPath} has a truncated script path ` +
+        `(\${CLAUDE_PLUGIN_ROOT}/skills/impeccable/scripts/${match[1]}). A replacement in ` +
+        'scripts/lib/plugin-paths.js spliced into the middle of a command; check the source ' +
+        'sentence shape against the anchors there (issue #523).',
+      );
+    }
+  }
   if (content.includes('embed-prompt.mjs') && !content.includes(AGENT_EMBED_FALLBACK)) {
     throw new Error(
       `Plugin rewrite drift: ${agentPath} carries an embed instruction without the sidecar ` +
