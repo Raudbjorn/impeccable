@@ -21,9 +21,6 @@ Last verified: 2026-04-28 (subagent landscape spot-checked 2026-06-28; Mistral V
 | Kiro | https://kiro.dev/docs/skills/ |
 | OpenCode | https://opencode.ai/docs/skills/ |
 | Pi | https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/skills.md |
-| Qoder | https://docs.qoder.com/extensions/skills |
-| Trae | TBD (no official skills docs found yet) |
-| Rovo Dev | https://support.atlassian.com/rovo/docs/extend-rovo-dev-cli-with-agent-skills |
 | Mistral Vibe | https://docs.mistral.ai/vibe/code/cli/skills |
 | Grok Build | https://docs.x.ai/build/features/skills-plugins-marketplaces |
 | Hermes Agent | https://hermes-agent.nousresearch.com/docs/ |
@@ -39,22 +36,22 @@ Provider-specific extensions beyond the spec: `user-invocable`, `argument-hint`,
 
 Fields marked with * are spec-standard. Others are provider extensions.
 
-| Field | Claude Code | Cursor | Gemini | Codex | Copilot | Grok | Hermes | Kiro | OpenCode | Pi | Qoder | Rovo Dev | Mistral Vibe | Antigravity |
-|-------|:-----------:|:------:|:------:|:-----:|:-------:|:----:|:------:|:----:|:--------:|:--:|:-----:|:--------:|:------------:|:-----------:|
-| `name`* | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| `description`* | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| `license`* | Yes | Yes | Ignored | No | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| `compatibility`* | Yes | Yes | Ignored | No | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| `metadata`* | Yes | Yes | Ignored | No | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| `allowed-tools`* | Yes | No | Ignored | No | No | Yes | No | No | Yes | Yes | Yes | Yes | Yes | Yes |
-| `user-invocable` | Yes | No | No | No | Yes | Yes | No | No | Yes | No | Yes | Yes | Yes | No |
-| `argument-hint` | Yes | No | No | No | Yes | Yes | No | No | Yes | No | Yes | Yes | No | No |
-| `disable-model-invocation` | Yes | Yes | No | No | Yes | Yes | No | No | Yes | Yes | TBD | TBD | No | No |
-| `model` | Yes | No | No | No | No | Yes | No | No | Yes | No | No | No | No | No |
-| `effort` | Yes | No | No | No | No | Yes | No | No | No | No | No | No | No | No |
-| `context` | Yes | No | No | No | No | No | No | No | No | No | No | No | No | No |
-| `agent` | Yes | No | No | No | No | No | No | No | Yes | No | No | No | No | No |
-| `hooks` | Yes | No | No | Yes | No | Yes | No | No | No | No | No | No | No | No |
+| Field | Claude Code | Cursor | Gemini | Codex | Copilot | Grok | Hermes | Kiro | OpenCode | Pi | Mistral Vibe | Antigravity |
+|-------|:-----------:|:------:|:------:|:-----:|:-------:|:----:|:------:|:----:|:--------:|:--:|:------------:|:-----------:|
+| `name`* | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `description`* | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `license`* | Yes | Yes | Ignored | No | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `compatibility`* | Yes | Yes | Ignored | No | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `metadata`* | Yes | Yes | Ignored | No | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `allowed-tools`* | Yes | No | Ignored | No | No | Yes | No | No | Yes | Yes | Yes | Yes |
+| `user-invocable` | Yes | No | No | No | Yes | Yes | No | No | Yes | No | Yes | No |
+| `argument-hint` | Yes | No | No | No | Yes | Yes | No | No | Yes | No | No | No |
+| `disable-model-invocation` | Yes | Yes | No | No | Yes | Yes | No | No | Yes | Yes | No | No |
+| `model` | Yes | No | No | No | No | Yes | No | No | Yes | No | No | No |
+| `effort` | Yes | No | No | No | No | Yes | No | No | No | No | No | No |
+| `context` | Yes | No | No | No | No | No | No | No | No | No | No | No |
+| `agent` | Yes | No | No | No | No | No | No | No | Yes | No | No | No |
+| `hooks` | Yes | No | No | Yes | No | Yes | No | No | No | No | No | No |
 
 Notes:
 - Gemini CLI validates only `name` and `description`; other spec fields are parsed but ignored.
@@ -88,8 +85,6 @@ Notes:
 | Kiro | `.kiro/skills/` | - |
 | OpenCode | `.opencode/skills/` | `.agents/skills/`, `.claude/skills/` |
 | Pi | `.pi/skills/` (project), `~/.pi/agent/skills/` (global) | `.agents/skills/` |
-| Trae China | `.trae-cn/skills/` | TBD |
-| Trae International | `.trae/skills/` | TBD |
 | Mistral Vibe | `.vibe/skills/` (project), `~/.vibe/skills/` (global) | `.agents/skills/` (project), `~/.agents/skills/` (global) |
 | Antigravity | `.agent/skills/` (project), `~/.gemini/config/skills/` (global) | `.agents/skills/` (project), `~/.agents/skills/` (global) |
 

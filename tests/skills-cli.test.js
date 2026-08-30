@@ -605,10 +605,10 @@ describe('skills link: submodule installs', () => {
     rmSync(tmp, { recursive: true, force: true });
   }, 15000);
 
-  test('maps codex and rovo-dev provider aliases to their install folders', () => {
+  test('maps codex provider alias to its install folder', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'imp-test-link-alias-'));
     execSync('git init', { cwd: tmp });
-    run('skills link --source=.impeccable --providers=codex,rovo-dev -y', { cwd: tmp });
+    run('skills link --source=.impeccable --providers=codex -y', { cwd: tmp });
     expect(lstatSync(join(tmp, '.agents', 'skills', 'impeccable')).isSymbolicLink()).toBe(true);
     rmSync(tmp, { recursive: true, force: true });
   }, 15000);

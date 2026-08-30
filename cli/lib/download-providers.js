@@ -16,7 +16,6 @@ export const FILE_DOWNLOAD_PROVIDER_CONFIG_DIRS = Object.freeze({
   kiro: '.kiro',
   opencode: '.opencode',
   pi: '.pi',
-  qoder: '.qoder',
   vibe: '.vibe',
 });
 

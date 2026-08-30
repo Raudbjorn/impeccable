@@ -508,24 +508,6 @@ export const PROVIDER_PLACEHOLDERS = {
     ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
     command_prefix: '/'
   },
-  'qoder': {
-    model: 'the model',
-    config_file: 'AGENTS.md',
-    ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
-    command_prefix: '/'
-  },
-  'trae': {
-    model: 'the model',
-    config_file: 'RULES.md',
-    ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
-    command_prefix: '/'
-  },
-  'rovo-dev': {
-    model: 'Rovo Dev',
-    config_file: 'AGENTS.md',
-    ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
-    command_prefix: '/'
-  },
   'vibe': {
     model: 'Mistral',
     config_file: 'AGENTS.md',
@@ -569,10 +551,6 @@ export const PROVIDER_BLOCK_TAGS = new Set([
   'kiro',
   'opencode',
   'pi',
-  'qoder',
-  'rovo-dev',
-  'trae',
-  'trae-cn',
   'vibe',
 ]);
 
