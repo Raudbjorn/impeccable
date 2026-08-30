@@ -28,7 +28,9 @@ Normal development should be source-first: stage changes in `skill/`, `scripts/`
 
 ## Coding Style & Naming Conventions
 
-Use ESM, semicolons, and the existing two-space indentation style in JS, HTML, and CSS. Prefer small, single-purpose modules over large abstractions. Keep filenames descriptive and lowercase with hyphens where needed; skill entrypoints stay as `SKILL.md`, helper scripts use `.js` or `.mjs`. In source frontmatter, use clear kebab-case names and concise descriptions. There is no dedicated formatter or linter configured here, so match surrounding code closely.
+Use ESM, semicolons, and the existing two-space indentation style in JS, HTML, and CSS. Prefer small, single-purpose modules over large abstractions. Keep filenames descriptive and lowercase with hyphens where needed; skill entrypoints stay as `SKILL.md`, helper scripts use `.js` or `.mjs`. In source frontmatter, use clear kebab-case names and concise descriptions. There is no dedicated formatter or linter configured as a project dependency here, so match surrounding code closely.
+
+**Locally available system tools (not project dependencies, not guaranteed on every machine):** `prettier` and `esbuild` are installed system-wide on this dev machine (`/usr/bin/prettier`, `/usr/bin/esbuild`), not via `package.json`/`node_modules`. Useful for ad-hoc checks: `esbuild --bundle --outfile=/dev/null <file>` pinpoints syntax errors (brace/paren mismatches) with a location `node --check` doesn't give; `prettier --check <file>` diffs formatting without applying it. Don't add either as a build-time dependency or assume they exist in CI or another contributor's environment; `npx prettier` without a local devDependency will try to install it.
 
 ## Testing Guidelines
 

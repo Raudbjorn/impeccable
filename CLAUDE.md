@@ -111,6 +111,13 @@ After source changes land on `main`, `.github/workflows/sync-generated-output.ym
 
 Local state files inside harness directories (e.g. `.claude/scheduled_tasks.lock`, `.claude/settings.local.json`) ARE gitignored.
 
+## Locally available tools (not project dependencies)
+
+Neither is in `package.json`/`node_modules`; do not add either as a build-time dependency, and never assume they exist in CI or another contributor's environment.
+
+- **`esbuild`** (`/usr/bin/esbuild`, system-installed): `esbuild --bundle --outfile=/dev/null <file>` pinpoints a syntax error's real location (e.g. an unclosed brace many lines above `node --check`'s "unexpected end of input"), which is invaluable when a file was hand-edited and left unbalanced.
+- **`prettier`** (`/usr/bin/prettier`, system-installed): `prettier --check <file>` diffs formatting without applying it. `npx prettier` without a local devDependency triggers an install prompt instead of using the system binary — call `prettier` directly.
+
 ## Testing
 
 ```bash
