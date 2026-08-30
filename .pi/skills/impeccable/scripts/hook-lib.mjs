@@ -299,7 +299,7 @@ export function resolveCacheCwd(primaryFile, sessionCwd) {
 // Flutter project is made of the exact extensions the hook watches (.tsx, .ts,
 // .js), so without this gate every native screen edit would draw web-shaped
 // findings that contradict the native platform references. PRODUCT.md's
-// `## Platform` field decides: `ios` / `android` / `adaptive` projects skip
+// `## Platform` field decides: `android` / `adaptive` projects skip
 // the scan entirely. Resolution goes through loadContext so the hook reads the
 // same PRODUCT.md the skill does (alternate context dirs, monorepo fallback).
 export function resolveProjectPlatform(cwd) {
@@ -312,7 +312,7 @@ export function resolveProjectPlatform(cwd) {
 }
 
 export function isNativePlatform(platform) {
-  return platform === 'ios' || platform === 'android' || platform === 'adaptive';
+  return platform === 'android' || platform === 'adaptive';
 }
 
 export function readConfig(cwd) {

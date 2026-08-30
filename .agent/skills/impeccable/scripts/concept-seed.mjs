@@ -62,7 +62,7 @@
  * the register, and the rendered seed says how many actually matched so a
  * borrowed structure is never mistaken for a supplied one.
  *
- * --platform names the delivery target (web, ios, android). Unlike grain this is
+ * --platform names the delivery target (web, android). Unlike grain this is
  * a hard filter: a composition that needs hover or a pointer does not degrade on
  * a phone, it stops working. --mode also gates which worlds are eligible, for
  * worlds whose reviewer marked them as carrying only some modes.

@@ -87,14 +87,15 @@ const KNOWN_DETECTOR_KEYS = new Set([
 
 // Evidence that a project ships a native app. Checked only to catch a
 // PRODUCT.md that says web (or says nothing, which resolves to web) on a
-// project that is plainly not: that combination silently skips the iOS and
-// Android references for the whole session.
+// project that is plainly not: that combination silently skips the Android
+// reference for the whole session. A pure-iOS project (Podfile/Runner.xcodeproj
+// with no Android or cross-platform evidence) has no supported native platform
+// value here, so it is not flagged -- it falls back to web guidance same as
+// any other unsupported native target.
 const NATIVE_EVIDENCE_PATHS = Object.freeze([
   { rel: 'pubspec.yaml', platform: 'adaptive', reason: 'a Flutter pubspec.yaml' },
-  { rel: 'ios/Podfile', platform: 'ios', reason: 'an ios/Podfile' },
   { rel: 'android/build.gradle', platform: 'android', reason: 'an android/build.gradle' },
   { rel: 'android/build.gradle.kts', platform: 'android', reason: 'an android/build.gradle.kts' },
-  { rel: 'ios/Runner.xcodeproj', platform: 'ios', reason: 'an ios/Runner.xcodeproj' },
 ]);
 
 const NATIVE_EVIDENCE_DEPENDENCIES = Object.freeze([
@@ -240,7 +241,7 @@ export function checkNativePlatformEvidence({ projectRoot, platform, product, pr
     filePath: productPath || null,
     severity: 'mention',
     summary: `${declared}, but the project carries ${evidence.map((entry) => entry.reason).join(' and ')}. `
-      + 'Web guidance is being applied to a native codebase, and the iOS and Android references never load.',
+      + 'Web guidance is being applied to a native codebase, and the Android reference never loads.',
     fix: `Ask the user whether \`## Platform\` should be \`${suggested}\`. `
       + 'If it should, write the value and load the matching native reference before designing.',
   })];
