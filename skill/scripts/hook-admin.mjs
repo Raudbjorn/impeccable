@@ -46,6 +46,16 @@ const IMPECCABLE_HOOK_COMMAND_MARKERS = [
   'skills/impeccable/scripts/hook-after-edit.mjs',
   'skills/impeccable/scripts/hook-stop.mjs',
 ];
+// oh-my-pi's hook is a loaded JS module, not a JSON manifest, so it carries a
+// stamp instead of a command string. Kept OUT of the command markers above:
+// those are scanned against raw text to decide "wired but unparseable JSON",
+// and a module never parses as JSON, so listing it there would make every omp
+// reset throw. Authored in scripts/lib/transformers/hooks.js and duplicated
+// here because the published CLI and the copied skill scripts cannot import
+// from scripts/lib; tests/hook-build.test.mjs pins the two together.
+const IMPECCABLE_HOOK_MODULE_MARKER = '@impeccable-hook-module';
+const IMPECCABLE_HOOK_MODULE_LEGACY_SIGNATURE = 'export default function impeccableHook(pi)';
+
 const TIMEOUT_SECONDS = 5;
 const STATUS_MESSAGE = 'Checking UI changes';
 // The Stop deep pass scans every UI file touched in the session with the full
@@ -70,6 +80,16 @@ function stopManifestEntry(command) {
 }
 
 const HOOK_MANIFEST_TARGETS = [
+  {
+    // The one module-shaped target. It has no `manifest()` and no
+    // `sharedDestRel`: the file is a build artifact the installer places, so
+    // `on` reports a missing one rather than trying to recreate content it
+    // does not carry.
+    provider: '.omp',
+    kind: 'module',
+    skillRel: '.omp/skills/impeccable',
+    destRel: '.omp/hooks/post/impeccable.js',
+  },
   {
     provider: '.claude',
     skillRel: '.claude/skills/impeccable',
@@ -309,6 +329,18 @@ function ignoreValueEntryKey(entry) {
   return `${entry.rule}\0${entry.value}\0${files}`;
 }
 
+/** Providers whose hook is actually wired on disk, in whichever shape they use. */
+function wiredProviders(cwd) {
+  const wired = [];
+  for (const target of HOOK_MANIFEST_TARGETS) {
+    if (targetIsWired(target, path.join(cwd, target.destRel))) wired.push(target.provider);
+    else if (target.sharedDestRel && targetIsWired(target, path.join(cwd, target.sharedDestRel))) {
+      wired.push(`${target.provider} (shared)`);
+    }
+  }
+  return wired;
+}
+
 function statusReport(cwd) {
   const shared = readRawConfigFile(getConfigPath(cwd));
   const local = readRawConfigFile(getLocalConfigPath(cwd));
@@ -344,6 +376,7 @@ function statusReport(cwd) {
     `  maxChars:     ${cfg.limits.maxChars}`,
     `  env override: ${envState}`,
     `  cache file:   ${fs.existsSync(getCachePath(cwd)) ? cachePath : `${cachePath} (not present)`}`,
+    `  wiring:       ${wiredProviders(cwd).join(', ') || '(none installed)'}`,
   ];
   return lines.join('\n');
 }
@@ -369,6 +402,9 @@ function setEnabled(cwd, value) {
   } else {
     parts.push('No installed provider skill folders found to repair.');
   }
+  if (repaired.missing.length > 0) {
+    parts.push(`No hook file installed for: ${repaired.missing.join(', ')}. Run \`npx impeccable skills install\` to place it.`);
+  }
   if (repaired.backups.length > 0) {
     parts.push(`Backed up malformed manifest(s): ${repaired.backups.map((filePath) => path.relative(cwd, filePath) || filePath).join(', ')}.`);
   }
@@ -376,13 +412,21 @@ function setEnabled(cwd, value) {
 }
 
 function repairHookManifests(cwd) {
-  const result = { written: [], already: [], backups: [] };
+  const result = { written: [], already: [], backups: [], missing: [] };
   for (const target of HOOK_MANIFEST_TARGETS) {
     if (!fs.existsSync(path.join(cwd, target.skillRel))) continue;
     const dest = path.join(cwd, target.destRel);
     const sharedDest = target.sharedDestRel ? path.join(cwd, target.sharedDestRel) : null;
 
-    if (sharedDest && fileHasImpeccableHookMarker(sharedDest)) {
+    // A module target's content is a build artifact this script does not
+    // carry, so it can confirm one or report it absent, never author it.
+    if (target.kind === 'module') {
+      if (targetIsWired(target, dest)) result.already.push(target.provider);
+      else result.missing.push(target.provider);
+      continue;
+    }
+
+    if (sharedDest && targetIsWired(target, sharedDest)) {
       pruneImpeccableHookFromManifest(dest);
       result.already.push(target.provider);
       continue;
@@ -751,6 +795,42 @@ function manifestIsUnreadableButWired(manifestPath) {
   }
 }
 
+/** True when `text` is a hook module we generated, stamped or pre-stamp. */
+function isImpeccableHookModule(text) {
+  if (typeof text !== 'string') return false;
+  if (text.includes(IMPECCABLE_HOOK_MODULE_MARKER)) return true;
+  return text.includes(IMPECCABLE_HOOK_MODULE_LEGACY_SIGNATURE) && text.includes('hook.mjs');
+}
+
+/** Is our hook currently wired at `filePath`, in whichever shape this target uses. */
+function targetIsWired(target, filePath) {
+  if (target.kind === 'module') return isImpeccableHookModule(safeReadText(filePath));
+  return fileHasImpeccableHookMarker(filePath);
+}
+
+/**
+ * Remove our hook from `filePath`. Returns true when something was removed.
+ * Write failures propagate so reset's `failed` path can report them.
+ */
+function unwireHookTarget(target, filePath) {
+  if (target.kind === 'module') {
+    if (!isImpeccableHookModule(safeReadText(filePath))) return false;
+    fs.rmSync(filePath, { force: true });
+    return true;
+  }
+  return pruneImpeccableHookFromManifest(filePath);
+}
+
+/**
+ * Always false for a module. The JSON check requires JSON.parse to fail on a
+ * marker-bearing file, and a module never parses as JSON, so routing modules
+ * through it would make every omp reset throw permanently.
+ */
+function targetIsUnreadableButWired(target, filePath) {
+  if (target.kind === 'module') return false;
+  return manifestIsUnreadableButWired(filePath);
+}
+
 /** Delete the hook's own state files. Never a kill switch, so always safe. */
 function removeHookStateFiles(cwd) {
   const removed = [];
@@ -782,11 +862,11 @@ function reset(cwd) {
   const stillShared = [];
   for (const target of HOOK_MANIFEST_TARGETS) {
     const destPath = path.join(cwd, target.destRel);
-    if (manifestIsUnreadableButWired(destPath)) {
+    if (targetIsUnreadableButWired(target, destPath)) {
       unreadable.push(target.destRel);
     } else {
       try {
-        if (pruneImpeccableHookFromManifest(destPath)) pruned.push(target.provider);
+        if (unwireHookTarget(target, destPath)) pruned.push(target.provider);
       } catch (err) {
         failed.push(`${target.destRel} (${err.message || err})`);
       }
@@ -798,8 +878,8 @@ function reset(cwd) {
     // to stop.
     if (target.sharedDestRel) {
       const sharedPath = path.join(cwd, target.sharedDestRel);
-      if (manifestIsUnreadableButWired(sharedPath)) unreadable.push(target.sharedDestRel);
-      else if (fileHasImpeccableHookMarker(sharedPath)) stillShared.push(target.sharedDestRel);
+      if (targetIsUnreadableButWired(target, sharedPath)) unreadable.push(target.sharedDestRel);
+      else if (targetIsWired(target, sharedPath)) stillShared.push(target.sharedDestRel);
     }
   }
 

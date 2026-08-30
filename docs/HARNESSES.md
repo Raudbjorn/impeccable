@@ -57,6 +57,7 @@ Notes:
 - Codex CLI hooks ship under `[features].hooks = true` (still flagged), require `/hooks` trust ceremony per-update, and are disabled on Windows.
 - Kiro recognizes `user-invocable` and `disable-model-invocation` per community reports but does not formally document them.
 - Antigravity supports standard Agent Skills spec frontmatter fields (`name`, `description`, `license`, `compatibility`, `metadata`, `allowed-tools`).
+- Impeccable does not emit `allowed-tools` for oh-my-pi: the field is parsed and never enforced there, and the value would have to name a scripts path that differs between a project and a user install.
 - oh-my-pi's own supported frontmatter set is `name`, `description`, `globs`, `alwaysApply`, `hide`, `disableModelInvocation` (kebab-case `disable-model-invocation` is normalized to this); everything else is parsed and preserved as unknown metadata but not interpreted, same as Gemini's spec fields.
 - Unknown fields are silently ignored by all harnesses.
 
@@ -66,6 +67,8 @@ Notes:
 |---------|:---------:|:------------:|-------------------|-------|
 | Claude Code | Yes (`PostToolUse`) | No | `.claude/settings.json` | Project-local settings entry installed by `npx impeccable skills install/update`. Runs `.claude/skills/impeccable/scripts/hook.mjs`. |
 | Codex CLI | Yes (`PostToolUse`) | No | `.codex/hooks.json` | Project-local manifest installed with the `.agents/skills/impeccable` payload. Runs `.agents/skills/impeccable/scripts/hook.mjs` from the git root. Requires normal `/hooks` trust approval. |
+| GitHub Copilot | Yes (`PostToolUse`) | No | `.github/hooks/impeccable.json` | Team-shared, committed repo-level manifest. Runs `.github/skills/impeccable/scripts/hook.mjs`. |
+| oh-my-pi | Yes (`tool_result`) | Yes (`session_stop`) | `.omp/hooks/post/impeccable.js` | The only module-shaped target: a loaded JS module, not a JSON manifest, so it is recognized by an `@impeccable-hook-module` stamp rather than a command string. Matches `edit`, `write`, and `ast_edit`, and scans every entry of the event's `paths`. The Stop pass returns `continue: true` alongside `additionalContext`, which is what oh-my-pi requires to schedule the continuation. |
 | All other harnesses | No | No | n/a | No documented hook surface today. Skill and commands still ship. |
 
 ## Skill Directory Structure
@@ -81,7 +84,7 @@ Notes:
 | Pi | `.pi/skills/` (project), `~/.pi/agent/skills/` (global) | `.agents/skills/` |
 | Mistral Vibe | `.vibe/skills/` (project), `~/.vibe/skills/` (global) | `.agents/skills/` (project), `~/.agents/skills/` (global) |
 | Antigravity | `.agent/skills/` (project), `~/.gemini/config/skills/` (global) | `.agents/skills/` (project), `~/.agents/skills/` (global) |
-| oh-my-pi | `.omp/skills/` (project, highest discovery priority) | `.claude/skills/`, `.agent/skills/`, `.agents/skills/`, `.codex/skills/`, `.opencode/skills/`, `.github/skills/` (all lower priority; already picked up before this row existed) |
+| oh-my-pi | `.omp/skills/` (project, highest discovery priority), `~/.omp/agent/skills/` (global; note the `agent` segment, as with Pi) | `.claude/skills/`, `.agent/skills/`, `.agents/skills/`, `.codex/skills/`, `.opencode/skills/`, `.github/skills/` (all lower priority; already picked up before this row existed) |
 
 All harnesses support the `{skill-name}/SKILL.md` directory structure with optional `reference/`, `scripts/`, and `assets/` subdirectories.
 
@@ -96,6 +99,8 @@ All harnesses support the `{skill-name}/SKILL.md` directory structure with optio
 |---------|------------------|-------------|
 | Claude Code | `.claude/agents/` (installed plugin) | Markdown with YAML frontmatter |
 | Codex CLI | `<skill>/agents/` (nested, auto-discovered) | TOML |
+
+oh-my-pi also has a documented format (`.omp/agents/*.md` project, `~/.omp/agent/agents/*.md` user, markdown with frontmatter including `autoloadSkills`), but Impeccable does not emit there yet.
 
 Impeccable keeps canonical agent prompts under `skill/agents/` and emits provider-native files only for harnesses with a documented on-disk subagent format. Claude reads its agents from the installed plugin; Codex auto-discovers the TOML bundled inside the installed skill's own `agents/` folder, so the normal skills install carries it with no separate sidecar.
 

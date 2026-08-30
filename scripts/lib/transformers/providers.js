@@ -107,7 +107,12 @@ export const PROVIDERS = {
     providerTags: ['omp'],
     configDir: '.omp',
     displayName: 'oh-my-pi',
-    frontmatterFields: ['license', 'compatibility', 'metadata', 'allowed-tools'],
+    // allowed-tools is deliberately absent: oh-my-pi parses the field and
+    // never enforces it, and the value we emitted hardcoded
+    // `.omp/skills/impeccable/scripts/*`, which is wrong for a user-scope
+    // install under ~/.omp/agent/skills. It promised a gate that does not
+    // exist and named a path that may not.
+    frontmatterFields: ['license', 'compatibility', 'metadata'],
     emitHooks: 'omp',
     hooksManifestRel: 'hooks/post/impeccable.js',
   }

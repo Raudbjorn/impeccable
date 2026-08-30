@@ -395,6 +395,24 @@ describe('generated hook artifacts in repo', () => {
     assert.ok(fs.existsSync(path.join(REPO_ROOT, 'plugin/skills/impeccable/scripts/hook-lib.mjs')));
   });
 
+  it('keeps the hook module marker aligned across every copy', () => {
+    // The published CLI ships only cli/, and skill/scripts/* is copied
+    // verbatim into each provider payload, so neither can import the
+    // authored constant from scripts/lib. The duplication is structural;
+    // this is what keeps the three spellings from drifting apart.
+    const copies = [
+      'skill/scripts/hook-admin.mjs',
+      'cli/bin/commands/skills.mjs',
+    ];
+    for (const rel of copies) {
+      const source = fs.readFileSync(path.join(REPO_ROOT, rel), 'utf-8');
+      assert.ok(
+        source.includes(`'${IMPECCABLE_HOOK_MODULE_MARKER}'`),
+        `${rel} must carry the module marker literal ${IMPECCABLE_HOOK_MODULE_MARKER}`,
+      );
+    }
+  });
+
   it('keeps the marketplace hook repair matcher aligned with Claude Code', () => {
     const hookAdmin = fs.readFileSync(
       path.join(REPO_ROOT, 'plugin/skills/impeccable/scripts/hook-admin.mjs'),

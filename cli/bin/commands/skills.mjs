@@ -74,6 +74,9 @@ function opencodeGlobalConfigDir(home) {
 const HOME_SKILLS_DIR_OVERRIDES = {
   '.agent': (home) => join(home, '.gemini', 'config', 'skills'),
   '.pi': (home) => join(home, '.pi', 'agent', 'skills'),
+  // oh-my-pi reads user skills from ~/.omp/agent/skills, the same `agent`
+  // segment Pi uses; ~/.omp/skills is never scanned.
+  '.omp': (home) => join(home, '.omp', 'agent', 'skills'),
   '.opencode': (home) => join(opencodeGlobalConfigDir(home), 'skills'),
 };
 
@@ -113,6 +116,28 @@ const IMPECCABLE_HOOK_COMMAND_MARKERS = [
   'skills/impeccable/scripts/hook-after-edit.mjs',
   'skills/impeccable/scripts/hook-stop.mjs',
 ];
+// oh-my-pi's hook is a loaded JS module rather than a JSON manifest, so it is
+// recognized by a stamp instead of a command string. Kept out of the command
+// markers above on purpose; see the note in skill/scripts/hook-admin.mjs.
+// Authored in scripts/lib/transformers/hooks.js and duplicated here because
+// the published package ships only cli/; tests/hook-build.test.mjs pins them.
+const IMPECCABLE_HOOK_MODULE_MARKER = '@impeccable-hook-module';
+const IMPECCABLE_HOOK_MODULE_LEGACY_SIGNATURE = 'export default function impeccableHook(pi)';
+
+function isImpeccableHookModule(text) {
+  if (typeof text !== 'string') return false;
+  if (text.includes(IMPECCABLE_HOOK_MODULE_MARKER)) return true;
+  return text.includes(IMPECCABLE_HOOK_MODULE_LEGACY_SIGNATURE) && text.includes('hook.mjs');
+}
+
+function fileIsImpeccableHookModule(filePath) {
+  try {
+    return isImpeccableHookModule(readFileSync(filePath, 'utf-8'));
+  } catch {
+    return false;
+  }
+}
+
 const PROVIDER_HOOK_ARTIFACTS = {
   '.claude': [
     // The hook is a machine-local install side effect, so it lands in the
@@ -132,6 +157,12 @@ const PROVIDER_HOOK_ARTIFACTS = {
   // so source and dest are the same path.
   '.github': [
     { sourceProvider: '.github', rel: 'hooks/impeccable.json', destProvider: '.github' },
+  ],
+  // oh-my-pi loads `.omp/hooks/post/*.js` as a module. It is copied whole
+  // rather than merged: there is no manifest to merge into, and the file is
+  // ours alone.
+  '.omp': [
+    { sourceProvider: '.omp', rel: 'hooks/post/impeccable.js', destProvider: '.omp', kind: 'module' },
   ],
 };
 
@@ -1288,11 +1319,13 @@ function refreshProviderSkills(bundleDir, root, providers, scope) {
 }
 
 function hookArtifactsForProvider(bundleDir, root, provider) {
-  return (PROVIDER_HOOK_ARTIFACTS[provider] || []).map(({ sourceProvider, rel, destProvider, destRel }) => {
+  return (PROVIDER_HOOK_ARTIFACTS[provider] || []).map(({ sourceProvider, rel, destProvider, destRel, kind }) => {
     const writeRel = destRel || rel;
     const artifact = {
       src: join(bundleDir, sourceProvider, rel),
       dest: join(root, destProvider, writeRel),
+      kind: kind || 'json',
+      provider,
     };
     // When the write target is a local override (e.g. settings.local.json), the
     // team-shared sibling (settings.json) is where a legacy install or a
@@ -1435,8 +1468,12 @@ function fileHasImpeccableHookMarker(file) {
 function hookInstalledForProvider(root, provider) {
   const artifacts = PROVIDER_HOOK_ARTIFACTS[provider] || [];
   if (artifacts.length === 0) return true;
-  return artifacts.every(({ destProvider, rel, destRel }) => {
+  return artifacts.every(({ destProvider, rel, destRel, kind }) => {
     const writeRel = destRel || rel;
+    // A module never parses as JSON, so the marker check is always false on
+    // one; without this branch an installed omp project would re-enter the
+    // bundle-download path on every run.
+    if (kind === 'module') return fileIsImpeccableHookModule(join(root, destProvider, writeRel));
     if (fileHasImpeccableHookMarker(join(root, destProvider, writeRel))) return true;
     if (writeRel !== rel && fileHasImpeccableHookMarker(join(root, destProvider, rel))) return true;
     return false;
@@ -1556,12 +1593,43 @@ function readJsonFile(filePath, description) {
   }
 }
 
-function copyProviderHooks(bundleDir, root, providers, { force = false, skillRoot = root } = {}) {
+function copyProviderHooks(bundleDir, root, providers, { force = false, skillRoot = root, scope = 'project' } = {}) {
   const targets = Array.isArray(providers) ? providers : [providers];
   const written = [];
   for (const provider of targets) {
-    for (const { src, dest, sharedDest } of hookArtifactsForProvider(bundleDir, root, provider)) {
+    for (const { src, dest, sharedDest, kind } of hookArtifactsForProvider(bundleDir, root, provider)) {
       if (!existsSync(src)) continue;
+
+      // A module is copied whole, never merged. It also has to be told where
+      // hook.mjs ended up: the bundled copy walks up from its own location,
+      // which only holds when the skill sits beside it under the project. A
+      // user-scope install puts the skill under the home skills dir, so the
+      // path is resolved from the same expression that placed it.
+      if (kind === 'module') {
+        const selfRelative = skillRoot === root && scope !== 'user';
+        let content = readFileSync(src, 'utf-8');
+        if (!selfRelative) {
+          const skillsDir = scope === 'user'
+            ? userProviderSkillsDir(skillRoot, provider)
+            : join(skillRoot, provider, 'skills');
+          const hookScript = join(skillsDir, 'impeccable', 'scripts', 'hook.mjs');
+          content = content.replace(
+            /^import \{ fileURLToPath \} from "node:url";\nimport \{ dirname, join \} from "node:path";\n\nconst HOOK_SCRIPT = .*$/m,
+            `const HOOK_SCRIPT = ${JSON.stringify(hookScript)};`,
+          );
+        }
+        if (existsSync(dest) && !isImpeccableHookModule(readFileSync(dest, 'utf-8'))) {
+          if (!force) {
+            throw new Error(`Existing hook file was not written by impeccable: ${dest}. Re-run with --force to replace it.`);
+          }
+          writeFileSync(`${dest}.bak`, readFileSync(dest));
+        }
+        if (existsSync(dest) && readFileSync(dest, 'utf-8') === content) continue;
+        mkdirSync(dirname(dest), { recursive: true });
+        writeFileSync(dest, content);
+        written.push(provider);
+        continue;
+      }
 
       // Leave-it-never-duplicate: our hook already lives in the team-shared
       // settings.json (a legacy install or a deliberate user move). Honor it in
@@ -1848,7 +1916,7 @@ async function install(flags) {
       }
 
       const writtenHookTargets = missingHookTargets.length > 0
-        ? copyProviderHooks(bundleDir, hookRoot, missingHookTargets, { skillRoot: installRoot })
+        ? copyProviderHooks(bundleDir, hookRoot, missingHookTargets, { skillRoot: installRoot, scope })
         : [];
       if (writtenHookTargets.length > 0) console.log(`Installed hooks into: ${writtenHookTargets.join(', ')}`);
 
@@ -1903,7 +1971,7 @@ async function install(flags) {
   try {
     written = copyProviderSkills(bundleDir, installRoot, targets, { scope });
     agentResults = copyProviderAgents(bundleDir, installRoot, targets, { scope });
-    hookTargets = wantHooks ? copyProviderHooks(bundleDir, hookRoot, targets, { force, skillRoot: installRoot }) : [];
+    hookTargets = wantHooks ? copyProviderHooks(bundleDir, hookRoot, targets, { force, skillRoot: installRoot, scope }) : [];
   } catch (e) {
     rmSync(bundleDir, { recursive: true, force: true });
     console.error(`Install failed: ${e.message}`);
@@ -2151,7 +2219,7 @@ async function update(flags = []) {
   if (isUpToDate(root, copyProviders, tmpDir, scope, agentScope)) {
     try {
       const wantHooks = installHooks && await decideHookInstall(root, copyProviders, { yes });
-      const hookTargets = wantHooks ? copyProviderHooks(tmpDir, root, copyProviders, { force }) : [];
+      const hookTargets = wantHooks ? copyProviderHooks(tmpDir, root, copyProviders, { force, scope }) : [];
       rmSync(tmpDir, { recursive: true, force: true });
       const v = getSkillsVersion(root, scope);
       console.log(`Skills are up to date${v ? ` (v${v})` : ''}.`);
@@ -2186,7 +2254,7 @@ async function update(flags = []) {
     const updated = refreshProviderSkills(tmpDir, root, copyProviders, scope);
     reportProviderAgents(copyProviderAgents(tmpDir, root, copyProviders, { scope: agentScope }));
     const wantHooks = installHooks && await decideHookInstall(root, providers, { yes });
-    const hookTargets = wantHooks ? copyProviderHooks(tmpDir, root, providers, { force }) : [];
+    const hookTargets = wantHooks ? copyProviderHooks(tmpDir, root, providers, { force, scope }) : [];
 
     rmSync(tmpDir, { recursive: true, force: true });
 
