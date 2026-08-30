@@ -374,7 +374,8 @@ export function createTransformer(config) {
       const manifest = hooksJsonFor(config.emitHooks, { configDir });
       if (manifest) {
         const hooksRel = config.hooksManifestRel || path.join('hooks', 'hooks.json');
-        writeFile(path.join(providerDir, configDir, hooksRel), JSON.stringify(manifest, null, 2) + '\n');
+        const content = manifest.isModule ? manifest.content : JSON.stringify(manifest, null, 2) + '\n';
+        writeFile(path.join(providerDir, configDir, hooksRel), content);
         hooksEmitted = true;
       }
     }

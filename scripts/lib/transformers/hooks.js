@@ -205,6 +205,64 @@ export function buildGitHubHooksManifest() {
   };
 }
 
+// oh-my-pi's hook is a loaded JS module (`pi.on(eventName, handler)`), not a
+// JSON manifest, so this is the one builder that returns literal file
+// content rather than an object every other caller JSON.stringify's — see
+// `hooksJsonFor()`'s `isModule` tag below. The payload it sends to hook.mjs
+// on stdin is deliberately shaped exactly like Claude Code's own
+// PostToolUse/Stop JSON: hook-lib.mjs's extraction (`resolveTargetFiles()`,
+// `isStopEvent()`, the `stop_hook_active` re-entrancy guard) and its default
+// `payload()` output are shape-driven, not harness-gated, and
+// `resolveHarness()` has no 'omp' branch — a payload this shape falls
+// through to the 'claude' default on both ends, so hook-lib.mjs needs no
+// changes at all. `spawnSync` (not `pi.exec()`) is used deliberately:
+// `pi.exec()`'s documented options carry no stdin, which hook.mjs requires.
+export function buildOmpHookModule() {
+  return `import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const HOOK_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "skills", "impeccable", "scripts", "hook.mjs");
+
+function runHook(payload) {
+  const result = spawnSync(process.execPath, [HOOK_SCRIPT], {
+    input: JSON.stringify(payload),
+    encoding: "utf8",
+  });
+  if (!result.stdout) return null;
+  try {
+    return JSON.parse(result.stdout)?.hookSpecificOutput?.additionalContext || null;
+  } catch {
+    return null;
+  }
+}
+
+export default function impeccableHook(pi) {
+  pi.on("tool_result", async (event, ctx) => {
+    if (event.toolName !== "edit" && event.toolName !== "write") return;
+    const filePath = event.input && typeof event.input.path === "string" ? event.input.path : null;
+    if (!filePath) return;
+    const text = runHook({
+      hook_event_name: "PostToolUse",
+      tool_name: event.toolName,
+      tool_input: { file_path: filePath },
+      cwd: ctx.cwd,
+    });
+    if (text) return { content: text };
+  });
+
+  pi.on("session_stop", async (event, ctx) => {
+    const text = runHook({
+      hook_event_name: "Stop",
+      stop_hook_active: event.stop_hook_active === true,
+      cwd: ctx.cwd,
+    });
+    if (text) return { additionalContext: text };
+  });
+}
+`;
+}
+
 export function hooksJsonFor(provider, options = {}) {
   switch (provider) {
     case 'claude':
@@ -213,6 +271,8 @@ export function hooksJsonFor(provider, options = {}) {
       return buildCodexHooksManifest(options.configDir || '.codex');
     case 'github':
       return buildGitHubHooksManifest();
+    case 'omp':
+      return { isModule: true, content: buildOmpHookModule() };
     default:
       return null;
   }

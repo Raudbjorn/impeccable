@@ -15,6 +15,7 @@ import {
   buildCodexHooksManifest,
   buildCodexPluginHooksManifest,
   buildGitHubHooksManifest,
+  buildOmpHookModule,
   hooksJsonFor,
 } from '../scripts/lib/transformers/hooks.js';
 
@@ -154,6 +155,36 @@ describe('hook manifest builders', () => {
     assert.ok(entry.bash.includes('git rev-parse --show-toplevel'));
     assert.equal(manifest.hooks.PostToolUse, undefined);
     assert.equal(manifest.hooks.preToolUse, undefined);
+  });
+
+  it('builds an oh-my-pi hook module (JS source, not a JSON manifest)', () => {
+    // oh-my-pi loads `.omp/hooks/post/*` as an imported JS module exporting
+    // `pi.on(eventName, handler)`, not a JSON manifest — hooksJsonFor() tags
+    // this one with `isModule: true` so callers know to write it verbatim
+    // instead of JSON.stringify-ing it.
+    const tagged = hooksJsonFor('omp');
+    assert.equal(tagged.isModule, true);
+    assert.equal(tagged.content, buildOmpHookModule());
+
+    const source = buildOmpHookModule();
+    assert.match(source, /export default function impeccableHook\(pi\)/);
+    assert.match(source, /pi\.on\("tool_result"/);
+    assert.match(source, /pi\.on\("session_stop"/);
+    assert.match(source, /"\.\.", "\.\.", "skills", "impeccable", "scripts", "hook\.mjs"/);
+    // Filters to the two file-modifying tools; never fires on bash/read/etc.
+    assert.match(source, /event\.toolName !== "edit" && event\.toolName !== "write"/);
+    // Shaped exactly like Claude Code's own PostToolUse/Stop JSON so
+    // hook-lib.mjs's existing shape-driven extraction (resolveTargetFiles(),
+    // isStopEvent(), the stop_hook_active re-entrancy guard) needs no
+    // omp-specific branch.
+    assert.match(source, /hook_event_name: "PostToolUse"/);
+    assert.match(source, /hook_event_name: "Stop"/);
+    assert.match(source, /stop_hook_active: event\.stop_hook_active === true/);
+    // Uses raw spawnSync (pi.exec() has no stdin option, and hook.mjs
+    // requires stdin), and parses Claude's default payload() JSON envelope
+    // back out on its own side.
+    assert.match(source, /spawnSync\(process\.execPath, \[HOOK_SCRIPT\]/);
+    assert.match(source, /hookSpecificOutput\?\.additionalContext/);
   });
 
   it('probes the node runtime everywhere, and notices only where a channel exists', () => {

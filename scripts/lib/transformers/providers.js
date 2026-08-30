@@ -108,5 +108,7 @@ export const PROVIDERS = {
     configDir: '.omp',
     displayName: 'oh-my-pi',
     frontmatterFields: ['license', 'compatibility', 'metadata', 'allowed-tools'],
+    emitHooks: 'omp',
+    hooksManifestRel: 'hooks/post/impeccable.js',
   }
 };

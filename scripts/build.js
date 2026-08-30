@@ -481,8 +481,9 @@ function syncRootHookManifests(rootDir) {
     if (!manifest) continue;
     const rel = config.hooksManifestRel || path.join('hooks', 'hooks.json');
     const dest = path.join(rootDir, config.configDir, rel);
+    const content = manifest.isModule ? manifest.content : JSON.stringify(manifest, null, 2) + '\n';
     fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.writeFileSync(dest, JSON.stringify(manifest, null, 2) + '\n');
+    fs.writeFileSync(dest, content);
     synced.push(path.join(config.configDir, rel).split(path.sep).join('/'));
   }
   return synced;
