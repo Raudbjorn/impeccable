@@ -88,10 +88,7 @@ const KNOWN_DETECTOR_KEYS = new Set([
 // Evidence that a project ships a native app. Checked only to catch a
 // PRODUCT.md that says web (or says nothing, which resolves to web) on a
 // project that is plainly not: that combination silently skips the Android
-// reference for the whole session. A pure-iOS project (Podfile/Runner.xcodeproj
-// with no Android or cross-platform evidence) has no supported native platform
-// value here, so it is not flagged -- it falls back to web guidance same as
-// any other unsupported native target.
+// reference for the whole session. 
 const NATIVE_EVIDENCE_PATHS = Object.freeze([
   { rel: 'pubspec.yaml', platform: 'adaptive', reason: 'a Flutter pubspec.yaml' },
   { rel: 'android/build.gradle', platform: 'android', reason: 'an android/build.gradle' },

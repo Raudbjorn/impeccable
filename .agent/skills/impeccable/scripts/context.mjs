@@ -932,8 +932,7 @@ export function extractSectionValue(product, heading) {
  * Pull the platform (`web`, `android`, or `adaptive`) out of PRODUCT.md by
  * looking for a `## Platform` section and reading the first non-empty line
  * that follows it. `adaptive` is a legacy alias for cross-platform apps
- * (Flutter, React Native) that predates dropping iOS as a distinct target;
- * it now behaves identically to `android`. Returns null when the file is
+ * (Flutter, React Native)  -now behaves identically to `android`. Returns null when the file is
  * legacy / platform-less, which the skill treats as `web` (the default the
  * general rules already assume).
  */
