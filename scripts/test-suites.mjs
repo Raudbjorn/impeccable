@@ -63,6 +63,7 @@ export const SUITES = {
           'tests/context-signals.test.mjs',
           'tests/critique-storage.test.mjs',
           'tests/design-parser.test.mjs',
+          'tests/github-issue-gate.test.mjs',
           'tests/github-sheriff.test.mjs',
           'tests/hook-build.test.mjs',
           'tests/hook.test.mjs',
