@@ -79,6 +79,33 @@ describe('live-commit-manual-edits.mjs batched AI apply', () => {
     assert.equal(fs.readFileSync(file, 'utf8'), '<h1>Applied</h1>\n');
   });
 
+  it('does not re-trigger an in-project symlink whose target is outside the project', (t) => {
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'commit-test-outside-'));
+    const outsideFile = path.join(outsideDir, 'page.html');
+    const link = path.join(tmpDir, 'src', 'external-page.html');
+    const oldTime = new Date('2020-01-01T00:00:00.000Z');
+    try {
+      fs.writeFileSync(outsideFile, '<h1>Outside</h1>\n');
+      fs.utimesSync(outsideFile, oldTime, oldTime);
+      try {
+        fs.symlinkSync(outsideFile, link);
+      } catch (err) {
+        if (err.code === 'EPERM') {
+          t.skip('symlink creation is unavailable');
+          return;
+        }
+        throw err;
+      }
+
+      const result = retriggerManualApplyFiles(['src/external-page.html'], tmpDir);
+
+      assert.deepEqual(result, { touched: [], failures: [] });
+      assert.equal(fs.statSync(outsideFile).mtimeMs, oldTime.getTime());
+    } finally {
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
   it('re-triggers only after the transaction reaches a committed final state', () => {
     assert.equal(shouldRetriggerManualApply({ cleared: 2, failed: [] }), true);
     assert.equal(shouldRetriggerManualApply({ cleared: 1, failed: [{ id: 'partial' }] }), true);
