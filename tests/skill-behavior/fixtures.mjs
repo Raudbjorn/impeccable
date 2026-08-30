@@ -111,25 +111,25 @@ WCAG AA, keyboard access, 200% zoom, and reduced motion support.
 `;
 
 /**
- * Native iOS app fixture with `## Platform` set to `ios`. Exercises Setup
- * step 5 — the agent must also load `reference/ios.md` (Apple HIG) on top of
- * the task-scoped visitor-mode guidance.
+ * Native Android app fixture with `## Platform` set to `android`. Exercises
+ * Setup step 5 — the agent must also load `reference/android.md` (Material
+ * Design 3) on top of the task-scoped visitor-mode guidance.
  */
-export const PRODUCT_MD_SAMPLE_IOS = `# Tideline
+export const PRODUCT_MD_SAMPLE_ANDROID = `# Tideline
 
 ## Platform
-ios
+android
 
 ## Product Purpose
-Tideline is a native iOS app for coastal anglers: tide tables, solunar
+Tideline is a native Android app for coastal anglers: tide tables, solunar
 windows, and a logbook. It SERVES the task — get in, read the conditions,
-log a catch — so fluent iPhone users should trust it instantly rather than
+log a catch — so fluent Android users should trust it instantly rather than
 relearn navigation. Earned familiarity over novelty.
 
 ## Users
-Saltwater anglers checking conditions dockside on an iPhone, often one-handed
-in bright sun and sometimes offline. They live in Apple Weather, Notes, and
-Maps and expect the same gestures and controls here.
+Saltwater anglers checking conditions dockside on Android, often one-handed
+in bright sun and sometimes offline. They live in Google Maps, Keep, and
+Weather and expect the same gestures and controls here.
 
 ## Positioning
 The fastest trustworthy read on whether the next coastal window is worth the trip.
@@ -139,7 +139,7 @@ Tide tables, chartplotters, dock logs, weather radar, tackle trays, wet gloves,
 and the repeated glance from water to phone in hard daylight.
 
 ## Pinned Direction
-Native iOS controls and navigation are non-negotiable; the logbook may carry
+Native Android controls and navigation are non-negotiable; the logbook may carry
 the product's distinctive character.
 
 ## Brand Personality
@@ -154,11 +154,11 @@ gesture.
 
 ## Design Principles
 - Platform conformance is the structural bar; brand lives in the expressive layer.
-- Standard navigation, SF Symbols, Dynamic Type, Dark Mode first-class.
+- Standard navigation, Material Symbols, Dynamic Color, dark theme first-class.
 - One accent tint drives interactive elements.
 
 ## Accessibility & Inclusion
-Dynamic Type, VoiceOver, reduced motion, high contrast in direct sun, and
+Text scaling, TalkBack, reduced motion, high contrast in direct sun, and
 targets usable one-handed with wet hands.
 `;
 
@@ -169,36 +169,27 @@ targets usable one-handed with wet hands.
  * assertion ends up measuring how a model copes with an empty workspace
  * instead. One screen is enough to make the request answerable.
  */
-export const MINIMAL_IOS_SOURCE = `import SwiftUI
+export const MINIMAL_ANDROID_SOURCE = `import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.Button
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 
-struct TideDetailView: View {
-    let station: String
-    @State private var showsLog = false
+@Composable
+fun TideDetailScreen(station: String) {
+    var showsLog by remember { mutableStateOf(false) }
 
-    var body: some View {
-        NavigationStack {
-            List {
-                Section("Next window") {
-                    HStack {
-                        Text("High")
-                        Spacer()
-                        Text("4:12 PM").foregroundStyle(.secondary)
-                    }
-                    HStack {
-                        Text("Low")
-                        Spacer()
-                        Text("10:38 PM").foregroundStyle(.secondary)
-                    }
-                }
-                Section {
-                    Button("Log a catch") { showsLog = true }
-                }
-            }
-            .navigationTitle(station)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Refresh") { }
-                }
+    Scaffold(topBar = { TopAppBar(title = { Text(station) }) }) { padding ->
+        Column {
+            Text("High: 4:12 PM")
+            Text("Low: 10:38 PM")
+            Button(onClick = { showsLog = true }) {
+                Text("Log a catch")
             }
         }
     }

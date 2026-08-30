@@ -6,13 +6,9 @@
  * 1. Project-local install (the `npx impeccable skills install` CLI path):
  *      - Claude Code: `.claude/settings.json`   (${CLAUDE_PROJECT_DIR}-relative)
  *      - Codex:       `.codex/hooks.json`
- *      - Cursor:      `.cursor/hooks.json`
- *      - Grok Build:  `.grok/hooks/impeccable.json`
  *
  * 2. Claude Code plugin package (the marketplace / `/plugin install` path):
  *      - `plugin/hooks/hooks.json`              (${CLAUDE_PLUGIN_ROOT}-relative)
- *        Also consumed by Grok Build via Claude Code plugin compatibility
- *        (`CLAUDE_PLUGIN_ROOT` is aliased to `GROK_PLUGIN_ROOT`).
  *
  * 3. OpenAI plugin package:
  *      - `hooks/hooks.json`                     (${PLUGIN_ROOT}-relative)
@@ -29,8 +25,8 @@ const STATUS_MESSAGE = 'Checking UI changes';
 // The Stop deep pass scans every UI file touched in the session with the
 // full rule set, so it gets a longer budget than the single-file per-edit
 // pass. Wired only for Claude Code and Codex, which both dispatch a native
-// `Stop` hook event; Cursor's stop hook is not consistently dispatched and
-// GitHub Copilot's stop-style events do not feed context back to the model.
+// `Stop` hook event; GitHub Copilot's stop-style events do not feed context
+// back to the model.
 const STOP_TIMEOUT_SECONDS = 30;
 const STOP_STATUS_MESSAGE = 'Design deep pass';
 
@@ -69,11 +65,6 @@ const NODE_MAJOR_FLOOR = 22;
 // because only some have a channel for it, checked against each harness's own
 // hook reference on the events we hook:
 //   Claude Code / Codex: `systemMessage` on stdout is shown to the user -> notice
-//   Cursor: preToolUse output is permission-shaped and its `user_message`
-//     renders only on DENY, so warning would block the edit    -> probe only
-//   Grok Build: PostToolUse stdout is ignored; Stop additionalContext
-//     reaches the model, but the node-version notice has no systemMessage
-//     channel on this harness                                 -> probe only
 //   Copilot: output contract unconfirmed; do not guess a shape -> probe only
 //
 // The clamp avoids `<` and `>` deliberately: Volta's Windows shims run through
@@ -131,11 +122,7 @@ const CODEX_PLUGIN_HOOK = '${PLUGIN_ROOT}/skills/impeccable/scripts/hook.mjs';
 // so each generated manifest points at its own payload rather than a hardcoded
 // `.agents` — otherwise the guarded hook silently no-ops on `.codex` installs.
 const codexProjectHook = (skillDir) => `${skillDir}/skills/impeccable/scripts/hook.mjs`;
-const CURSOR_BEFORE_EDIT_SCRIPT = '.cursor/skills/impeccable/scripts/hook-before-edit.mjs';
 const GITHUB_PROJECT_HOOK = '$(git rev-parse --show-toplevel)/.github/skills/impeccable/scripts/hook.mjs';
-// Grok project hooks are relative to the git/workspace root. Claude tool names
-// in the matcher (Edit|Write|MultiEdit) alias to Grok's search_replace family.
-const GROK_PROJECT_HOOK = '.grok/skills/impeccable/scripts/hook.mjs';
 
 export function buildClaudeSettingsManifest() {
   return {
@@ -191,22 +178,8 @@ export function buildCodexHooksManifest(skillDir = '.codex') {
   };
 }
 
-export function buildCursorHooksManifest() {
-  return {
-    version: 1,
-    hooks: {
-      preToolUse: [
-        {
-          command: guardedNode(CURSOR_BEFORE_EDIT_SCRIPT),
-          timeout: TIMEOUT_SECONDS,
-        },
-      ],
-    },
-  };
-}
-
 // GitHub Copilot reads project hooks from `.github/hooks/*.json`. Its schema
-// differs from Claude/Codex/Cursor: the event key is lowercase `postToolUse`,
+// differs from Claude/Codex: the event key is lowercase `postToolUse`,
 // each entry is flat (no nested `hooks` array), the command lives under `bash`
 // (with an optional `powershell` sibling), the timeout key is `timeoutSec`, and
 // `matcher` is a full-match regex (`^(?:PATTERN)$`) tested against the tool name.
@@ -232,15 +205,62 @@ export function buildGitHubHooksManifest() {
   };
 }
 
-// Grok Build discovers project hooks from `.grok/hooks/*.json` and requires
-// folder trust (`/hooks-trust` or `--trust`) before they run. Event schema is
-// Claude-compatible (PostToolUse / Stop / PreToolUse); Claude tool names in
-// matchers are aliased to Grok tools (Edit|Write|MultiEdit → search_replace).
-// https://docs.x.ai/build/features/hooks
-export function buildGrokHooksManifest() {
-  return {
-    hooks: buildClaudeCompatibleHooks('Edit|Write|MultiEdit', GROK_PROJECT_HOOK),
-  };
+// oh-my-pi's hook is a loaded JS module (`pi.on(eventName, handler)`), not a
+// JSON manifest, so this is the one builder that returns literal file
+// content rather than an object every other caller JSON.stringify's — see
+// `hooksJsonFor()`'s `isModule` tag below. The payload it sends to hook.mjs
+// on stdin is deliberately shaped exactly like Claude Code's own
+// PostToolUse/Stop JSON: hook-lib.mjs's extraction (`resolveTargetFiles()`,
+// `isStopEvent()`, the `stop_hook_active` re-entrancy guard) and its default
+// `payload()` output are shape-driven, not harness-gated, and
+// `resolveHarness()` has no 'omp' branch — a payload this shape falls
+// through to the 'claude' default on both ends, so hook-lib.mjs needs no
+// changes at all. `spawnSync` (not `pi.exec()`) is used deliberately:
+// `pi.exec()`'s documented options carry no stdin, which hook.mjs requires.
+export function buildOmpHookModule() {
+  return `import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const HOOK_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "skills", "impeccable", "scripts", "hook.mjs");
+
+function runHook(payload) {
+  const result = spawnSync(process.execPath, [HOOK_SCRIPT], {
+    input: JSON.stringify(payload),
+    encoding: "utf8",
+  });
+  if (!result.stdout) return null;
+  try {
+    return JSON.parse(result.stdout)?.hookSpecificOutput?.additionalContext || null;
+  } catch {
+    return null;
+  }
+}
+
+export default function impeccableHook(pi) {
+  pi.on("tool_result", async (event, ctx) => {
+    if (event.toolName !== "edit" && event.toolName !== "write") return;
+    const filePath = event.input && typeof event.input.path === "string" ? event.input.path : null;
+    if (!filePath) return;
+    const text = runHook({
+      hook_event_name: "PostToolUse",
+      tool_name: event.toolName,
+      tool_input: { file_path: filePath },
+      cwd: ctx.cwd,
+    });
+    if (text) return { content: text };
+  });
+
+  pi.on("session_stop", async (event, ctx) => {
+    const text = runHook({
+      hook_event_name: "Stop",
+      stop_hook_active: event.stop_hook_active === true,
+      cwd: ctx.cwd,
+    });
+    if (text) return { additionalContext: text };
+  });
+}
+`;
 }
 
 export function hooksJsonFor(provider, options = {}) {
@@ -249,12 +269,10 @@ export function hooksJsonFor(provider, options = {}) {
       return buildClaudeSettingsManifest();
     case 'codex':
       return buildCodexHooksManifest(options.configDir || '.codex');
-    case 'cursor':
-      return buildCursorHooksManifest();
     case 'github':
       return buildGitHubHooksManifest();
-    case 'grok':
-      return buildGrokHooksManifest();
+    case 'omp':
+      return { isModule: true, content: buildOmpHookModule() };
     default:
       return null;
   }

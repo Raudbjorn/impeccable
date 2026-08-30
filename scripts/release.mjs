@@ -54,7 +54,7 @@ const COMPONENTS = {
   },
 };
 
-const REPO_URL = 'https://github.com/pbakaus/impeccable';
+const REPO_URL = 'https://github.com/Raudbjorn/impeccable';
 const TWEET_LIMIT = 280;
 
 const args = process.argv.slice(2);

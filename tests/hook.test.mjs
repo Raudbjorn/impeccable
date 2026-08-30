@@ -1139,7 +1139,7 @@ describe('hook-admin.mjs', () => {
   it('hooks on accepts declined consent and installs missing provider manifests', () => {
     fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
     fs.writeFileSync(getLocalConfigPath(cwd), JSON.stringify({ hook: { consent: 'declined', quiet: true } }));
-    for (const provider of ['.claude', '.agents', '.cursor', '.github']) {
+    for (const provider of ['.claude', '.agents', '.github']) {
       fs.mkdirSync(path.join(cwd, provider, 'skills', 'impeccable', 'scripts'), { recursive: true });
     }
     fs.mkdirSync(path.join(cwd, '.claude'), { recursive: true });
@@ -1154,7 +1154,7 @@ describe('hook-admin.mjs', () => {
 
     const out = runAdmin(['on']);
     assert.match(out, /Recorded local hook consent/);
-    assert.match(out, /Installed or repaired hook manifests for: \.claude, \.agents, \.cursor, \.github/);
+    assert.match(out, /Installed or repaired hook manifests for: \.claude, \.agents, \.github/);
 
     const shared = JSON.parse(fs.readFileSync(getConfigPath(cwd), 'utf-8')).hook;
     assert.equal(shared.enabled, true);
@@ -1176,8 +1176,6 @@ describe('hook-admin.mjs', () => {
 
     const codex = fs.readFileSync(path.join(cwd, '.codex', 'hooks.json'), 'utf-8');
     assert.match(codex, /\.agents\/skills\/impeccable\/scripts\/hook\.mjs/);
-    const cursor = fs.readFileSync(path.join(cwd, '.cursor', 'hooks.json'), 'utf-8');
-    assert.match(cursor, /\.cursor\/skills\/impeccable\/scripts\/hook-before-edit\.mjs/);
     const github = JSON.parse(fs.readFileSync(path.join(cwd, '.github', 'hooks', 'impeccable.json'), 'utf-8'));
     assert.equal(github.hooks.postToolUse[0].matcher, 'edit|create|apply_patch');
     assert.match(github.hooks.postToolUse[0].bash, /\.github\/skills\/impeccable\/scripts\/hook\.mjs/);
@@ -1340,8 +1338,8 @@ describe('hook-admin.mjs', () => {
     assert.equal(claude.hooks.Stop, undefined, 'the impeccable-only Stop array should be dropped entirely');
   });
 
-  it('reset prunes all four provider manifests installed via `on`', () => {
-    for (const provider of ['.claude', '.agents', '.cursor', '.github']) {
+  it('reset prunes all three provider manifests installed via `on`', () => {
+    for (const provider of ['.claude', '.agents', '.github']) {
       fs.mkdirSync(path.join(cwd, provider, 'skills', 'impeccable', 'scripts'), { recursive: true });
     }
     runAdmin(['on']);
@@ -1349,11 +1347,10 @@ describe('hook-admin.mjs', () => {
 
     const out = runAdmin(['reset']);
     assert.match(out, /Reset design hook config and cache \(removed:/);
-    assert.match(out, /Removed hook entries from: \.claude, \.agents, \.cursor, \.github\./);
+    assert.match(out, /Removed hook entries from: \.claude, \.agents, \.github\./);
 
     assert.equal(fs.existsSync(path.join(cwd, '.claude', 'settings.local.json')), false, 'nothing else was in the manifest, so it is removed entirely');
     assert.equal(fs.existsSync(path.join(cwd, '.codex', 'hooks.json')), false);
-    assert.equal(fs.existsSync(path.join(cwd, '.cursor', 'hooks.json')), false);
     assert.equal(fs.existsSync(path.join(cwd, '.github', 'hooks', 'impeccable.json')), false);
   });
 
@@ -1445,8 +1442,6 @@ describe('renderTemplate()', () => {
     assert.match(text, /Confident false positive or sanctioned exception/);
     assert.match(text, /literal or domain-appropriate motion/);
     assert.match(text, /persist the narrowest ignore yourself and disclose it/);
-    // quoteCommandArg quotes the hook-admin.mjs path per platform (single
-    // quotes on POSIX, double on Windows; #533), so match either close quote.
     assert.match(text, /hook-admin\.mjs['"] ignore-value <rule> "<value>" --reason "<who decided: evidence>"/);
     assert.match(text, /Write "user confirmed" in a reason only when the user did/);
     assert.match(text, /Unsure: leave it as is and ask the user in one line/);
@@ -1463,8 +1458,7 @@ describe('renderTemplate()', () => {
     assert.match(text, /Triage per the session policy/);
     // The short form names the tool without the absolute path; the runnable
     // invocation lives only in the session's first (full) footer. The quoted
-    // path would render as `node '...'` on POSIX or `node "..."` on Windows,
-    // so reject both.
+    // path would render as `node '...'` on POSIX
     assert.match(text, /`hook-admin\.mjs ignore-value`/);
     assert.doesNotMatch(text, /node ['"]/);
     assert.match(text, /unsure, ask in one line/);
@@ -1524,34 +1518,6 @@ describe('renderTemplate()', () => {
     assert.doesNotMatch(text, /ignore-value overused-font "\$\(touch pwned\)"/);
   });
 
-  it('quotes a hint value per platform: single quotes on POSIX, double quotes on Windows (#533)', () => {
-    // #533 originally targeted the footer's concrete `--file <path>`
-    // suggestion; directiveFooter() now carries only literal placeholders
-    // (`--file <path>`), so that surface is gone. The quoting-sensitive
-    // surface that remains user-visible is the per-finding ignore hint,
-    // whose value comes straight from scanned file content and is meant to
-    // be pasted into the footer's command on this same machine. POSIX needs
-    // single quotes so $(...) cannot execute; Windows cmd.exe treats single
-    // quotes as literal, so a value with spaces must stay double-quoted or
-    // the ignore scope is split at the space.
-    const original = process.platform;
-    const renderFor = (platform) => {
-      Object.defineProperty(process, 'platform', { value: platform, configurable: true });
-      try {
-        return renderTemplate(
-          [finding('overused-font', 1, {
-            name: 'Overused font',
-            snippet: 'h1 { font-family: "Space Grotesk Var", sans-serif; }',
-          })],
-          '/x/fonts.css', DEFAULT_CONFIG, { cwd: '/x' }
-        );
-      } finally {
-        Object.defineProperty(process, 'platform', { value: original, configurable: true });
-      }
-    };
-    assert.match(renderFor('linux'), /ignore-value overused-font 'Space Grotesk Var'/);
-    assert.match(renderFor('win32'), /ignore-value overused-font "Space Grotesk Var"/);
-  });
 
   it('keeps the policy footer when reserveChars presses against the 500-char floor', () => {
     // Bugbot on PR #508: the note reservation used to be subtracted after
@@ -1716,12 +1682,6 @@ describe('payload()', () => {
     assert.equal(obj.hookSpecificOutput.additionalContext, 'hello');
   });
 
-  it('produces additional_context for Cursor', () => {
-    const obj = JSON.parse(payload('hello', 'PostToolUse', 'cursor'));
-    assert.equal(obj.additional_context, 'hello');
-    assert.equal(obj.hookSpecificOutput, undefined);
-  });
-
   it('produces top-level additionalContext for GitHub Copilot', () => {
     const obj = JSON.parse(payload('hello', 'PostToolUse', 'github'));
     assert.equal(obj.additionalContext, 'hello');
@@ -1836,32 +1796,6 @@ rounded:
     assert.ok(out.additionalContext.includes(ENVELOPE_PREFIX));
     assert.match(out.additionalContext, /Design hook findings requiring review/);
     assert.equal(out.hookSpecificOutput, undefined);
-  });
-
-  it('handles a Grok Build search_replace event and does not classify it as github (#646)', async () => {
-    const file = writeFixture('src/Card.tsx', 'noop');
-    const det = fakeDetector([finding('gradient-text', 1, { name: 'Gradient text' })]);
-    const grokEvent = {
-      hookEventName: 'post_tool_use',
-      sessionId: 'grok-1',
-      cwd,
-      workspaceRoot: `${cwd}/`,
-      toolName: 'search_replace',
-      toolInput: { file_path: file, old_string: 'a', new_string: 'b' },
-      toolResult: { type: 'SearchReplace' },
-    };
-
-    const r = await runHook({ stdinJson: JSON.stringify(grokEvent), env: {}, cwd, detector: det });
-    assert.equal(r.exitCode, 0);
-    assert.equal(r.audit.harness, 'grok');
-    assert.notEqual(r.audit.harness, 'github');
-    assert.equal(r.audit.emitted, true);
-    assert.equal(r.audit.skipped, undefined);
-    const out = JSON.parse(r.stdout);
-    assert.match(out.hookSpecificOutput.additionalContext, /gradient-text/);
-    const cache = readCache(cwd);
-    assert.ok(cache.sessions['grok-1'].files[file], 'PostToolUse must mark the file for Stop');
-    assert.deepEqual(cache.sessions['grok-1'].files[file].findings || [], []);
   });
 
   it('handles a GitHub Copilot apply_patch event end-to-end (interactive/cloud path)', async () => {
@@ -2034,7 +1968,7 @@ rounded:
     // The web rule engine has no business flagging React Native screens; the
     // hook watches .tsx/.ts/.js, which is exactly what a native project is
     // made of, so the platform field gates the whole scan.
-    for (const platform of ['ios', 'android', 'adaptive']) {
+    for (const platform of ['android', 'adaptive']) {
       writeFixture('PRODUCT.md', `# App\n\n## Register\n\nproduct\n\n## Platform\n\n${platform}\n`);
       const file = writeFixture('src/Card.tsx', 'noop');
       const det = fakeDetector([finding('side-tab', 1)]);
@@ -3074,39 +3008,22 @@ describe('resolveTargetFiles()', () => {
     );
   });
 
-  it('accepts Cursor Write/StrReplace path field and top-level file_path', () => {
-    assert.deepEqual(resolveTargetFiles({ tool_input: { path: '/a/b.tsx' } }, '/proj'), ['/a/b.tsx']);
+  it('accepts a top-level file_path', () => {
     assert.deepEqual(resolveTargetFiles({ file_path: '/a/c.css' }, '/proj'), ['/a/c.css']);
   });
 });
 
 describe('resolveHarness() / normalizeHookEvent()', () => {
-  it('routes explicit env and Cursor conversation_id to cursor harness', () => {
-    assert.equal(resolveHarness({ IMPECCABLE_HOOK_HARNESS: 'cursor' }), 'cursor');
+  it('routes explicit env harnesses and falls back to claude', () => {
     assert.equal(resolveHarness({ IMPECCABLE_HOOK_HARNESS: 'codex' }), 'codex');
-    assert.equal(resolveHarness({}, { conversation_id: 'c1' }), 'cursor');
     assert.equal(resolveHarness({}, { turn_id: 'turn-1' }), 'codex');
     assert.equal(resolveHarness({}), 'claude');
   });
 
-  it('prefers explicit harness and Cursor detection over the Codex turn_id', () => {
+  it('prefers explicit harness over the Codex turn_id', () => {
     assert.equal(resolveHarness({ IMPECCABLE_HOOK_HARNESS: 'claude' }, { turn_id: 'turn-1' }), 'claude');
-    assert.equal(resolveHarness({ IMPECCABLE_HOOK_HARNESS: 'grok' }, { turn_id: 'turn-1' }), 'grok');
-    assert.equal(resolveHarness({}, { conversation_id: 'c1', turn_id: 'turn-1' }), 'cursor');
     assert.equal(resolveHarness({}, { turn_id: '' }), 'claude');
     assert.equal(resolveHarness({}, { turn_id: 42 }), 'claude');
-  });
-
-  it('maps Cursor postToolUse Write path into file_path + cwd', () => {
-    const normalized = normalizeHookEvent({
-      conversation_id: 'c1',
-      workspace_roots: ['/proj'],
-      tool_name: 'Write',
-      tool_input: { path: 'src/App.jsx' },
-    }, '/fallback', 'cursor');
-    assert.equal(normalized.session_id, 'c1');
-    assert.equal(normalized.cwd, '/proj');
-    assert.equal(normalized.tool_input.file_path, 'src/App.jsx');
   });
 
   it('routes a GitHub Copilot postToolUse event (toolName/toolArgs) to the github harness', () => {
@@ -3117,44 +3034,11 @@ describe('resolveHarness() / normalizeHookEvent()', () => {
     assert.equal(resolveHarness({}, { tool_name: 'Edit', tool_input: { file_path: 'a.tsx' } }), 'claude');
   });
 
-  it('routes a Grok Build envelope (toolName/toolInput, no toolArgs) to grok, not github (#646)', () => {
-    const post = {
-      hookEventName: 'post_tool_use',
-      sessionId: 's1',
-      cwd: '/proj',
-      toolName: 'search_replace',
-      toolInput: { file_path: '/proj/src/styles.css' },
-    };
-    const stop = {
-      hookEventName: 'stop',
-      sessionId: 's1',
-      cwd: '/proj',
-      reason: 'end_turn',
-      stopHookActive: false,
-    };
-    assert.equal(resolveHarness({}, post), 'grok');
-    assert.equal(resolveHarness({}, stop), 'grok');
-    assert.equal(resolveHarness({ IMPECCABLE_HOOK_HARNESS: 'grok' }), 'grok');
-    assert.equal(isStopEvent(stop), true);
+  it('isStopEvent() matches Claude\'s hook_event_name and rejects other events', () => {
     assert.equal(isStopEvent({ hook_event_name: 'Stop' }), true);
-    assert.equal(isStopEvent(post), false);
-  });
-
-  it('normalizes a Grok search_replace event onto tool_input.file_path + session_id', () => {
-    const normalized = normalizeHookEvent({
-      hookEventName: 'post_tool_use',
-      sessionId: 'g1',
-      cwd: '/proj',
-      workspaceRoot: '/proj/',
-      toolName: 'search_replace',
-      toolInput: { file_path: '/proj/src/styles.css', old_string: 'a', new_string: 'b' },
-      toolResult: { type: 'SearchReplace' },
-    }, '/fallback', 'grok');
-    assert.equal(normalized.session_id, 'g1');
-    assert.equal(normalized.cwd, '/proj');
-    assert.equal(normalized.tool_name, 'search_replace');
-    assert.equal(normalized.tool_input.file_path, '/proj/src/styles.css');
-    assert.deepEqual(resolveTargetFiles(normalized, '/proj'), ['/proj/src/styles.css']);
+    assert.equal(isStopEvent({ hook_event_name: 'PostToolUse' }), false);
+    assert.equal(isStopEvent({}), false);
+    assert.equal(isStopEvent(null), false);
   });
 
   it('normalizes a GitHub edit event: JSON-string toolArgs.path -> tool_input.file_path', () => {
@@ -3572,8 +3456,8 @@ describe('resolveProjectPlatform() / isNativePlatform()', () => {
   afterEach(() => fs.rmSync(cwd, { recursive: true, force: true }));
 
   it('reads the platform from PRODUCT.md via the same resolution the skill uses', () => {
-    fs.writeFileSync(path.join(cwd, 'PRODUCT.md'), '# App\n\n## Platform\n\nios\n');
-    assert.equal(resolveProjectPlatform(cwd), 'ios');
+    fs.writeFileSync(path.join(cwd, 'PRODUCT.md'), '# App\n\n## Platform\n\nandroid\n');
+    assert.equal(resolveProjectPlatform(cwd), 'android');
   });
 
   it('returns null when PRODUCT.md is absent or platform-less', () => {
@@ -3582,450 +3466,12 @@ describe('resolveProjectPlatform() / isNativePlatform()', () => {
     assert.equal(resolveProjectPlatform(cwd), null);
   });
 
-  it('isNativePlatform is true only for ios / android / adaptive', () => {
-    assert.equal(isNativePlatform('ios'), true);
+  it('isNativePlatform is true only for android / adaptive', () => {
     assert.equal(isNativePlatform('android'), true);
     assert.equal(isNativePlatform('adaptive'), true);
     assert.equal(isNativePlatform('web'), false);
     assert.equal(isNativePlatform(null), false);
   });
-});
-
-describe('Cursor hook scripts', () => {
-  let cwd;
-  beforeEach(() => { cwd = mkTmp(); });
-  afterEach(() => fs.rmSync(cwd, { recursive: true, force: true }));
-
-  it('preToolUse denies proposed writes with detector findings before they land', () => {
-    const logPath = path.join(cwd, 'hook.ndjson');
-    const filePath = path.join(cwd, 'src/Card.html');
-
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        cwd,
-        tool_name: 'Write',
-        tool_input: {
-          file_path: filePath,
-          content: `
-            <style>
-              .card { border-left: 4px solid #7c3aed; border-radius: 16px; }
-            </style>
-            <div class="card">Hello</div>
-          `,
-        },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: logPath },
-      encoding: 'utf-8',
-    });
-
-    const payload = JSON.parse(out);
-    assert.equal(payload.permission, 'deny');
-    assert.match(payload.user_message, /blocked this write/);
-    assert.match(payload.user_message, /side-tab/);
-    assert.match(payload.agent_message, /Triage each finding/);
-    assert.match(payload.agent_message, /Full suppression ladder/, 'the deny message carries the complete policy, not a truncated head');
-    assert.ok(payload.agent_message.length <= 4000, 'the deny message respects the Cursor cap');
-
-    const entries = fs.readFileSync(logPath, 'utf-8').trim().split('\n').map((line) => JSON.parse(line));
-    assert.equal(entries[0].event, 'preToolUse');
-    assert.equal(entries[0].blocked, true);
-    assert.equal(entries[0].blockedFindings, 1);
-  });
-
-  it('preToolUse delivers the stale-sidecar note within a 500-char budget (PR #508)', () => {
-    fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
-    fs.writeFileSync(getConfigPath(cwd), JSON.stringify({
-      hook: { limits: { maxChars: 500 } },
-    }));
-
-    const designMd = path.join(cwd, 'DESIGN.md');
-    const sidecarPath = path.join(cwd, '.impeccable', 'design.json');
-    fs.writeFileSync(designMd, `---
-typography:
-  body:
-    fontFamily: "IBM Plex Sans, Arial, sans-serif"
-colors:
-  ink: "#241f1a"
-rounded:
-  "2xl": "80px"
----
-
-# Design System
-`);
-    fs.writeFileSync(sidecarPath, JSON.stringify({
-      extensions: {
-        colorMeta: {
-          accent: {
-            canonical: '#b8422e',
-            tonalRamp: ['#d55a42'],
-          },
-        },
-        roundedMeta: {
-          lg: { canonical: '24px' },
-        },
-      },
-    }));
-    const past = new Date(Date.now() - 10000);
-    fs.utimesSync(sidecarPath, past, past);
-
-    const filePath = path.join(cwd, 'src/Card.html');
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        session_id: 'sid-508',
-        cwd,
-        tool_name: 'Write',
-        tool_input: {
-          file_path: filePath,
-          content: `
-            <style>
-              .card { border-left: 4px solid #7c3aed; border-radius: 16px; }
-            </style>
-            <div class="card">Hello</div>
-          `,
-        },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-      encoding: 'utf-8',
-    });
-
-    const payload = JSON.parse(out);
-    assert.equal(payload.permission, 'deny');
-    assert.match(payload.agent_message, /DESIGN\.md is newer/);
-    assert.ok(payload.agent_message.length <= 500, `deny message length ${payload.agent_message.length} exceeds 500-char budget`);
-    assert.equal(readCache(cwd).sessions['sid-508'].designNoteShown, true);
-  });
-
-  it('preToolUse allows writes with findings when the project platform is native', () => {
-    // Same slop content the deny test blocks, but the project declares a
-    // native platform, so the web rule engine must stand aside.
-    fs.writeFileSync(path.join(cwd, 'PRODUCT.md'), '# App\n\n## Platform\n\nios\n');
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        cwd,
-        tool_name: 'Write',
-        tool_input: {
-          file_path: path.join(cwd, 'src/Card.html'),
-          content: `
-            <style>
-              .card { border-left: 4px solid #7c3aed; border-radius: 16px; }
-            </style>
-            <div class="card">Hello</div>
-          `,
-        },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-      encoding: 'utf-8',
-    });
-
-    assert.deepEqual(JSON.parse(out), { permission: 'allow' });
-  });
-
-  it('preToolUse allows clean proposed writes', () => {
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        cwd,
-        tool_name: 'Write',
-        tool_input: {
-          path: 'src/Card.jsx',
-          streamContent: 'export default function Card() { return <section className="card">Hello</section>; }',
-        },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-      encoding: 'utf-8',
-    });
-
-    assert.deepEqual(JSON.parse(out), { permission: 'allow' });
-  });
-
-  it('preToolUse gates configured template extensions (issue #316)', () => {
-    const filePath = path.join(cwd, 'resources/views/card.blade.php');
-    const content = `
-      <style>
-        .card { border-left: 4px solid #7c3aed; border-radius: 16px; }
-      </style>
-      <div class="card">Hello</div>
-    `;
-    const run = () => execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        cwd,
-        tool_name: 'Write',
-        tool_input: { file_path: filePath, content },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-      encoding: 'utf-8',
-    });
-
-    // Without config the file is invisible to the gate: allowed untouched.
-    assert.equal(JSON.parse(run()).permission, 'allow');
-
-    // With a detector.extensions entry the same proposed write is scanned and denied.
-    fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
-    fs.writeFileSync(path.join(cwd, '.impeccable', 'config.json'), JSON.stringify({
-      detector: { extensions: [{ ext: '.blade.php' }] },
-    }));
-    const payload = JSON.parse(run());
-    assert.equal(payload.permission, 'deny');
-    assert.match(payload.user_message, /card\.blade\.php/);
-    assert.match(payload.user_message, /side-tab/);
-  });
-
-  it('preToolUse routes configured html-engine templates through the HTML engine (issue #316)', () => {
-    // oversized-h1 is only detectable by the static HTML engine (detectText has
-    // no such rule), so a denial here proves the proposed content went through
-    // detectHtml rather than the old always-detectText path.
-    const filePath = path.join(cwd, 'resources/views/hero.blade.php');
-    fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
-    fs.writeFileSync(path.join(cwd, '.impeccable', 'config.json'), JSON.stringify({
-      detector: { extensions: [{ ext: '.blade.php' }] },
-    }));
-
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        cwd,
-        tool_name: 'Write',
-        tool_input: {
-          file_path: filePath,
-          content: '<style>h1 { font-size: 84px; }</style>\n<h1>This is a very long headline that keeps going on and on for a while</h1>',
-        },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-      encoding: 'utf-8',
-    });
-
-    const payload = JSON.parse(out);
-    assert.equal(payload.permission, 'deny');
-    assert.match(payload.user_message, /oversized-h1/);
-  });
-
-  it('preToolUse denies shell heredoc writes that bypass the Write tool', () => {
-    const filePath = path.join(cwd, 'src/ShellCard.html');
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        cwd,
-        tool_name: 'Shell',
-        tool_input: {
-          command: `cat > "${filePath}" <<'EOF'\n<style>.card { border-left: 4px solid #7c3aed; border-radius: 16px; padding: 16px; }</style>\n<div class="card">Hello</div>\nEOF\n`,
-        },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-      encoding: 'utf-8',
-    });
-
-    const payload = JSON.parse(out);
-    assert.equal(payload.permission, 'deny');
-    assert.match(payload.user_message, /ShellCard\.html/);
-    assert.match(payload.user_message, /side-tab/);
-  });
-
-  it('preToolUse denies Python heredoc file writes that bypass the Write tool', () => {
-    const filePath = path.join(cwd, 'src/PythonCard.html');
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        cwd,
-        tool_name: 'Shell',
-        tool_input: {
-          command: `python3 - <<'PY'\nfrom pathlib import Path\npath = Path('${filePath}')\npath.write_text('''<style>.card { border-left: 4px solid #7c3aed; border-radius: 16px; padding: 16px; }</style>\n<div class="card">Hello</div>\n''', encoding='utf-8')\nPY\n`,
-        },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-      encoding: 'utf-8',
-    });
-
-    const payload = JSON.parse(out);
-    assert.equal(payload.permission, 'deny');
-    assert.match(payload.user_message, /PythonCard\.html/);
-    assert.match(payload.user_message, /side-tab/);
-  });
-
-  it('preToolUse denies shell append redirects that bypass the Write tool', () => {
-    const filePath = path.join(cwd, 'src/AppendedCard.html');
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        cwd,
-        tool_name: 'Shell',
-        tool_input: {
-          command: `cat >> "${filePath}" <<'EOF'\n<style>.card { border-left: 4px solid #7c3aed; border-radius: 16px; padding: 16px; }</style>\n<div class="card">Hello</div>\nEOF\n`,
-        },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-      encoding: 'utf-8',
-    });
-
-    const payload = JSON.parse(out);
-    assert.equal(payload.permission, 'deny');
-    assert.match(payload.user_message, /AppendedCard\.html/);
-    assert.match(payload.user_message, /side-tab/);
-  });
-
-  it('preToolUse denies shell tee writes that bypass the Write tool', () => {
-    const filePath = path.join(cwd, 'src/TeeCard.html');
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        cwd,
-        tool_name: 'Shell',
-        tool_input: {
-          command: `cat <<'EOF' | tee -a "${filePath}"\n<style>.card { border-left: 4px solid #7c3aed; border-radius: 16px; padding: 16px; }</style>\n<div class="card">Hello</div>\nEOF\n`,
-        },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-      encoding: 'utf-8',
-    });
-
-    const payload = JSON.parse(out);
-    assert.equal(payload.permission, 'deny');
-    assert.match(payload.user_message, /TeeCard\.html/);
-    assert.match(payload.user_message, /side-tab/);
-  });
-
-  it('preToolUse denies shell copy writes when copied content has detector findings', () => {
-    const sourcePath = path.join(cwd, 'src/SourceCard.html');
-    const destPath = path.join(cwd, 'src/CopiedCard.html');
-    fs.mkdirSync(path.dirname(sourcePath), { recursive: true });
-    fs.writeFileSync(sourcePath, `
-      <style>.card { border-left: 4px solid #7c3aed; border-radius: 16px; padding: 16px; }</style>
-      <div class="card">Hello</div>
-    `);
-
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        cwd,
-        tool_name: 'Shell',
-        tool_input: {
-          command: `cp "${sourcePath}" "${destPath}"`,
-        },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-      encoding: 'utf-8',
-    });
-
-    const payload = JSON.parse(out);
-    assert.equal(payload.permission, 'deny');
-    assert.match(payload.user_message, /CopiedCard\.html/);
-    assert.match(payload.user_message, /side-tab/);
-  });
-
-  it('preToolUse reconstructs Edit old_string/new_string into a full proposed file before scanning', () => {
-    const filePath = path.join(cwd, 'src/EditCard.html');
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    const oldString = '<div class="card">Hello</div>';
-    fs.writeFileSync(filePath, oldString);
-    const newString = '<style>.card { border-left: 4px solid #7c3aed; border-radius: 16px; padding: 16px; }</style>\n<div class="card">Hello</div>';
-
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        cwd,
-        tool_name: 'Edit',
-        tool_input: {
-          file_path: filePath,
-          old_string: oldString,
-          new_string: newString,
-        },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-      encoding: 'utf-8',
-    });
-
-    const payload = JSON.parse(out);
-    assert.equal(payload.permission, 'deny');
-    assert.match(payload.user_message, /EditCard\.html/);
-    assert.match(payload.user_message, /side-tab/);
-  });
-
-  it('preToolUse allows fragment-only edits instead of denying on partial context', () => {
-    const filePath = path.join(cwd, 'src/MissingEditCard.html');
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        cwd,
-        tool_name: 'Edit',
-        tool_input: {
-          file_path: filePath,
-          new_string: '<div style="border-left: 4px solid #7c3aed; border-radius: 16px;">Hello</div>',
-        },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-      encoding: 'utf-8',
-    });
-
-    assert.deepEqual(JSON.parse(out), { permission: 'allow' });
-  });
-
-  it('preToolUse downgrades repeated identical denials to allow-with-warning after the edit threshold', () => {
-    const filePath = path.join(cwd, 'src/LoopCard.html');
-    const input = JSON.stringify({
-      hook_event_name: 'preToolUse',
-      cwd,
-      session_id: 'cursor-loop',
-      tool_name: 'Write',
-      tool_input: {
-        file_path: filePath,
-        content: '<style>.card { border-left: 4px solid #7c3aed; border-radius: 16px; padding: 16px; }</style><div class="card">Hello</div>',
-      },
-    });
-
-    let payload;
-    for (let i = 0; i < 7; i++) {
-      const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-        cwd: path.resolve('.'),
-        input,
-        env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-        encoding: 'utf-8',
-      });
-      payload = JSON.parse(out);
-    }
-
-    assert.equal(payload.permission, 'allow');
-    assert.match(payload.agent_message, /allowing this write to avoid a loop/);
-    const cache = readCache(cwd);
-    const denials = cache.sessions['cursor-loop'].files[filePath].cursorDenials;
-    assert.equal(Object.values(denials)[0], 7);
-  });
-
-  it('preToolUse honors truthy IMPECCABLE_HOOK_DISABLED values before stdin parsing', () => {
-    const logPath = path.join(cwd, 'hook.ndjson');
-
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: '{not-json',
-      env: {
-        ...process.env,
-        IMPECCABLE_HOOK_DISABLED: 'true',
-        IMPECCABLE_HOOK_LOG: logPath,
-      },
-      encoding: 'utf-8',
-    });
-
-    assert.deepEqual(JSON.parse(out), { permission: 'allow' });
-    const entries = fs.readFileSync(logPath, 'utf-8').trim().split('\n').map((line) => JSON.parse(line));
-    assert.equal(entries[0].event, 'preToolUse');
-    assert.equal(entries[0].skipped, 'env-disabled');
-  });
-
 });
 
 describe('runHook() — emission enrichment', () => {
@@ -4095,12 +3541,10 @@ describe('runHook() — per-edit tiering', () => {
     for (const f of immediate) assert.ok(IMMEDIATE_TIER_RULES.has(f.antipattern));
   });
 
-  it('perEditTieringActive is on for claude, off for cursor/github and perEditRules:"all"', () => {
+  it('perEditTieringActive is on for claude, off for github and perEditRules:"all"', () => {
     assert.equal(perEditTieringActive({ perEditRules: 'immediate' }, 'claude'), true);
     assert.equal(perEditTieringActive({ perEditRules: 'all' }, 'claude'), false);
     assert.equal(perEditTieringActive({ perEditRules: 'immediate' }, 'github'), false);
-    assert.equal(perEditTieringActive({ perEditRules: 'immediate' }, 'cursor'), false);
-    assert.equal(perEditTieringActive({ perEditRules: 'immediate' }, 'grok'), true);
     assert.equal(perEditTieringActive({}, 'claude'), true);
   });
 
@@ -4448,110 +3892,32 @@ describe('runStopHook()', () => {
     assert.equal(reentrant.stdout, '');
   });
 
-  function grokEditEvent(file, sessionId) {
-    return {
-      hookEventName: 'post_tool_use',
-      sessionId,
-      cwd,
-      workspaceRoot: `${cwd}/`,
-      toolName: 'search_replace',
-      toolInput: { file_path: file, old_string: 'a', new_string: 'b' },
-      toolResult: { type: 'SearchReplace' },
-    };
-  }
-
-  function grokStopEvent(sessionId, reason = 'end_turn') {
-    return {
-      hookEventName: 'stop',
-      sessionId,
-      cwd,
-      workspaceRoot: `${cwd}/`,
-      reason,
-      stopHookActive: false,
-    };
-  }
-
-  it('Grok Stop end_turn runs the deep pass over files warmed by camelCase PostToolUse (#646)', async () => {
-    const sid = 'grok-stop-sid';
-    const file = write('src/Card.tsx', 'noop');
-    const det = fakeDetector([
-      finding('dark-glow', 5),
-      finding('marketing-buzzword', 3),
-    ]);
-
-    const edit = await runHook({ stdinJson: JSON.stringify(grokEditEvent(file, sid)), env: {}, cwd, detector: det });
-    assert.equal(edit.audit.harness, 'grok');
-    assert.match(edit.stdout, /dark-glow/);
-    assert.doesNotMatch(edit.stdout, /marketing-buzzword/);
-
-    const stop = await runStopHook({ stdinJson: JSON.stringify(grokStopEvent(sid)), env: {}, cwd, detector: det });
-    assert.equal(stop.exitCode, 0);
-    assert.equal(stop.audit.harness, 'grok');
-    assert.equal(stop.audit.session, sid);
-    assert.equal(stop.audit.emitted, true);
-    const out = JSON.parse(stop.stdout);
-    assert.equal(out.hookSpecificOutput.hookEventName, 'Stop');
-    // Grok discarded the per-edit stdout, so Stop must still carry the
-    // immediate-tier finding as well as the deferred remainder.
-    assert.match(out.hookSpecificOutput.additionalContext, /dark-glow/);
-    assert.match(out.hookSpecificOutput.additionalContext, /marketing-buzzword/);
-  });
-
-  it('Grok Stop re-emits a finding that was fixed then reintroduced', async () => {
-    // Grok PostToolUse only touches the file. Stop is the cache writer.
-    // A clean Stop must replace the remembered set with the empty scan so
-    // the same finding is not deduped away when it comes back.
-    const sid = 'grok-stop-reintro';
-    const file = write('src/Card.tsx', 'noop');
-    let current = [finding('dark-glow', 5)];
-    const det = {
-      set(next) { current = next; },
-      detectText: () => current.slice(),
-      detectHtml: () => current.slice(),
-    };
-
-    await runHook({ stdinJson: JSON.stringify(grokEditEvent(file, sid)), env: {}, cwd, detector: det });
-    const first = await runStopHook({ stdinJson: JSON.stringify(grokStopEvent(sid)), env: {}, cwd, detector: det });
-    assert.match(first.stdout, /dark-glow/);
-
-    det.set([]);
-    const clean = await runStopHook({ stdinJson: JSON.stringify(grokStopEvent(sid)), env: {}, cwd, detector: det });
-    assert.equal(clean.stdout, '');
-    assert.equal(clean.audit.skipped, 'stop-clean');
-    assert.deepEqual(readCache(cwd).sessions[sid].files[file].findings, []);
-
-    det.set([finding('dark-glow', 5)]);
-    const again = await runStopHook({ stdinJson: JSON.stringify(grokStopEvent(sid)), env: {}, cwd, detector: det });
-    assert.equal(again.audit.emitted, true);
-    assert.match(again.stdout, /dark-glow/, 'a finding fixed then reintroduced must fire at Stop again');
-  });
-
   it('a Stop detector failure leaves the remembered set alone', async () => {
     // A throw yields an empty scan; recording that as truth would wipe the
     // remembered keys and make the next successful Stop re-emit everything.
-    const sid = 'grok-stop-throw';
+    const sid = 'stop-throw';
     const file = write('src/Card.tsx', 'noop');
     let fail = false;
     const scan = () => {
       if (fail) throw new Error('detector crashed');
-      return [finding('dark-glow', 5)];
+      return [finding('marketing-buzzword', 3)];
     };
     const det = { detectText: scan, detectHtml: scan };
 
-    await runHook({ stdinJson: JSON.stringify(grokEditEvent(file, sid)), env: {}, cwd, detector: det });
-    const first = await runStopHook({ stdinJson: JSON.stringify(grokStopEvent(sid)), env: {}, cwd, detector: det });
-    assert.match(first.stdout, /dark-glow/);
+    await runHook({ stdinJson: JSON.stringify(editEvent(file, sid)), env: {}, cwd, detector: det });
+    const first = await runStopHook({ stdinJson: JSON.stringify(stopEvent(sid)), env: {}, cwd, detector: det });
+    assert.match(first.stdout, /marketing-buzzword/);
     const remembered = readCache(cwd).sessions[sid].files[file].findings;
     assert.equal(remembered.length, 1);
 
     fail = true;
-    const broken = await runStopHook({ stdinJson: JSON.stringify(grokStopEvent(sid)), env: {}, cwd, detector: det });
+    const broken = await runStopHook({ stdinJson: JSON.stringify(stopEvent(sid)), env: {}, cwd, detector: det });
     assert.equal(broken.stdout, '');
     assert.equal(broken.audit.skipped, 'stop-clean');
     assert.deepEqual(readCache(cwd).sessions[sid].files[file].findings, remembered);
 
     fail = false;
-    const recovered = await runStopHook({ stdinJson: JSON.stringify(grokStopEvent(sid)), env: {}, cwd, detector: det });
+    const recovered = await runStopHook({ stdinJson: JSON.stringify(stopEvent(sid)), env: {}, cwd, detector: det });
     assert.equal(recovered.stdout, '', 'an unchanged finding must stay deduped after a detector failure');
     assert.equal(recovered.audit.skipped, 'stop-clean');
   });
@@ -4577,38 +3943,22 @@ describe('runStopHook()', () => {
     assert.equal(second.audit.skipped, 'stop-clean');
   });
 
-  it('Grok Stop shutdown is observe-only and does not emit a second deep pass (#646)', async () => {
-    const sid = 'grok-shutdown';
-    const file = write('src/Card.tsx', 'noop');
-    const det = fakeDetector([finding('dark-glow', 5)]);
-    await runHook({ stdinJson: JSON.stringify(grokEditEvent(file, sid)), env: {}, cwd, detector: det });
+  it('hook.mjs routes Stop stdin into runStopHook end-to-end', async () => {
+    const sid = 'script-stop';
+    const file = write('src/hero.css', '.hero { color: black; }\n');
+    // Pre-create .impeccable/ so the per-edit pass's clean scan still
+    // persists the touched-file cache entry (a brand-new repo's first-ever
+    // clean edit is intentionally not persisted, to avoid creating dotfiles
+    // for a no-op edit).
+    fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
 
-    const stop = await runStopHook({
-      stdinJson: JSON.stringify(grokStopEvent(sid, 'shutdown')),
-      env: {}, cwd, detector: det,
-    });
-    assert.equal(stop.exitCode, 0);
-    assert.equal(stop.stdout, '');
-    assert.equal(stop.audit.skipped, 'stop-reason');
-    assert.equal(stop.audit.reason, 'shutdown');
-  });
+    // The per-edit pass runs on the clean file, touching it for Stop without
+    // remembering any finding. A later edit (not re-run through the per-edit
+    // hook) introduces the issue, so only Stop's full rescan catches it.
+    const edit = await runHook({ stdinJson: JSON.stringify(editEvent(file, sid)), env: {}, cwd });
+    assert.equal(edit.audit.harness, 'claude');
 
-  it('Grok stopHookActive:true exits silent after camelCase normalize (#646)', async () => {
-    const sid = 'grok-active';
-    const file = write('src/Card.tsx', 'noop');
-    const det = fakeDetector([finding('marketing-buzzword', 3)]);
-    await runHook({ stdinJson: JSON.stringify(grokEditEvent(file, sid)), env: {}, cwd, detector: det });
-
-    const active = { ...grokStopEvent(sid), stopHookActive: true };
-    const stop = await runStopHook({ stdinJson: JSON.stringify(active), env: {}, cwd, detector: det });
-    assert.equal(stop.exitCode, 0);
-    assert.equal(stop.stdout, '');
-    assert.equal(stop.audit.skipped, 'stop-hook-active');
-  });
-
-  it('hook.mjs routes Grok camelCase stop stdin into runStopHook (#646)', async () => {
-    const sid = 'grok-script-stop';
-    const file = write('src/hero.css', [
+    fs.writeFileSync(file, [
       '.hero {',
       '  background: linear-gradient(#f00, #00f);',
       '  -webkit-background-clip: text;',
@@ -4617,16 +3967,12 @@ describe('runStopHook()', () => {
       '',
     ].join('\n'));
 
-    const edit = await runHook({ stdinJson: JSON.stringify(grokEditEvent(file, sid)), env: {}, cwd });
-    assert.equal(edit.audit.harness, 'grok');
-    assert.equal(edit.audit.emitted, true);
-
     const env = { ...process.env };
     delete env.IMPECCABLE_HOOK_DEPTH;
     delete env.CLAUDE_HOOK_DEPTH;
     const out = execFileSync(process.execPath, [path.resolve('skill/scripts/hook.mjs')], {
       cwd,
-      input: JSON.stringify(grokStopEvent(sid)),
+      input: JSON.stringify(stopEvent(sid)),
       env,
       encoding: 'utf-8',
     });

@@ -25,7 +25,7 @@ const GOOD_MANIFEST = {
   version: '4.0.4',
   author: { name: 'Paul Bakaus' },
   homepage: 'https://impeccable.style',
-  repository: 'https://github.com/pbakaus/impeccable',
+  repository: 'https://github.com/Raudbjorn/impeccable',
   skills: './skills/',
 };
 

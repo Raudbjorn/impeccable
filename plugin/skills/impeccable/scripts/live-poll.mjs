@@ -365,9 +365,8 @@ Options:
 
 Harness note:
   Default one-shot mode is the primary contract, including Codex foreground polling.
-  Claude Code may run it as a background task; Cursor uses a background terminal with exit notification.
-  --stream is retained for harnesses with measured, reliable incremental stdout.
-  Do not use --stream on Cursor.`);
+  Claude Code may run it as a background task.
+  --stream is retained for harnesses with measured, reliable incremental stdout.`);
     process.exit(0);
   }
 

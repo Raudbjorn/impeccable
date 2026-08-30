@@ -41,10 +41,6 @@ export { slugFromTarget } from './lib/target-slug.mjs';
  * concrete artifact before calling this — we never slug a natural-language
  * phrase.
  */
-/**
- * Filename-safe UTC ISO timestamp: hyphens for separators, trailing Z.
- * Plain colons aren't allowed on Windows filesystems.
- */
 export function nowFilenameStamp(date = new Date()) {
   const iso = date.toISOString();           // 2026-05-12T18:30:00.123Z
   return iso.replace(/[:.]/g, '-').replace(/-\d+Z$/, 'Z');
@@ -207,8 +203,7 @@ function isMainModule() {
   try {
     return fs.realpathSync(fileURLToPath(import.meta.url)) === fs.realpathSync(process.argv[1]);
   } catch {
-    // pathToFileURL normalizes Windows paths; keep it as a fallback for any
-    // environment where realpath is unavailable.
+    // fallback for any environment where realpath is unavailable.
     return import.meta.url === pathToFileURL(process.argv[1]).href;
   }
 }

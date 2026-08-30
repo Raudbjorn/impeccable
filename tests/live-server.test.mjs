@@ -3415,7 +3415,7 @@ colors: {}
       await res.text().catch(() => {});
       assert.equal(res.status, 403);
     } finally {
-      rmSync(linkPath, { force: true });
+      rmSync(linkPath, { recursive: true, force: true });
       rmSync(outsideDir, { recursive: true, force: true });
     }
   });

@@ -6,8 +6,8 @@ import { createTransformer } from '../../../scripts/lib/transformers/factory.js'
 const TEST_DIR = path.join(process.cwd(), 'test-tmp-provider-block-transformer');
 
 const baseConfig = {
-  provider: 'cursor',
-  providerTags: ['cursor'],
+  provider: 'gemini',
+  providerTags: ['gemini'],
   configDir: '.test',
   displayName: 'Test Provider',
   frontmatterFields: [],
@@ -33,9 +33,9 @@ describe('provider block transformer integration', () => {
       description: 'Test',
       body: [
         'Shared guidance.',
-        '<cursor>',
-        'Cursor-only guidance.',
-        '</cursor>',
+        '<gemini>',
+        'Gemini-only guidance.',
+        '</gemini>',
         '<codex>',
         'Codex-only guidance.',
         '</codex>',
@@ -43,11 +43,11 @@ describe('provider block transformer integration', () => {
     }];
     transform(skills, TEST_DIR);
 
-    const content = fs.readFileSync(path.join(TEST_DIR, 'cursor/.test/skills/test/SKILL.md'), 'utf-8');
+    const content = fs.readFileSync(path.join(TEST_DIR, 'gemini/.test/skills/test/SKILL.md'), 'utf-8');
     expect(content).toContain('Shared guidance.');
-    expect(content).toContain('Cursor-only guidance.');
+    expect(content).toContain('Gemini-only guidance.');
     expect(content).not.toContain('Codex-only guidance.');
-    expect(content).not.toContain('<cursor>');
+    expect(content).not.toContain('<gemini>');
   });
 
   test('compiles provider blocks in reference files', () => {
@@ -62,9 +62,9 @@ describe('provider block transformer integration', () => {
           filePath: '/fake/ref.md',
           content: [
             'Shared reference.',
-            '<cursor>',
-            'Cursor reference.',
-            '</cursor>',
+            '<gemini>',
+            'Gemini reference.',
+            '</gemini>',
             '<codex>',
             'Codex reference.',
             '</codex>',
@@ -74,11 +74,11 @@ describe('provider block transformer integration', () => {
     }];
     transform(skills, TEST_DIR);
 
-    const ref = fs.readFileSync(path.join(TEST_DIR, 'cursor/.test/skills/test/reference/ref.md'), 'utf-8');
+    const ref = fs.readFileSync(path.join(TEST_DIR, 'gemini/.test/skills/test/reference/ref.md'), 'utf-8');
     expect(ref).toContain('Shared reference.');
-    expect(ref).toContain('Cursor reference.');
+    expect(ref).toContain('Gemini reference.');
     expect(ref).not.toContain('Codex reference.');
-    expect(ref).not.toContain('<cursor>');
+    expect(ref).not.toContain('<gemini>');
   });
 
   test('compiles provider blocks in generated agents', () => {
@@ -130,7 +130,7 @@ describe('provider block transformer integration', () => {
     }];
     transform(skills, TEST_DIR);
 
-    const detector = path.join(TEST_DIR, 'cursor/.test/skills/test/scripts/detector/detect-antipatterns.mjs');
+    const detector = path.join(TEST_DIR, 'gemini/.test/skills/test/scripts/detector/detect-antipatterns.mjs');
     expect(fs.existsSync(detector)).toBe(true);
     expect(fs.readFileSync(detector, 'utf-8')).toContain('bundled = true');
   });

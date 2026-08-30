@@ -504,8 +504,8 @@ async function main() {
   console.log(printSpec(spec));
 }
 
-// realpath on both sides: a skill mounted through a symlink (Cursor, a
-// worktree, an eval stage) must still run as a CLI.
+// realpath on both sides: a skill mounted through a symlink (a worktree,
+// an eval stage) must still run as a CLI.
 const isMain = (() => {
   try { return !!process.argv[1] && fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url)); }
   catch { return !!process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname); }
