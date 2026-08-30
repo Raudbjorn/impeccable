@@ -24,7 +24,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const API_BASE = 'https://impeccable.style';
 
 // Provider folder names in project roots
-const PROVIDER_DIRS = ['.claude', '.gemini', '.codex', '.agents', '.agent', '.github', '.hermes', '.pi', '.opencode', '.kiro', '.vibe'];
+const PROVIDER_DIRS = ['.claude', '.gemini', '.codex', '.agents', '.agent', '.github', '.pi', '.opencode', '.kiro', '.vibe'];
 const PROVIDER_ALIASES = {
   agent: '.agent',
   agents: '.agents',
@@ -65,10 +65,10 @@ function opencodeGlobalConfigDir(home) {
 }
 
 // Providers whose GLOBAL (home) skills dir is not `<provider>/skills`,
-// as a function of the home dir. Pi discovers global skills from
-// ~/.pi/agent/skills/ (issue #327); OpenCode from its config dir (issue
-// #406); Hermes from $HERMES_HOME. Project scope stays `<provider>/skills`
-// for all three.
+// as a function of the home dir. Antigravity discovers global skills from
+// ~/.gemini/config/skills/; Pi from ~/.pi/agent/skills/ (issue #327);
+// OpenCode from its config dir (issue #406). Project scope stays
+// `<provider>/skills` for all three.
 const HOME_SKILLS_DIR_OVERRIDES = {
   '.agent': (home) => join(home, '.gemini', 'config', 'skills'),
   '.pi': (home) => join(home, '.pi', 'agent', 'skills'),
@@ -78,14 +78,6 @@ const HOME_SKILLS_DIR_OVERRIDES = {
 // When a project has no harness folder yet, infer the target from globally
 // installed harnesses (~/.claude, ~/.codex, ...). Codex reads skills from
 // .agents/skills, so ~/.codex maps to the .agents bundle variant.
-//
-// Hermes auto-detection uses the fixed `~/.hermes` location only. When a
-// non-default Hermes profile is active (HERMES_HOME points to a profile path),
-// the user is expected to be inside a Hermes invocation and can pass
-// --providers=hermes explicitly. Auto-detection from a non-default HERMES_HOME
-// would also defeat test isolation (tests inject HOME; HERMES_HOME leaks from
-// the parent process and would surface the developer's real ~/.hermes in
-// detection output). The install path honors $HERMES_HOME; detection does not.
 const GLOBAL_HARNESS_HINTS = [
   { home: '.agent', provider: '.agent' },
   // Antigravity nests under ~/.gemini/ too, so any of these also trips the
@@ -2286,7 +2278,6 @@ export {
   expectedHookDests,
   extractZip,
   formatInstallDetectionLines,
-  hermesGlobalHome,
   HOME_SKILLS_DIR_OVERRIDES,
   linkProviderSkills,
   mergeHookManifests,

@@ -12,7 +12,6 @@ export const FILE_DOWNLOAD_PROVIDER_CONFIG_DIRS = Object.freeze({
   antigravity: '.agent',
   github: '.github',
   grok: '.grok',
-  hermes: '.hermes',
   kiro: '.kiro',
   opencode: '.opencode',
   pi: '.pi',
