@@ -77,7 +77,11 @@ export function normalizeHeading(text) {
 
 function extractHeadings(markdown) {
   const headings = [];
-  for (const line of String(markdown || '').split(/\r?\n/)) {
+  // Scan the same prose-only view proseWordCount() uses: a heading wrapped
+  // inside a fenced code block (or an HTML comment / <details> block) is not
+  // structure, it's quoted text, and counting it let a body with every
+  // required heading fenced and zero real prose pass the gate untouched.
+  for (const line of stripNonProse(String(markdown || '')).split(/\r?\n/)) {
     const match = line.match(/^#{2,3}\s+(.+)$/);
     if (match) headings.push(normalizeHeading(match[1]));
   }

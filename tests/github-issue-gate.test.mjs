@@ -168,6 +168,20 @@ describe('issue body gate', () => {
     assert.deepEqual(plan.reasons, ['missing section "steps to reproduce" from the bug report template']);
   });
 
+  it('does not pass a body that fences every required heading with zero real prose', () => {
+    const plan = evaluateIssue(issue({
+      body: [
+        '```',
+        '## What happened?',
+        '## Steps to reproduce',
+        '## How did you run impeccable?',
+        '## Provider & environment',
+        '```',
+      ].join('\n'),
+    }), { templates });
+    assert.notEqual(plan.verdict, 'pass');
+  });
+
   it('flags an oversized prose body even when the structure passes', () => {
     const plan = evaluateIssue(issue({
       body: FILLED_BUG_BODY + '\n' + words(700),
