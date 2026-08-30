@@ -841,13 +841,17 @@ export function collectManualApplyFiles(batch, extraFiles = [], cwd = process.cw
 export function retriggerManualApplyFiles(files, cwd = process.cwd()) {
   const touched = [];
   const failures = [];
+  const realRoot = fs.realpathSync(cwd);
   for (const relativeFile of collectManualApplyFiles({ entries: [] }, files, cwd)) {
     const absolute = path.resolve(cwd, relativeFile);
     try {
-      const stat = fs.statSync(absolute);
+      const realFile = fs.realpathSync(absolute);
+      const realRelative = path.relative(realRoot, realFile);
+      if (!realRelative || realRelative.startsWith('..') || path.isAbsolute(realRelative)) continue;
+      const stat = fs.statSync(realFile);
       if (!stat.isFile()) continue;
       const mtime = new Date(Math.max(Date.now(), stat.mtimeMs + 1));
-      fs.utimesSync(absolute, stat.atime, mtime);
+      fs.utimesSync(realFile, stat.atime, mtime);
       touched.push(relativeFile);
     } catch (err) {
       failures.push({ file: relativeFile, reason: err.message });
