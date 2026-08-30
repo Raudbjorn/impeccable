@@ -522,6 +522,27 @@ test('neutral contrast issue flags mid-tones and low primary separation', async 
   assert.match(both[1], /too similar/);
 });
 
+test('isHexColor and safeUrl reject values that would break out of an unescaped attribute', async () => {
+  const { isHexColor, safeUrl } = await import(colorModule);
+  // A crafted answers.json (hand-edited, or an imported design-context
+  // bundle) is the realistic attacker-controlled source for these: they feed
+  // design-context.js's unescaped `style="--dot-fill:${hex}"` and
+  // `<a href="${url}">` sites directly.
+  assert.equal(isHexColor('#1E4A42'), true);
+  assert.equal(isHexColor('#1e4a42'), true);
+  assert.equal(isHexColor('red" onmouseover="alert(1)'), false);
+  assert.equal(isHexColor('#1E4A4'), false);
+  assert.equal(isHexColor(''), false);
+  assert.equal(isHexColor(null), false);
+
+  assert.equal(safeUrl('https://example.com/icons'), 'https://example.com/icons');
+  assert.equal(safeUrl('http://example.com'), 'http://example.com/');
+  assert.equal(safeUrl('javascript:alert(1)'), '');
+  assert.equal(safeUrl('data:text/html,<script>alert(1)</script>'), '');
+  assert.equal(safeUrl('not a url'), '');
+  assert.equal(safeUrl(''), '');
+});
+
 test('rejects raw, encoded, and double-encoded path traversal', async (t) => {
   const fixture = await createFixture();
   const server = await startPicker(fixture.cwd, ['--port', String(portBase + 20)]);

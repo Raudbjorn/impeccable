@@ -205,6 +205,23 @@ function sourceCanvas(image) {
   return canvas;
 }
 
+/* The ring itself is aria-hidden (a single element can't honestly expose two
+   independent axes as one aria-valuenow), so its two axis-slider proxies
+   carry the real value/text -- rounded to whole percent, since a fractional
+   position is not a meaningful spoken value. */
+function syncAxisSliders(node, role, x, y, colorHex) {
+  const xSlider = $(`.picker-ring-axis--x[data-role="${role}"]`, node);
+  const ySlider = $(`.picker-ring-axis--y[data-role="${role}"]`, node);
+  if (xSlider) {
+    xSlider.setAttribute('aria-valuenow', String(Math.round(x)));
+    xSlider.setAttribute('aria-valuetext', `${colorHex}, horizontal ${Math.round(x)}%`);
+  }
+  if (ySlider) {
+    ySlider.setAttribute('aria-valuenow', String(Math.round(y)));
+    ySlider.setAttribute('aria-valuetext', `${colorHex}, vertical ${Math.round(y)}%`);
+  }
+}
+
 function syncRings(item) {
   if (item.type !== 'cue') return;
   const itemState = states.get(item.id);
@@ -214,8 +231,8 @@ function syncRings(item) {
     ring.style.setProperty('--x', `${x}%`);
     ring.style.setProperty('--y', `${y}%`);
     ring.style.setProperty('--marker-color', itemState.colors[role]);
-    ring.setAttribute('aria-valuetext', itemState.colors[role]);
     ring.toggleAttribute('data-detached', itemState.detached[role]);
+    syncAxisSliders(item.node, role, x, y, itemState.colors[role]);
   });
 }
 
@@ -4192,6 +4209,29 @@ function wireRing(ring, item, image) {
     const [x, y] = states.get(item.id).rings[ring.dataset.role];
     sample(ring, item, image, x + moves[e.key][0] * step, y + moves[e.key][1] * step);
   };
+
+  // The two axis-slider proxies (see index.astro) are the real keyboard/AT
+  // target: the visual ring above is aria-hidden and reachable by pointer
+  // only. sample()/drawLoupe() still take the visual ring itself, since the
+  // loupe positions from *its* bounding rect, not the (visually hidden,
+  // 1px) proxy that received the key event.
+  const wireAxis = (axis, keys) => {
+    const slider = ring.parentElement.querySelector(`.picker-ring-axis--${axis}[data-role="${ring.dataset.role}"]`);
+    if (!slider) return;
+    slider.onfocus = () => image.complete && drawLoupe(ring, item, image);
+    slider.onblur = () => delete loupe.dataset.visible;
+    slider.onkeydown = (e) => {
+      if (!(e.key in keys)) return;
+      e.preventDefault();
+      dismissRingGuide();
+      const step = e.shiftKey ? 5 : 1;
+      const [x, y] = states.get(item.id).rings[ring.dataset.role];
+      const delta = keys[e.key] * step;
+      sample(ring, item, image, axis === 'x' ? x + delta : x, axis === 'y' ? y + delta : y);
+    };
+  };
+  wireAxis('x', { ArrowLeft: -1, ArrowRight: 1 });
+  wireAxis('y', { ArrowUp: -1, ArrowDown: 1 });
 }
 
 function buildCard(item) {
@@ -4208,7 +4248,8 @@ function buildCard(item) {
     image.src = `/cues/${encodeURIComponent(item.id)}.png`;
     $$('.picker-ring', face).forEach((ring) => {
       const role = ring.dataset.role;
-      ring.setAttribute('aria-valuetext', states.get(item.id).colors[role]);
+      const [x, y] = states.get(item.id).rings[role];
+      syncAxisSliders(face, role, x, y, states.get(item.id).colors[role]);
       wireRing(ring, item, image);
     });
     image.addEventListener('load', () => {
@@ -4276,7 +4317,13 @@ function deckKeys(e) {
   }
   const delta = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
   if (!delta) return;
-  if (e.target instanceof Element && e.target.closest('[role="slider"], input')) return;
+  // This listener runs in the capture phase (registered with `true` below),
+  // ahead of the ring/axis-slider's own keydown handler, so it can't rely on
+  // e.defaultPrevented the way the bubble-phase screen-navigation handler in
+  // index.astro does -- it has to recognize the ring by class, not just by
+  // role, since the ring itself (mouse-focused, then nudged with arrows) is
+  // aria-hidden and carries no role="slider" of its own.
+  if (e.target instanceof Element && e.target.closest('.picker-ring, [role="slider"], input')) return;
   // A band held by the keyboard owns the arrows until it is dropped.
   if (drag?.keyboard) return;
   e.preventDefault();

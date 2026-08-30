@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -513,6 +513,10 @@ describe('init gate', () => {
     assert.match(result.stdout, /NO_PRODUCT_MD/);
     assert.match(result.stdout, /init/);
     assert.doesNotMatch(result.stdout, /ASSIGNED INDEX/);
+    // A refused roll must not leave the pending marker behind: it makes a
+    // later context.mjs/detect.mjs run report COMP_ROUND_OPEN for a roll
+    // that never happened.
+    assert.equal(existsSync(path.join(dir, '.impeccable', 'build', 'pending.json')), false);
   });
 
   it('deals normally once PRODUCT.md exists', () => {
@@ -538,12 +542,14 @@ describe('init gate', () => {
   };
 
   it('refuses a direction roll with no DESIGN.md and routes to the seed questionnaire offer', () => {
-    const result = gateRun(seedGateDir());
+    const dir = seedGateDir();
+    const result = gateRun(dir);
     assert.equal(result.status, 1);
     assert.match(result.stdout, /NO_DESIGN_MD/);
     assert.match(result.stdout, /document --seed/);
     assert.match(result.stdout, /--seed-declined/);
     assert.doesNotMatch(result.stdout, /ASSIGNED INDEX/);
+    assert.equal(existsSync(path.join(dir, '.impeccable', 'build', 'pending.json')), false);
   });
 
   it('deals a direction once --seed-declined records the user skip', () => {

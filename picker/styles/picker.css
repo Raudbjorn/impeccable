@@ -740,6 +740,41 @@ body[data-hydrated='submitted'] [data-restored-submitted] {
   outline-offset: 3px;
 }
 
+/* Focusable but never visible: the real keyboard/AT target for a ring's two
+   independent axes. The visual dot (.picker-ring above) stays mouse-only and
+   aria-hidden, since a single element can't honestly expose two axes as one
+   aria-valuenow. Clip, not display:none/visibility:hidden, which would drop
+   these from the accessibility tree and defeat the point. */
+.picker-ring-axis {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The ring's own focus highlight, re-keyed off its axis proxies: keyboard
+   and AT users never focus .picker-ring directly (tabindex="-1"), so the
+   visible cue has to follow whichever axis slider has focus instead. */
+.picker-card[data-pos="0"]:has(.picker-ring-axis[data-role="primary"]:focus-visible) .picker-ring[data-role="primary"],
+.picker-card[data-pos="0"]:has(.picker-ring-axis[data-role="secondary"]:focus-visible) .picker-ring[data-role="secondary"],
+.picker-card[data-pos="0"]:has(.picker-ring-axis[data-role="tertiary"]:focus-visible) .picker-ring[data-role="tertiary"],
+.picker-card[data-pos="0"]:has(.picker-ring-axis[data-role="neutral"]:focus-visible) .picker-ring[data-role="neutral"] {
+  z-index: 3;
+}
+
+.picker-card[data-pos="0"]:has(.picker-ring-axis[data-role="primary"]:focus-visible) .picker-ring[data-role="primary"]::before,
+.picker-card[data-pos="0"]:has(.picker-ring-axis[data-role="secondary"]:focus-visible) .picker-ring[data-role="secondary"]::before,
+.picker-card[data-pos="0"]:has(.picker-ring-axis[data-role="tertiary"]:focus-visible) .picker-ring[data-role="tertiary"]::before,
+.picker-card[data-pos="0"]:has(.picker-ring-axis[data-role="neutral"]:focus-visible) .picker-ring[data-role="neutral"]::before {
+  outline: 2px solid var(--ks-patina);
+  outline-offset: 3px;
+}
+
 .picker-deck-controls {
   min-width: 260px;
   display: grid;

@@ -606,7 +606,23 @@ const questions = [
                     <div class="picker-card-face picker-cue-face">
                       <img alt="" />
                       {roles.map(([role, label]) => (
-                        <button class="picker-ring" type="button" data-role={role} role="slider" aria-label={`${label} color picker`}></button>
+                        <>
+                          {/* Visual thumb only: pointer drag stays wired to this
+                              element exactly as before. tabindex="-1" keeps it
+                              programmatically focusable (palette-picker.js calls
+                              ring.focus() on pointerdown, for the loupe) without
+                              adding it to the Tab order -- the two sliders below
+                              are the actual accessibility surface, since a
+                              single element can't honestly expose two
+                              independent axes as one aria-valuenow. */}
+                          <div class="picker-ring" data-role={role} tabindex="-1" aria-hidden="true"></div>
+                          <button class="picker-ring-axis picker-ring-axis--x" type="button" data-role={role} data-axis="x"
+                            role="slider" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="100"
+                            aria-label={`${label} color, horizontal position`}></button>
+                          <button class="picker-ring-axis picker-ring-axis--y" type="button" data-role={role} data-axis="y"
+                            role="slider" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="100"
+                            aria-label={`${label} color, vertical position`}></button>
+                        </>
                       ))}
                     </div>
                   </article>

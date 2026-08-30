@@ -16,7 +16,7 @@
  * the design-context store with no submit involved.
  */
 
-import { contrastInk, contrastInkHex, formatOklch, readableOn } from './color.js';
+import { contrastInk, contrastInkHex, formatOklch, isHexColor, readableOn, safeUrl } from './color.js';
 import { getBoot, hydrationReady } from './boot.js';
 import { loadIconPacks } from './palette-picker.js';
 
@@ -165,10 +165,14 @@ function flatAnswer(name, surfaces) {
 
 function takeSnapshot() {
   const surfaces = chosenSurfaces();
+  // Every downstream use of entry.hex lands in an unescaped inline style or
+  // data attribute (the swatch/fan/cue-dot renderers below), so a strict
+  // format check here -- not just "is it non-empty" -- is what keeps a value
+  // like `red" onmouseover="alert(1)` from breaking out of an attribute.
   const palette = ROLES.map((role) => ({
     role: role[0].toUpperCase() + role.slice(1),
     hex: fieldValue(`palette-${role}`).toUpperCase(),
-  })).filter((entry) => entry.hex);
+  })).filter((entry) => isHexColor(entry.hex));
 
   const scaleInput = form.querySelector('input[name="type-scale"]:checked');
   const pairCard = form.querySelector('input[name="font-pair"]:checked')?.closest('.picker-type-option');
@@ -201,7 +205,12 @@ function takeSnapshot() {
     icons: {
       pack: fieldValue('icon-pack-name'),
       license: fieldValue('icon-pack-license'),
-      url: fieldValue('icon-pack-url'),
+      // Escaped for HTML entities at the render site below, which blocks
+      // quote-breakout but not a javascript: scheme; restrict to http(s)
+      // here so a crafted answers.json (hand-edited, or an imported bundle
+      // -- validateBundle() checks shape, not per-field content) can't turn
+      // an icon-pack link into script execution.
+      url: safeUrl(fieldValue('icon-pack-url')),
     },
   };
 }

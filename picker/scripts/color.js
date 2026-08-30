@@ -81,6 +81,24 @@ export function contrastInkHex(hex) {
     : oklchToHex([0.14, 0.018, 95]);
 }
 
+// Strict format, not just non-empty: every caller that checks this uses the
+// result in an unescaped inline style or data attribute (design-context.js's
+// palette swatches), so this is the boundary that keeps a crafted value like
+// `red" onmouseover="alert(1)` from ever reaching one.
+export function isHexColor(value) {
+  return typeof value === 'string' && /^#[0-9A-F]{6}$/i.test(value);
+}
+
+/** A URL safe to place in an href: parses, and resolves to an allowed scheme. */
+export function safeUrl(value, protocols = ['http:', 'https:']) {
+  try {
+    const url = new URL(value);
+    return protocols.includes(url.protocol) ? url.href : '';
+  } catch {
+    return '';
+  }
+}
+
 function relativeLuminance(hex) {
   const [red, green, blue] = parseHex(hex).map(linearize);
   return 0.2126 * red + 0.7152 * green + 0.0722 * blue;

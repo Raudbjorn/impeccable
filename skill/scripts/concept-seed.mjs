@@ -770,16 +770,6 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         scope: scopeIdx !== -1 ? args[scopeIdx + 1] : undefined,
       }));
     } else {
-      // A dealt roll leaves a marker the build phase clears: context.mjs and
-      // detect.mjs read it and refuse to treat page work as done while a
-      // direction is chosen but the build never started (COMP_ROUND_OPEN).
-      try {
-        const { mkdirSync, writeFileSync: wf } = await import('node:fs');
-        if (scopeIdx !== -1 && args[scopeIdx + 1] === 'direction') {
-          mkdirSync(resolve(process.cwd(), '.impeccable', 'build'), { recursive: true });
-          wf(resolve(process.cwd(), '.impeccable', 'build', 'pending.json'), JSON.stringify({ scope: 'direction', at: new Date().toISOString() }, null, 2));
-        }
-      } catch { /* marker is best-effort */ }
       // Mechanical init gate: prose alone does not keep a model from dealing
       // before init, and fresh repos produced exactly that skip (the model
       // rolled directions with no PRODUCT.md, so nothing grounded the fusion).
@@ -818,6 +808,21 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         // output clean for the agent.
         process.stderr.write('seed pause bypassed via IMPECCABLE_SEED_DECLINED (unattended harness escape)\n');
       }
+      // A dealt roll leaves a marker the build phase clears: context.mjs and
+      // detect.mjs read it and refuse to treat page work as done while a
+      // direction is chosen but the build never started (COMP_ROUND_OPEN).
+      // Written only after every gate above has passed (or been bypassed):
+      // writing it earlier left a phantom marker behind a NO_PRODUCT_MD or
+      // NO_DESIGN_MD refusal, which never dealt anything, so a later
+      // context.mjs/detect.mjs run reported COMP_ROUND_OPEN for a roll that
+      // never happened.
+      try {
+        const { mkdirSync, writeFileSync: wf } = await import('node:fs');
+        if (scopeIdx !== -1 && args[scopeIdx + 1] === 'direction') {
+          mkdirSync(resolve(process.cwd(), '.impeccable', 'build'), { recursive: true });
+          wf(resolve(process.cwd(), '.impeccable', 'build', 'pending.json'), JSON.stringify({ scope: 'direction', at: new Date().toISOString() }, null, 2));
+        }
+      } catch { /* marker is best-effort */ }
       process.stdout.write(await renderConceptSeed({
         scope: scopeIdx !== -1 ? args[scopeIdx + 1] : 'surface',
         key: fromIdx !== -1
