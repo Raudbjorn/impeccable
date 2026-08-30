@@ -2577,7 +2577,7 @@ describe('walkDir', () => {
   });
 
   // Issue #303: when impeccable (or any agent tool) is installed into a
-  // project's .claude/.cursor/etc. tree, a root scan descended into the
+  // project's .claude/.gemini/etc. tree, a root scan descended into the
   // vendored skill code and reported the detector's own example strings as
   // findings. Hidden directories are never app source — skip them all.
   test('skips hidden dirs (AI-harness installs) during recursion', () => {
@@ -2590,7 +2590,7 @@ describe('walkDir', () => {
       };
       write('src/app.css');
       write('.claude/skills/impeccable/scripts/detector.js');
-      write('.cursor/skills/impeccable/example.css');
+      write('.gemini/skills/impeccable/example.css');
       write('.impeccable/live/preview.html');
       write('node_modules/pkg/index.js');
       // Hidden dirs that conventionally hold real UI source are the

@@ -57,8 +57,6 @@ function stageFixture(name) {
     try {
       symlinkSync(repoSvelte, join(tmp, 'node_modules', 'svelte'), 'dir');
     } catch {
-      // Windows without Developer Mode cannot symlink; copying is slower but
-      // keeps the suite runnable there.
       cpSync(repoSvelte, join(tmp, 'node_modules', 'svelte'), { recursive: true });
     }
   }

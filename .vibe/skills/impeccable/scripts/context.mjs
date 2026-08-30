@@ -802,11 +802,7 @@ function safeRead(p) {
 }
 
 function loadNativePlatformReferences(platform) {
-  const names = platform === 'adaptive'
-    ? ['ios', 'android']
-    : platform === 'ios' || platform === 'android'
-      ? [platform]
-      : [];
+  const names = platform === 'android' || platform === 'adaptive' ? ['android'] : [];
   return names.flatMap((name) => {
     const filePath = path.join(SKILL_REFERENCE_DIR, `${name}.md`);
     const content = safeRead(filePath);
@@ -933,27 +929,17 @@ export function extractSectionValue(product, heading) {
 }
 
 /**
- * Pull the platform (`web`, `ios`, `android`, or `adaptive`) out of PRODUCT.md
- * by looking for a `## Platform` section and reading the first non-empty line
- * that follows it. `adaptive` is for cross-platform apps (Flutter, React
- * Native) that ship both iOS and Android from one codebase; a line that names
- * both targets (e.g. `ios, android`) is also read as `adaptive`. Returns null
- * when the file is legacy / platform-less, which the skill treats as `web`
- * (the default the general rules already assume).
+ * Pull the platform (`web`, `android`, or `adaptive`) out of PRODUCT.md by
+ * looking for a `## Platform` section and reading the first non-empty line
+ * that follows it. `adaptive` is a legacy alias for cross-platform apps
+ * (Flutter, React Native)  -now behaves identically to `android`. Returns null when the file is
+ * legacy / platform-less, which the skill treats as `web` (the default the
+ * general rules already assume).
  */
 export function extractPlatform(product) {
   const value = (extractSectionValue(product, 'Platform') || '').toLowerCase();
   if (!value) return null;
-  if (value === 'web' || value === 'ios' || value === 'android' || value === 'adaptive') return value;
-  // A short list naming both native targets (`ios, android`, `ios and
-  // android`) = adaptive. Only list separators and the two platform words may
-  // appear; anything else (prose, negations) is unrecognized and falls
-  // through to the CLI's WARNING path.
-  const tokens = value.split(/[\s,+&/]+/).filter(t => t && t !== 'and');
-  if (tokens.length >= 2 && tokens.every(t => t === 'ios' || t === 'android')
-    && tokens.includes('ios') && tokens.includes('android')) {
-    return 'adaptive';
-  }
+  if (value === 'web' || value === 'android' || value === 'adaptive') return value;
   return null;
 }
 
@@ -1013,9 +999,7 @@ async function fetchLatestSkillVersion() {
   }
 }
 
-// Destroy fetch's global undici dispatcher before process.exit(): a live
-// keep-alive socket trips a libuv assertion on Windows/Node 24 after a
-// successful boot (nodejs/node#56645, issue #573).
+// Destroy fetch's global undici dispatcher before process.exit()
 async function destroyFetchDispatcher() {
   const dispatcher = globalThis[Symbol.for('undici.globalDispatcher.1')];
   if (dispatcher && typeof dispatcher.destroy === 'function') {
@@ -1024,8 +1008,7 @@ async function destroyFetchDispatcher() {
 }
 
 // Drain the boot payload before process.exit(): a live pipe that has not
-// flushed yet is truncated when Node tears down (issue #573 review). Then
-// close fetch so Windows teardown does not abort on the keep-alive socket.
+// flushed yet is truncated when Node tears down (issue #573 review). 
 async function finishCli(output) {
   await new Promise((resolve) => {
     process.stdout.write(output, () => resolve());
@@ -1223,7 +1206,7 @@ async function cli() {
     const rawPlatform = extractSectionValue(ctx.product, 'Platform');
     if (rawPlatform) {
       parts.push(
-        `WARNING: PRODUCT.md's \`## Platform\` value \`${rawPlatform}\` is not recognized; treating the project as \`web\`. Valid values are \`web\`, \`ios\`, \`android\`, or \`adaptive\` (cross-platform, ships both). If this project is native, fix the field (name the design language the app renders, not the toolchain) and surface it to the user.`,
+        `WARNING: PRODUCT.md's \`## Platform\` value \`${rawPlatform}\` is not recognized; treating the project as \`web\`. Valid values are \`web\`, \`android\`, or \`adaptive\` (legacy alias for \`android\`). If this project is native, fix the field (name the design language the app renders, not the toolchain) and surface it to the user.`,
       );
     }
   }
@@ -1248,9 +1231,7 @@ const HOOK_MANIFESTS_BY_PROVIDER = Object.freeze({
   'claude-code': ['.claude/settings.local.json', '.claude/settings.json'],
   codex: ['.codex/hooks.json'],
   agents: ['.codex/hooks.json'],
-  cursor: ['.cursor/hooks.json'],
   github: ['.github/hooks/impeccable.json'],
-  grok: ['.grok/hooks/impeccable.json'],
 });
 
 function truthyEnv(value) {
@@ -1279,10 +1260,10 @@ function hookEnabledAt(root) {
   return enabled;
 }
 
-const STOP_REVIEW_PROVIDERS = new Set(['claude-code', 'codex', 'agents', 'grok']);
+const STOP_REVIEW_PROVIDERS = new Set(['claude-code', 'codex', 'agents']);
 
 function automaticHookMode(ctx) {
-  if (ctx.platform === 'ios' || ctx.platform === 'android' || ctx.platform === 'adaptive') {
+  if (ctx.platform === 'android' || ctx.platform === 'adaptive') {
     return 'none';
   }
   const activeRoot = path.resolve(ctx.projectRoot || process.cwd());
@@ -1420,7 +1401,7 @@ function appendSubagentAuthorizationDirective(parts) {
 // reads HTML and CSS, so native projects get nothing.
 function appendDetectorFallback(parts, ctx) {
   if (automaticHookMode(ctx) !== 'none') return;
-  if (ctx.platform === 'ios' || ctx.platform === 'android' || ctx.platform === 'adaptive') return;
+  if (ctx.platform === 'android' || ctx.platform === 'adaptive') return;
   const scriptsPath = path.dirname(fileURLToPath(import.meta.url));
   parts.push([
     'MANUAL_DETECTOR_REQUIRED: No automatic Impeccable design hook is active this session.',
@@ -1438,7 +1419,7 @@ function appendDetectorFallback(parts, ctx) {
 // harnesses and OSes differ (cwebp, sips on macOS, magick, ffmpeg), and the
 // agent should read this line instead of running command -v per image.
 function appendImageToolsDirective(parts) {
-  const probe = process.platform === 'win32' ? 'where' : 'which';
+  const probe = 'which';
   const found = ['cwebp', 'sips', 'magick', 'ffmpeg'].filter((tool) => {
     try { return spawnSync(probe, [tool], { stdio: 'ignore' }).status === 0; } catch { return false; }
   });

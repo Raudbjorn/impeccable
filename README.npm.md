@@ -85,4 +85,4 @@ This CLI is part of [Impeccable](https://impeccable.style), a cross-provider des
 
 ## License
 
-[Apache 2.0](https://github.com/pbakaus/impeccable/blob/main/LICENSE)
+[Apache 2.0](https://github.com/Raudbjorn/impeccable/blob/main/LICENSE)

@@ -14,9 +14,8 @@ import {
   buildClaudePluginHooksManifest,
   buildCodexHooksManifest,
   buildCodexPluginHooksManifest,
-  buildCursorHooksManifest,
   buildGitHubHooksManifest,
-  buildGrokHooksManifest,
+  buildOmpHookModule,
   hooksJsonFor,
 } from '../scripts/lib/transformers/hooks.js';
 
@@ -139,20 +138,6 @@ describe('hook manifest builders', () => {
     );
   });
 
-  it('builds one Cursor pre-write blocking hook', () => {
-    const manifest = buildCursorHooksManifest();
-    const beforeEdit = manifest.hooks.preToolUse[0];
-
-    assert.equal(manifest.version, 1);
-    assert.ok(Array.isArray(manifest.hooks.preToolUse));
-    assert.equal(Object.keys(manifest.hooks).length, 1);
-    assert.equal(manifest.hooks.afterFileEdit, undefined);
-    assert.equal(manifest.hooks.stop, undefined);
-    assert.equal(manifest.hooks.sessionStart, undefined);
-    expectCommand(beforeEdit.command, '.cursor/skills/impeccable/scripts/hook-before-edit.mjs');
-    assert.equal(beforeEdit.timeout, 5);
-  });
-
   it('builds GitHub Copilot repo-level hooks for the real detector hook', () => {
     const manifest = buildGitHubHooksManifest();
     const entry = manifest.hooks.postToolUse[0];
@@ -172,32 +157,40 @@ describe('hook manifest builders', () => {
     assert.equal(manifest.hooks.preToolUse, undefined);
   });
 
-  it('builds Grok Build project hooks for the real detector hook', () => {
-    const manifest = buildGrokHooksManifest();
-    const group = manifest.hooks.PostToolUse[0];
-    const handler = group.hooks[0];
+  it('builds an oh-my-pi hook module (JS source, not a JSON manifest)', () => {
+    // oh-my-pi loads `.omp/hooks/post/*` as an imported JS module exporting
+    // `pi.on(eventName, handler)`, not a JSON manifest — hooksJsonFor() tags
+    // this one with `isModule: true` so callers know to write it verbatim
+    // instead of JSON.stringify-ing it.
+    const tagged = hooksJsonFor('omp');
+    assert.equal(tagged.isModule, true);
+    assert.equal(tagged.content, buildOmpHookModule());
 
-    // Claude-compatible schema; Claude tool names alias to Grok tools at runtime.
-    assert.equal(group.matcher, 'Edit|Write|MultiEdit');
-    assert.equal(handler.type, 'command');
-    assert.equal(handler.timeout, 5);
-    assert.equal(handler.statusMessage, 'Checking UI changes');
-    expectCommand(handler.command, '.grok/skills/impeccable/scripts/hook.mjs');
-    assert.ok(!handler.command.includes('${CLAUDE_PROJECT_DIR}'));
-    assert.ok(!handler.command.includes('${GROK_PLUGIN_ROOT}'));
-    assert.equal(manifest.hooks.SessionStart, undefined);
-
-    const stop = manifest.hooks.Stop[0].hooks[0];
-    assert.equal(stop.timeout, 30);
-    assert.equal(stop.statusMessage, 'Design deep pass');
-    expectCommand(stop.command, '.grok/skills/impeccable/scripts/hook.mjs');
+    const source = buildOmpHookModule();
+    assert.match(source, /export default function impeccableHook\(pi\)/);
+    assert.match(source, /pi\.on\("tool_result"/);
+    assert.match(source, /pi\.on\("session_stop"/);
+    assert.match(source, /"\.\.", "\.\.", "skills", "impeccable", "scripts", "hook\.mjs"/);
+    // Filters to the two file-modifying tools; never fires on bash/read/etc.
+    assert.match(source, /event\.toolName !== "edit" && event\.toolName !== "write"/);
+    // Shaped exactly like Claude Code's own PostToolUse/Stop JSON so
+    // hook-lib.mjs's existing shape-driven extraction (resolveTargetFiles(),
+    // isStopEvent(), the stop_hook_active re-entrancy guard) needs no
+    // omp-specific branch.
+    assert.match(source, /hook_event_name: "PostToolUse"/);
+    assert.match(source, /hook_event_name: "Stop"/);
+    assert.match(source, /stop_hook_active: event\.stop_hook_active === true/);
+    // Uses raw spawnSync (pi.exec() has no stdin option, and hook.mjs
+    // requires stdin), and parses Claude's default payload() JSON envelope
+    // back out on its own side.
+    assert.match(source, /spawnSync\(process\.execPath, \[HOOK_SCRIPT\]/);
+    assert.match(source, /hookSpecificOutput\?\.additionalContext/);
   });
 
   it('probes the node runtime everywhere, and notices only where a channel exists', () => {
     // Claude Code and Codex render a `systemMessage` from hook stdout, so their
-    // manifests carry the one-time unsupported-runtime notice. Cursor (output is
-    // permission-shaped; a message would block the edit), Grok (stdout ignored),
-    // and Copilot (contract unconfirmed) get the silent probe only.
+    // manifests carry the one-time unsupported-runtime notice. Copilot (contract
+    // unconfirmed) gets the silent probe only.
     const withNotice = [
       buildClaudeSettingsManifest(),
       buildClaudePluginHooksManifest(),
@@ -205,9 +198,7 @@ describe('hook manifest builders', () => {
       buildCodexPluginHooksManifest(),
     ];
     const probeOnly = [
-      buildCursorHooksManifest(),
       buildGitHubHooksManifest(),
-      buildGrokHooksManifest(),
     ];
     for (const manifest of [...withNotice, ...probeOnly]) {
       for (const command of manifestCommands(manifest)) {
@@ -227,28 +218,18 @@ describe('hook manifest builders', () => {
     }
   });
 
-  // Volta's Windows shims exec through `cmd /C`, which claims `<`, `>`, and
-  // newlines from the `node -e` payload, so the probe died before node ran and
-  // the guard read that as a missing runtime (volta-cli/volta#1791). Every
-  // command is asserted to carry NODE_PROBE above, so this covers them all.
-  it('keeps the runtime probe free of characters cmd.exe re-parses', () => {
-    assert.ok(!/[<>\n]/.test(NODE_PROBE), `cmd.exe-unsafe character in probe: ${NODE_PROBE}`);
-  });
-
   it('routes supported hook builders and leaves other providers alone', () => {
     assert.ok(hooksJsonFor('claude'));
     assert.ok(hooksJsonFor('codex'));
-    assert.ok(hooksJsonFor('cursor'));
     assert.ok(hooksJsonFor('github'));
-    assert.ok(hooksJsonFor('grok'));
     assert.equal(hooksJsonFor('gemini'), null);
+    assert.equal(hooksJsonFor('cursor'), null);
   });
 });
 
 describe('generated hook artifacts in repo', () => {
   for (const rel of [
     '.claude/settings.json',
-    '.cursor/hooks.json',
     '.codex/hooks.json',
     '.github/hooks/impeccable.json',
   ]) {
@@ -261,7 +242,6 @@ describe('generated hook artifacts in repo', () => {
 
   it('root hook manifests exactly match the hook builders', () => {
     assert.deepEqual(readJson('.claude/settings.json'), buildClaudeSettingsManifest());
-    assert.deepEqual(readJson('.cursor/hooks.json'), buildCursorHooksManifest());
     assert.deepEqual(readJson('.codex/hooks.json'), buildCodexHooksManifest());
     assert.deepEqual(readJson('.github/hooks/impeccable.json'), buildGitHubHooksManifest());
   });
@@ -274,19 +254,6 @@ describe('generated hook artifacts in repo', () => {
     assert.ok(fs.existsSync(path.join(REPO_ROOT, '.claude/skills/impeccable/scripts/hook.mjs')));
     assert.ok(fs.existsSync(path.join(REPO_ROOT, '.claude/skills/impeccable/scripts/hook-lib.mjs')));
     assert.ok(fs.existsSync(path.join(REPO_ROOT, '.claude/skills/impeccable/scripts/detector/detect-antipatterns.mjs')));
-  });
-
-  it('Cursor project hooks reference only the pre-write runtime in .cursor/skills', () => {
-    const manifest = readJson('.cursor/hooks.json');
-    const beforeEdit = manifest.hooks.preToolUse[0];
-
-    assert.equal(Object.keys(manifest.hooks).length, 1);
-    expectCommand(beforeEdit.command, '.cursor/skills/impeccable/scripts/hook-before-edit.mjs');
-    assert.ok(fs.existsSync(path.join(REPO_ROOT, '.cursor/skills/impeccable/scripts/hook-before-edit.mjs')));
-    assert.equal(fs.existsSync(path.join(REPO_ROOT, '.cursor/skills/impeccable/scripts/hook-after-edit.mjs')), false);
-    assert.equal(fs.existsSync(path.join(REPO_ROOT, '.cursor/skills/impeccable/scripts/hook-stop.mjs')), false);
-    assert.ok(fs.existsSync(path.join(REPO_ROOT, '.cursor/skills/impeccable/scripts/hook-lib.mjs')));
-    assert.ok(fs.existsSync(path.join(REPO_ROOT, '.cursor/skills/impeccable/scripts/detector/detect-antipatterns.mjs')));
   });
 
   it('Codex project hooks reference hook.mjs in the .codex skill payload', () => {
@@ -327,7 +294,7 @@ describe('generated hook artifacts in repo', () => {
   });
 
   it('does not generate probe scripts into provider skill payloads', () => {
-    for (const providerDir of ['.claude', '.cursor', '.agents', 'plugin']) {
+    for (const providerDir of ['.claude', '.agents', 'plugin']) {
       const probe = path.join(REPO_ROOT, providerDir, 'skills', 'impeccable', 'scripts', 'hook-probe.mjs');
       assert.equal(fs.existsSync(probe), false, `${providerDir} still has hook-probe.mjs`);
     }
@@ -388,7 +355,6 @@ describe('generated hook artifacts in repo', () => {
   it('generated hook runtime can import the bundled detector', async () => {
     for (const scriptDir of [
       '.claude/skills/impeccable/scripts',
-      '.cursor/skills/impeccable/scripts',
       '.agents/skills/impeccable/scripts',
       'plugin/skills/impeccable/scripts',
     ]) {

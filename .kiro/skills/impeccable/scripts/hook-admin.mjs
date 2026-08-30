@@ -119,22 +119,6 @@ const HOOK_MANIFEST_TARGETS = [
     }),
   },
   {
-    provider: '.cursor',
-    skillRel: '.cursor/skills/impeccable',
-    destRel: '.cursor/hooks.json',
-    manifest: () => ({
-      version: 1,
-      hooks: {
-        preToolUse: [
-          {
-            command: 'node ".cursor/skills/impeccable/scripts/hook-before-edit.mjs"',
-            timeout: TIMEOUT_SECONDS,
-          },
-        ],
-      },
-    }),
-  },
-  {
     // GitHub Copilot reads repo-level hooks from `.github/hooks/*.json`. The same
     // manifest is honored by the CLI (once committed to the default branch) and
     // the cloud/app agent. Schema differs: lowercase `postToolUse`, flat entries,
@@ -485,7 +469,7 @@ function valueHasImpeccableHookMarker(value) {
 
 function stripImpeccableHookEntry(entry) {
   if (!entry || typeof entry !== 'object') return entry;
-  // `command`/`args`: Claude/Codex/Cursor. `bash`/`powershell`: GitHub Copilot's
+  // `command`/`args`: Claude/Codex. `bash`/`powershell`: GitHub Copilot's
   // flat entry shape, where the marker lives under the shell-command keys.
   if (valueHasImpeccableHookMarker(entry.command) || valueHasImpeccableHookMarker(entry.args)
     || valueHasImpeccableHookMarker(entry.bash) || valueHasImpeccableHookMarker(entry.powershell)) {

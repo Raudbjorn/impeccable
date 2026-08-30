@@ -56,8 +56,8 @@ The trace is the source of truth, not the model's free-form reply.
 | 11 | empty workspace; prompt is `/impeccable shape ...` | runs `context.mjs`; resolves `reference/init.md` before planning the surface |
 | 12 | empty workspace; prompt is natural-language build intent with no command word | runs `context.mjs`; resolves `reference/init.md` before implementation |
 | 13 | empty workspace; prompt is `/impeccable teach` | runs `context.mjs` and diverts into `reference/init.md` because `teach` aliases `init` |
-| 14 | PRODUCT.md with `## Platform: ios` (native iOS app); prompt is `/impeccable craft a tide detail screen` | `context.mjs` runs and emits the contents of `reference/ios.md` directly, placing native conventions in context without a second model-directed read |
-| 15 | same iOS fixture; prompt is `/impeccable audit` | agent loads `reference/audit.native.md` (the Commands-table native variant, routed instead of `audit.md`) |
+| 14 | PRODUCT.md with `## Platform: android` (native Android app); prompt is `/impeccable craft a tide detail screen` | `context.mjs` runs and emits the contents of `reference/android.md` directly, placing native conventions in context without a second model-directed read |
+| 15 | same Android fixture; prompt is `/impeccable audit` | agent loads `reference/audit.native.md` (the Commands-table native variant, routed instead of `audit.md`) |
 
 The workflow-contract file adds end-to-end assertions for attended fresh init,
 an initialized natural build request, replacement-world redesign, scope-preserving bolder
@@ -144,11 +144,11 @@ and the two causes are worth keeping because neither was where it looked:
   was the only concrete instruction left standing and sonnet ran it. Fixed by
   removing the command from the turn entirely rather than by strengthening the
   warning around it.
-- **15 was a broken fixture.** The iOS workspace held PRODUCT.md and nothing
+- **15 was a broken fixture.** The Android workspace held PRODUCT.md and nothing
   else, so `audit the app in this workspace` named an app that did not exist.
   Sonnet spent its whole step budget looking for it and read no reference file
   at all, which the assertion reported as "loaded `audit.md` instead of the
-  variant". The fixture now ships one SwiftUI screen, the same courtesy
+  variant". The fixture now ships one Compose screen, the same courtesy
   `MINIMAL_LANDING_HTML` already did for the web scenarios. The scenario passes
   on unmodified `main` once the fixture is answerable, which is the proof the
   routing text was never at fault.

@@ -462,12 +462,6 @@ export const PROVIDER_PLACEHOLDERS = {
     ask_instruction: 'STOP and call the AskUserQuestion tool to clarify.',
     command_prefix: '/'
   },
-  'cursor': {
-    model: 'the model',
-    config_file: '.cursorrules',
-    ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
-    command_prefix: '/'
-  },
   'gemini': {
     model: 'Gemini',
     config_file: 'GEMINI.md',
@@ -508,34 +502,10 @@ export const PROVIDER_PLACEHOLDERS = {
     ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
     command_prefix: '/'
   },
-  'qoder': {
-    model: 'the model',
-    config_file: 'AGENTS.md',
-    ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
-    command_prefix: '/'
-  },
-  'trae': {
-    model: 'the model',
-    config_file: 'RULES.md',
-    ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
-    command_prefix: '/'
-  },
-  'rovo-dev': {
-    model: 'Rovo Dev',
-    config_file: 'AGENTS.md',
-    ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
-    command_prefix: '/'
-  },
   'vibe': {
     model: 'Mistral',
     config_file: 'AGENTS.md',
     ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
-    command_prefix: '/'
-  },
-  'grok': {
-    model: 'Grok',
-    config_file: 'AGENTS.md',
-    ask_instruction: 'STOP and call the AskUserQuestion tool to clarify.',
     command_prefix: '/'
   },
   'antigravity': {
@@ -544,10 +514,18 @@ export const PROVIDER_PLACEHOLDERS = {
     ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
     command_prefix: '/'
   },
-  'hermes': {
-    // Hermes is provider-agnostic and reads AGENTS.md / CLAUDE.md / .cursorrules
-    // for project context. "the model" matches the pi/opencode phrasing used
-    // for harnesses without a vendor-fixed assistant name.
+  // oh-my-pi invokes skills as `/skill:<name> [args]`; the args form is a
+  // documented embedded pattern (trailing prose after the token is passed
+  // through), so the router's `/impeccable <subcommand>` shape still works.
+  'omp': {
+    model: 'the model',
+    config_file: 'AGENTS.md',
+    ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
+    command_prefix: '/skill:'
+  },
+  // Fallback for any provider id not in this map (backwards compat for
+  // forks that add a provider config without a matching placeholder entry).
+  'default': {
     model: 'the model',
     config_file: 'AGENTS.md',
     ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
@@ -561,18 +539,12 @@ export const PROVIDER_BLOCK_TAGS = new Set([
   'claude',
   'claude-code',
   'codex',
-  'cursor',
   'gemini',
   'github',
-  'grok',
-  'hermes',
   'kiro',
+  'omp',
   'opencode',
   'pi',
-  'qoder',
-  'rovo-dev',
-  'trae',
-  'trae-cn',
   'vibe',
 ]);
 
@@ -641,7 +613,7 @@ const IMPECCABLE_SUB_COMMANDS = [
 ];
 
 export function replacePlaceholders(content, provider, commandNames = [], allSkillNames = []) {
-  const placeholders = PROVIDER_PLACEHOLDERS[provider] || PROVIDER_PLACEHOLDERS['cursor'];
+  const placeholders = PROVIDER_PLACEHOLDERS[provider] || PROVIDER_PLACEHOLDERS.default;
   const cmdPrefix = placeholders.command_prefix || '/';
 
   // Build the available_commands list.
@@ -693,7 +665,7 @@ export function replacePlaceholders(content, provider, commandNames = [], allSki
  * here by an exact string match.
  */
 export function replaceScriptProviderMarker(content, provider, buildProvider = provider) {
-  const placeholders = PROVIDER_PLACEHOLDERS[provider] || PROVIDER_PLACEHOLDERS.cursor;
+  const placeholders = PROVIDER_PLACEHOLDERS[provider] || PROVIDER_PLACEHOLDERS.default;
   const commandPrefix = placeholders.command_prefix || '/';
   const prefixMarker = "export const IMPECCABLE_COMMAND_PREFIX = '/'; // @impeccable-provider-command-prefix";
   const providerMarker = "export const IMPECCABLE_PROVIDER_ID = 'source'; // @impeccable-provider-id";

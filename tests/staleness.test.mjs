@@ -155,13 +155,13 @@ describe('checkProduct', () => {
 
 describe('checkNativePlatformEvidence', () => {
   it('flags a web platform on a project carrying native build files', () => {
-    write('ios/Podfile', "platform :ios, '15.0'\n");
+    write('android/build.gradle', "apply plugin: 'com.android.application'\n");
     const findings = checkNativePlatformEvidence({
       projectRoot: scratch, platform: 'web', product: CURRENT_PRODUCT, productPath: 'PRODUCT.md',
     });
     assert.deepEqual(ids(findings), ['platform-native-evidence']);
-    assert.match(findings[0].summary, /ios\/Podfile/);
-    assert.match(findings[0].fix, /`ios`/);
+    assert.match(findings[0].summary, /android\/build\.gradle/);
+    assert.match(findings[0].fix, /`android`/);
   });
 
   it('reads react-native and expo out of package.json', () => {
@@ -173,8 +173,8 @@ describe('checkNativePlatformEvidence', () => {
     assert.match(findings[0].fix, /`adaptive`/);
   });
 
-  it('suggests adaptive when both native targets are present', () => {
-    write('ios/Podfile', '');
+  it('suggests adaptive when multiple pieces of native evidence disagree', () => {
+    write('pubspec.yaml', 'name: app\n');
     write('android/build.gradle', '');
     const findings = checkNativePlatformEvidence({
       projectRoot: scratch, platform: 'web', product: CURRENT_PRODUCT,
@@ -191,8 +191,8 @@ describe('checkNativePlatformEvidence', () => {
   });
 
   it('stays silent when the platform is already native', () => {
-    write('ios/Podfile', '');
-    for (const platform of ['ios', 'android', 'adaptive']) {
+    write('android/build.gradle', '');
+    for (const platform of ['android', 'adaptive']) {
       assert.deepEqual(
         checkNativePlatformEvidence({ projectRoot: scratch, platform, product: CURRENT_PRODUCT }),
         [],
@@ -552,7 +552,7 @@ describe('context.mjs CONTEXT_STALE directive', () => {
   });
 
   it('leaves the native-platform question to init when no PRODUCT.md exists', () => {
-    write('ios/Podfile', '');
+    write('android/build.gradle', '');
     write('src/app.css', ':root { --a: 1; --b: 2; --c: 3; }\n');
     const res = run();
     assert.equal(res.status, 0, res.stderr);

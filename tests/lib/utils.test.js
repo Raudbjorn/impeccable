@@ -595,14 +595,12 @@ describe('replacePlaceholders', () => {
     expect(replacePlaceholders('Ask {{model}} for help.', 'claude-code')).toBe('Ask Claude for help.');
     expect(replacePlaceholders('Ask {{model}} for help.', 'gemini')).toBe('Ask Gemini for help.');
     expect(replacePlaceholders('Ask {{model}} for help.', 'codex')).toBe('Ask GPT for help.');
-    expect(replacePlaceholders('Ask {{model}} for help.', 'cursor')).toBe('Ask the model for help.');
     expect(replacePlaceholders('Ask {{model}} for help.', 'agents')).toBe('Ask the model for help.');
     expect(replacePlaceholders('Ask {{model}} for help.', 'kiro')).toBe('Ask Claude for help.');
   });
 
   test('should replace {{config_file}} with provider-specific value', () => {
     expect(replacePlaceholders('See {{config_file}}.', 'claude-code')).toBe('See CLAUDE.md.');
-    expect(replacePlaceholders('See {{config_file}}.', 'cursor')).toBe('See .cursorrules.');
     expect(replacePlaceholders('See {{config_file}}.', 'gemini')).toBe('See GEMINI.md.');
     expect(replacePlaceholders('See {{config_file}}.', 'codex')).toBe('See AGENTS.md.');
     expect(replacePlaceholders('See {{config_file}}.', 'agents')).toBe('See .github/copilot-instructions.md.');
@@ -613,8 +611,8 @@ describe('replacePlaceholders', () => {
     const result = replacePlaceholders('{{ask_instruction}}', 'claude-code');
     expect(result).toBe('STOP and call the AskUserQuestion tool to clarify.');
 
-    const cursorResult = replacePlaceholders('{{ask_instruction}}', 'cursor');
-    expect(cursorResult).toBe('Ask the user directly to clarify what you cannot infer.');
+    const geminiResult = replacePlaceholders('{{ask_instruction}}', 'gemini');
+    expect(geminiResult).toBe('Ask the user directly to clarify what you cannot infer.');
   });
 
   test('should replace {{available_commands}} with command list', () => {
@@ -651,9 +649,9 @@ describe('replacePlaceholders', () => {
     expect(result).toBe('Gemini and Gemini again.');
   });
 
-  test('should fall back to cursor placeholders for unknown provider', () => {
+  test('should fall back to default placeholders for unknown provider', () => {
     const result = replacePlaceholders('{{model}} {{config_file}}', 'unknown-provider');
-    expect(result).toBe('the model .cursorrules');
+    expect(result).toBe('the model AGENTS.md');
   });
 
   test('should replace Codex command invocations without rewriting paths', () => {

@@ -1,18 +1,18 @@
-Run systematic **technical** quality checks on a native app (`ios` / `android` / `adaptive`) and generate a comprehensive report. Don't fix issues; document them for other commands to address.
+Run systematic **technical** quality checks on a native app (`android` / `adaptive`) and generate a comprehensive report. Don't fix issues; document them for other commands to address.
 
-This is a code-level audit, not a design critique. Audit from source (SwiftUI / UIKit / Compose / React Native / Flutter); no browser tooling or `detect.mjs` applies. Score against the platform reference(s): [ios.md](ios.md) / [android.md](android.md), both for `adaptive`. Read them before scoring if Setup hasn't already. The report skeleton mirrors [audit.md](audit.md); keep the two in sync when changing it.
+This is a code-level audit, not a design critique. Audit from source (Compose / React Native / Flutter); no browser tooling or `detect.mjs` applies. Score against the platform reference: [android.md](android.md). Read it before scoring if Setup hasn't already. The report skeleton mirrors [audit.md](audit.md); keep the two in sync when changing it.
 
 ## Diagnostic Scan
 
 Run comprehensive checks across 5 dimensions. Score each dimension 0-4 using the criteria below.
 
-### 1. Accessibility (VoiceOver / TalkBack)
+### 1. Accessibility (TalkBack)
 
 **Check for**:
-- **Missing labels**: interactive elements without accessibility labels, traits/roles, or state announcements
+- **Missing labels**: interactive elements without accessibility labels, roles, or state announcements
 - **Reading and focus order**: illogical traversal, unreachable controls, focus lost on navigation
-- **Text scaling**: fixed point sizes defeating Dynamic Type (iOS) or px instead of sp (Android); layouts that clip or overlap at large sizes
-- **Touch targets**: below 44 pt (iOS) / 48 dp (Android), or crammed without spacing
+- **Text scaling**: px instead of sp; layouts that clip or overlap at large sizes
+- **Touch targets**: below 48 dp, or crammed without spacing
 - **Reduce Motion ignored**: parallax and large slides with no crossfade alternative
 - **Contrast**: text failing contrast in either appearance, light or dark
 
@@ -33,7 +33,7 @@ Run comprehensive checks across 5 dimensions. Score each dimension 0-4 using the
 ### 3. Appearance & Theming
 
 **Check for**:
-- **Hard-coded colors**: raw hex instead of semantic system colors (iOS) / Material color roles (Android) / design tokens
+- **Hard-coded colors**: raw hex instead of Material color roles / design tokens
 - **Broken dark appearance**: missing dark variants, poor contrast in dark, quick inverts
 - **Dynamic Color** (Android 12+): no static fallback scheme, or ignored where it fits
 - **Off-platform materials**: hand-rolled visual materials where system materials or tonal elevation are expected
@@ -43,11 +43,11 @@ Run comprehensive checks across 5 dimensions. Score each dimension 0-4 using the
 ### 4. Platform Conformance (CRITICAL)
 
 Score against the loaded platform reference(s), including their slop tests. **Check for**:
-- **Broken system gestures**: edge-swipe back disabled (iOS), predictive Back hijacked (Android)
-- **Inset violations**: content under the notch, Dynamic Island, home indicator, status bar, or keyboard
-- **Off-platform navigation**: custom global nav, overloaded tab bars, iOS patterns on Android or vice versa
+- **Broken system gestures**: predictive Back hijacked
+- **Inset violations**: content under the display cutout, status bar, or keyboard
+- **Off-platform navigation**: custom global nav, overloaded tab bars
 - **Web-shaped controls**: HTML-style buttons, custom toggles, hover-dependent affordances
-- **Icon drift**: mixed icon sets instead of SF Symbols / Material Symbols
+- **Icon drift**: mixed icon sets instead of Material Symbols
 - **System drift**: repeated shortcuts or decorative patterns that conflict with the product, platform, or established design system
 
 **Score 0-4**: 0=Web port (nothing native), 1=Heavy violations (3-4 kinds), 2=Some (1-2 noticeable), 3=Mostly conformant (subtle issues), 4=Fully native (a fluent user trusts every screen)
@@ -55,11 +55,11 @@ Score against the loaded platform reference(s), including their slop tests. **Ch
 ### 5. Adaptivity
 
 **Check for**:
-- **Stretched phone layouts**: tablet/iPad rendering a scaled-up phone UI instead of using size classes / window size classes
+- **Stretched phone layouts**: tablet rendering a scaled-up phone UI instead of using window size classes
 - **Orientation breakage**: landscape clipping, ignored, or locked without reason
 - **Keyboard/IME handling**: inputs hidden behind the keyboard, no inset adjustment
-- **Multitasking**: iPad Split View / Android multi-window breaking layout
-- **Foldables**: hinge-unaware layouts on posture change (Android)
+- **Multitasking**: Android multi-window breaking layout
+- **Foldables**: hinge-unaware layouts on posture change
 
 **Score 0-4**: 0=One screen size only, 1=Major breakage (landscape or tablet broken), 2=Partial, 3=Good (minor edge cases), 4=Excellent (adapts across sizes, orientations, and windowing)
 
@@ -100,7 +100,7 @@ For each issue, document:
 - **Location**: Screen, file, line
 - **Category**: Accessibility / Performance / Theming / Conformance / Adaptivity
 - **Impact**: How it affects users
-- **Guideline**: The HIG / Material rule it violates (if applicable)
+- **Guideline**: The Material rule it violates (if applicable)
 - **Recommendation**: How to fix it
 - **Suggested command**: Which command to use (prefer: $impeccable adapt, $impeccable animate, $impeccable audit, $impeccable bolder, $impeccable clarify, $impeccable colorize, $impeccable critique, $impeccable delight, $impeccable distill, $impeccable document, $impeccable harden, $impeccable layout, $impeccable onboard, $impeccable optimize, $impeccable overdrive, $impeccable polish, $impeccable quieter, $impeccable shape, $impeccable typeset)
 

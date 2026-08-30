@@ -103,7 +103,7 @@ From the root of your project, run:
 npx impeccable install
 ```
 
-This shows the harness folders it detected (for example `~/.claude`, `~/.codex`, `~/.grok`, or project-local `.cursor`), lets you keep the detected set or customize providers, then asks whether to install into the current project or globally. Use `--providers=claude,codex,cursor,grok` and `--scope=project|global` to skip those choices in scripts. On Claude Code, Cursor, Codex, GitHub Copilot, and Grok Build, it also installs the provider-native hook manifest for the current project. Works with Cursor, Claude Code, Gemini CLI, Codex CLI, Grok Build, and every other supported tool. Reload your harness afterward.
+This shows the harness folders it detected (for example `~/.claude`, `~/.codex`, or project-local `.gemini`), lets you keep the detected set or customize providers, then asks whether to install into the current project or globally. Use `--providers=claude,codex,gemini` and `--scope=project|global` to skip those choices in scripts. On Claude Code, Codex, and GitHub Copilot, it also installs the provider-native hook manifest for the current project. Works with Claude Code, Gemini CLI, Codex CLI, and every other supported tool. Reload your harness afterward.
 
 To refresh an existing install, run:
 
@@ -111,7 +111,7 @@ To refresh an existing install, run:
 npx impeccable update
 ```
 
-Codex users should open `/hooks` after install or update and approve the project hook when prompted. Codex tracks trust by hook definition, so updates that change `.codex/hooks.json` can require approval again. Grok Build users need project folder trust (`/hooks-trust` or launch with `--trust`) before `.grok/hooks/` scripts run.
+Codex users should open `/hooks` after install or update and approve the project hook when prompted. Codex tracks trust by hook definition, so updates that change `.codex/hooks.json` can require approval again.
 
 See [Allow the hook in your harness](https://impeccable.style/docs/hooks#allow-the-hook-in-your-harness) for harness-specific trust and verification steps.
 
@@ -120,53 +120,35 @@ See [Allow the hook in your harness](https://impeccable.style/docs/hooks#allow-t
 For teams that want to keep Impeccable vendored and updated through Git, add this repo as a submodule and link the compiled provider build into your harness folders:
 
 ```bash
-git submodule add https://github.com/pbakaus/impeccable .impeccable
-npx impeccable link --source=.impeccable --providers=claude,cursor
-git add .gitmodules .impeccable .claude .cursor
+git submodule add https://github.com/Raudbjorn/impeccable .impeccable
+npx impeccable link --source=.impeccable --providers=claude,gemini
+git add .gitmodules .impeccable .claude .gemini
 git commit -m "Add Impeccable skills"
 ```
 
-Use the providers your project needs, for example `claude`, `cursor`, `gemini`, `codex`, `github`, `grok`, `opencode`, `pi`, `qoder`, `trae`, `trae-cn`, `rovo-dev`, or `vibe`. The command links individual skill folders from `.impeccable/dist/universal/` and leaves existing real skill directories untouched unless you pass `--force`.
+Use the providers your project needs, for example `claude`, `gemini`, `codex`, `github`, `opencode`, `pi`, `vibe`, or `omp`. The command links individual skill folders from `.impeccable/dist/universal/` and leaves existing real skill directories untouched unless you pass `--force`.
 
 To update later:
 
 ```bash
 git submodule update --remote .impeccable
-npx impeccable link --source=.impeccable --providers=claude,cursor
+npx impeccable link --source=.impeccable --providers=claude,gemini
 ```
 
 ### Option 3: Plugin install
 
 **Claude Code:**
 ```bash
-/plugin marketplace add pbakaus/impeccable
+/plugin marketplace add Raudbjorn/impeccable
 ```
 
 > Claude Code only. After adding the marketplace, open `/plugin` and install Impeccable from the list.
-
-**Grok Build:**
-```bash
-grok plugin install pbakaus/impeccable#plugin --trust
-```
-
-> Grok Build only. The `#plugin` suffix installs the slim plugin package (skills, agents, and hooks) instead of the full monorepo. Then run `/impeccable init` in a Grok session. Project-scoped installs via `npx impeccable install --providers=grok` also work and write `.grok/skills/` plus `.grok/hooks/impeccable.json`.
 
 ### Option 4: Download from Website
 
 Visit [impeccable.style](https://impeccable.style), download the ZIP for your tool, and extract to your project.
 
 ### Option 5: Copy from Repository
-
-**Cursor:**
-```bash
-cp -r dist/cursor/.cursor your-project/
-```
-
-> **Note:** Cursor skills require setup:
-> 1. Switch to Nightly channel in Cursor Settings → Beta
-> 2. Enable Agent Skills in Cursor Settings → Rules
->
-> [Learn more about Cursor skills](https://cursor.com/docs/context/skills)
 
 **Claude Code:**
 ```bash
@@ -219,39 +201,6 @@ cp -r dist/agents/.agents/skills/* ~/.agents/skills/
 cp -r dist/github/.github your-project/
 ```
 
-**Trae:**
-```bash
-# Trae China (domestic version)
-cp -r dist/trae/.trae-cn/skills/* ~/.trae-cn/skills/
-
-# Trae International
-cp -r dist/trae/.trae/skills/* ~/.trae/skills/
-```
-
-> **Note:** Trae has two versions with different config directories:
-> - **Trae China**: `~/.trae-cn/skills/`
-> - **Trae International**: `~/.trae/skills/`
->
-> After copying, restart Trae IDE to activate the skills.
-
-**Rovo Dev:**
-```bash
-# Project-specific
-cp -r dist/rovo-dev/.rovodev your-project/
-
-# Or global (applies to all projects)
-cp -r dist/rovo-dev/.rovodev/skills/* ~/.rovodev/skills/
-```
-
-**Qoder:**
-```bash
-# Project-specific
-cp -r dist/qoder/.qoder your-project/
-
-# Or global (applies to all projects)
-cp -r dist/qoder/.qoder/skills/* ~/.qoder/skills/
-```
-
 **Mistral Vibe:**
 ```bash
 # Project-specific
@@ -261,17 +210,6 @@ cp -r dist/vibe/.vibe your-project/
 cp -r dist/vibe/.vibe/skills/* ~/.vibe/skills/
 ```
 
-**Grok Build:**
-```bash
-# Project-specific
-cp -r dist/grok/.grok your-project/
-
-# Or global (applies to all projects)
-cp -r dist/grok/.grok/skills/* ~/.grok/skills/
-```
-
-> Prefer `npx impeccable install --providers=grok` or `grok plugin install pbakaus/impeccable#plugin --trust` so the design hook installs too. Project hooks need `/hooks-trust` (or `--trust`) once per folder.
-
 **Google Antigravity:**
 ```bash
 # Project-specific
@@ -280,6 +218,11 @@ cp -r dist/antigravity/.agent your-project/
 # Or global (applies to all projects)
 mkdir -p ~/.gemini/config/skills
 cp -r dist/antigravity/.agent/skills/* ~/.gemini/config/skills/
+```
+
+**oh-my-pi:**
+```bash
+cp -r dist/omp/.omp your-project/
 ```
 
 ## Usage
@@ -348,15 +291,13 @@ If an ephemeral file (a screenshot, `config.local.json`) was committed before yo
 
 ## Design hook
 
-On Claude Code, GitHub Copilot, Codex, Cursor, and Grok Build, `npx impeccable install` and `npx impeccable update` install a provider-native hook manifest along with the skill payload. The hook runs the Impeccable design detector on direct UI file edits and surfaces findings back into the agent flow. Claude Code, GitHub Copilot, and Codex surface findings after the edit (and run a deeper pass on Stop where supported). Grok Build scans after the edit to warm Stop, then surfaces on Stop; PostToolUse stdout never reaches the model. Cursor blocks bad proposed writes before they land.
+On Claude Code, GitHub Copilot, and Codex, `npx impeccable install` and `npx impeccable update` install a provider-native hook manifest along with the skill payload. The hook runs the Impeccable design detector on direct UI file edits and surfaces findings back into the agent flow, and runs a deeper pass on Stop where supported.
 
 Installed hook surfaces:
 
 - Claude Code: `.claude/settings.local.json` (gitignored, machine-local) runs `${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/hook.mjs`. A hook moved into the shared `settings.json` is honored in place.
 - GitHub Copilot: `.github/hooks/impeccable.json` (committed, shared by the Copilot CLI and the cloud agent) runs `.github/skills/impeccable/scripts/hook.mjs`. The Copilot CLI activates it once the file is on the repository's default branch and the folder is trusted.
-- Cursor: `.cursor/hooks.json` runs `.cursor/skills/impeccable/scripts/hook-before-edit.mjs`.
 - Codex: `.codex/hooks.json` runs `.agents/skills/impeccable/scripts/hook.mjs`.
-- Grok Build: `.grok/hooks/impeccable.json` runs `.grok/skills/impeccable/scripts/hook.mjs`. Requires `/hooks-trust` or `--trust`. Findings reach the model on Stop, not after each edit.
 
 The installer preserves unrelated hook entries and settings. If a hook manifest is malformed, install/update aborts by default; rerun with `--force` to back up the malformed file as `.bak` and replace it.
 
@@ -412,20 +353,16 @@ Full detector docs: [impeccable.style/docs/detector](https://impeccable.style/do
 
 ## Supported Tools
 
-- [Cursor](https://cursor.com)
 - [Claude Code](https://claude.ai/code)
 - [GitHub Copilot](https://github.com/features/copilot)
 - [Gemini CLI](https://github.com/google-gemini/gemini-cli)
 - [Codex CLI](https://github.com/openai/codex)
-- [Grok Build](https://x.ai/cli)
 - [OpenCode](https://opencode.ai)
 - [Pi](https://pi.dev)
 - [Kiro](https://kiro.dev)
-- [Trae](https://trae.ai)
-- [Rovo Dev](https://www.atlassian.com/software/rovo)
-- [Qoder](https://qoder.com)
 - [Mistral Vibe](https://docs.mistral.ai/vibe/code/overview)
 - [Google Antigravity](https://antigravity.google)
+- [oh-my-pi](https://omp.sh)
 
 ## Community & Ecosystem
 

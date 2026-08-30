@@ -24,7 +24,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const API_BASE = 'https://impeccable.style';
 
 // Provider folder names in project roots
-const PROVIDER_DIRS = ['.claude', '.cursor', '.gemini', '.agents', '.agent', '.github', '.grok', '.hermes', '.kiro', '.opencode', '.pi', '.qoder', '.trae', '.trae-cn', '.rovodev', '.vibe'];
+const PROVIDER_DIRS = ['.claude', '.gemini', '.codex', '.agents', '.agent', '.github', '.pi', '.opencode', '.kiro', '.vibe', '.omp'];
 const PROVIDER_ALIASES = {
   agent: '.agent',
   agents: '.agents',
@@ -33,21 +33,12 @@ const PROVIDER_ALIASES = {
   'claude-code': '.claude',
   codex: '.agents',
   copilot: '.github',
-  cursor: '.cursor',
   gemini: '.gemini',
   github: '.github',
-  grok: '.grok',
-  'grok-build': '.grok',
-  hermes: '.hermes',
-  xai: '.grok',
   kiro: '.kiro',
+  omp: '.omp',
   opencode: '.opencode',
   pi: '.pi',
-  qoder: '.qoder',
-  'rovo-dev': '.rovodev',
-  rovodev: '.rovodev',
-  trae: '.trae',
-  'trae-cn': '.trae-cn',
   vibe: '.vibe',
 };
 
@@ -55,21 +46,15 @@ const PROVIDER_DISPLAY = {
   '.agent': { name: 'Antigravity', input: 'antigravity' },
   '.agents': { name: 'Codex CLI', input: 'codex' },
   '.claude': { name: 'Claude Code', input: 'claude' },
-  '.cursor': { name: 'Cursor', input: 'cursor' },
   '.gemini': { name: 'Gemini CLI', input: 'gemini' },
   '.github': { name: 'GitHub Copilot', input: 'github' },
-  '.grok': { name: 'Grok Build', input: 'grok' },
-  '.hermes': { name: 'Hermes Agent', input: 'hermes' },
   '.kiro': { name: 'Kiro', input: 'kiro' },
+  '.omp': { name: 'oh-my-pi', input: 'omp' },
   '.opencode': { name: 'OpenCode', input: 'opencode' },
   '.pi': { name: 'Pi Coding Agent', input: 'pi' },
-  '.qoder': { name: 'Qoder', input: 'qoder' },
-  '.rovodev': { name: 'Rovo Dev', input: 'rovo-dev' },
-  '.trae': { name: 'Trae', input: 'trae' },
-  '.trae-cn': { name: 'Trae CN', input: 'trae-cn' },
   '.vibe': { name: 'Mistral Vibe', input: 'vibe' },
 };
-const PROVIDER_INPUT_ORDER = ['antigravity', 'claude', 'codex', 'cursor', 'gemini', 'github', 'grok', 'hermes', 'kiro', 'opencode', 'pi', 'qoder', 'trae', 'trae-cn', 'rovo-dev', 'vibe'];
+const PROVIDER_INPUT_ORDER = ['antigravity', 'claude', 'codex', 'gemini', 'github','kiro', 'omp', 'opencode', 'pi', 'vibe'];
 
 // OpenCode reads global skills from its config directory, not ~/.opencode:
 // $OPENCODE_CONFIG_DIR, else $XDG_CONFIG_HOME/opencode, else
@@ -81,52 +66,13 @@ function opencodeGlobalConfigDir(home) {
   return join(home, '.config', 'opencode');
 }
 
-// Hermes reads skills from `$HERMES_HOME/skills/`, where $HERMES_HOME defaults
-// to `~/.hermes` but is also set to a profile path (e.g.
-// `~/.hermes/profiles/forge`) when a non-default profile is active. Reading
-// the env var matters here at install time: writing to `~/.hermes/skills/`
-// from a profile-scoped Hermes invocation would land in the wrong profile
-// (the same cross-profile data-corruption class that the active_profile
-// fallback warning in hermes_constants.py exists to detect). Used by
-// HOME_SKILLS_DIR_OVERRIDES['.hermes'] only; GLOBAL_HARNESS_HINTS reads the
-// fixed `~/.hermes` location so detection doesn't leak the developer's real
-// HERMES_HOME into test output (test isolation).
-//
-// Ignore $HERMES_HOME when it doesn't sit under `home` (the caller-supplied
-// home dir, which tests inject via HOME=/tmp/...). Without this guard, an
-// inherited $HERMES_HOME=/home/<dev>/.hermes from the developer's shell leaks
-// into test output even when the test sets HOME=/tmp/imp-home-xxx: tests
-// expect ~/.hermes to live under their tmp home, not under the dev's real
-// home. The check uses `resolve()` on both sides so a symlinked test home
-// (e.g. /tmp -> /private/tmp on macOS) still compares correctly.
-function hermesGlobalHome(home) {
-  const envHome = process.env.HERMES_HOME;
-  if (envHome) {
-    try {
-      const resolvedEnv = resolve(envHome);
-      const resolvedHome = resolve(home);
-      // Honor HERMES_HOME only when it lives under the active home (real
-      // ~/.hermes or ~/.hermes/profiles/<name>). Cross-home inheritance is
-      // treated as not-set, so a test running under HOME=/tmp/... doesn't
-      // pick up the developer's real ~/.hermes.
-      if (resolvedEnv === resolvedHome || resolvedEnv.startsWith(resolvedHome + sep)) {
-        return resolvedEnv;
-      }
-    } catch {
-      // fall through to default
-    }
-  }
-  return join(home, '.hermes');
-}
-
 // Providers whose GLOBAL (home) skills dir is not `<provider>/skills`,
-// as a function of the home dir. Pi discovers global skills from
-// ~/.pi/agent/skills/ (issue #327); OpenCode from its config dir (issue
-// #406); Hermes from $HERMES_HOME. Project scope stays `<provider>/skills`
-// for all three.
+// as a function of the home dir. Antigravity discovers global skills from
+// ~/.gemini/config/skills/; Pi from ~/.pi/agent/skills/ (issue #327);
+// OpenCode from its config dir (issue #406). Project scope stays
+// `<provider>/skills` for all three.
 const HOME_SKILLS_DIR_OVERRIDES = {
   '.agent': (home) => join(home, '.gemini', 'config', 'skills'),
-  '.hermes': (home) => join(hermesGlobalHome(home), 'skills'),
   '.pi': (home) => join(home, '.pi', 'agent', 'skills'),
   '.opencode': (home) => join(opencodeGlobalConfigDir(home), 'skills'),
 };
@@ -134,14 +80,6 @@ const HOME_SKILLS_DIR_OVERRIDES = {
 // When a project has no harness folder yet, infer the target from globally
 // installed harnesses (~/.claude, ~/.codex, ...). Codex reads skills from
 // .agents/skills, so ~/.codex maps to the .agents bundle variant.
-//
-// Hermes auto-detection uses the fixed `~/.hermes` location only. When a
-// non-default Hermes profile is active (HERMES_HOME points to a profile path),
-// the user is expected to be inside a Hermes invocation and can pass
-// --providers=hermes explicitly. Auto-detection from a non-default HERMES_HOME
-// would also defeat test isolation (tests inject HOME; HERMES_HOME leaks from
-// the parent process and would surface the developer's real ~/.hermes in
-// detection output). The install path honors $HERMES_HOME; detection does not.
 const GLOBAL_HARNESS_HINTS = [
   { home: '.agent', provider: '.agent' },
   // Antigravity nests under ~/.gemini/ too, so any of these also trips the
@@ -151,19 +89,15 @@ const GLOBAL_HARNESS_HINTS = [
   { home: '.gemini/antigravity-ide', provider: '.agent' },
   { home: '.claude', provider: '.claude' },
   { home: '.codex', provider: '.agents' },
-  { home: '.cursor', provider: '.cursor' },
   { home: '.gemini', provider: '.gemini' },
-  { home: '.grok', provider: '.grok' },
-  { home: '.hermes', provider: '.hermes' },
   { home: '.kiro', provider: '.kiro' },
   { home: '.opencode', provider: '.opencode' },
   // OpenCode's real global config dir (issue #406); the ~/.opencode entry
   // above keeps recognizing machines that only have the legacy dir.
   { resolve: opencodeGlobalConfigDir, provider: '.opencode' },
   { home: '.pi', provider: '.pi' },
-  { home: '.qoder', provider: '.qoder' },
-  { home: '.rovodev', provider: '.rovodev' },
   { home: '.vibe', provider: '.vibe' },
+  { home: '.omp', provider: '.omp' },
 ];
 
 // Last-resort default when nothing is detected: Claude Code + the universal
@@ -188,9 +122,6 @@ const PROVIDER_HOOK_ARTIFACTS = {
     // into `settings.json` is honored in place; see copyProviderHooks.
     { sourceProvider: '.claude', rel: 'settings.json', destProvider: '.claude', destRel: 'settings.local.json' },
   ],
-  '.cursor': [
-    { sourceProvider: '.cursor', rel: 'hooks.json', destProvider: '.cursor' },
-  ],
   // Codex reads skills from `.agents/skills`, but project hooks from
   // `.codex/hooks.json`, so the `.agents` install target owns this sidecar.
   '.agents': [
@@ -201,12 +132,6 @@ const PROVIDER_HOOK_ARTIFACTS = {
   // so source and dest are the same path.
   '.github': [
     { sourceProvider: '.github', rel: 'hooks/impeccable.json', destProvider: '.github' },
-  ],
-  // Grok Build discovers project hooks from `.grok/hooks/*.json`. Team-shared
-  // by default (commit them if the whole team uses Grok); folder trust is still
-  // required via `/hooks-trust` or `--trust` before they run.
-  '.grok': [
-    { sourceProvider: '.grok', rel: 'hooks/impeccable.json', destProvider: '.grok' },
   ],
 };
 
@@ -666,7 +591,7 @@ async function copyOrExtractLocalBundle(sourceValue) {
  */
 function normalizeForHash(content) {
   return content
-    .replace(/\.(claude|cursor|agents|agent|github|gemini|codex|grok|hermes|kiro|opencode|pi|qoder|trae|trae-cn|rovodev|vibe)\/skills\//g, '.PROVIDER/skills/');
+    .replace(/\.(claude|agents|agent|github|gemini|codex|kiro|omp|opencode|pi|vibe)\/skills\//g, '.PROVIDER/skills/');
 }
 
 function hashSkillFile(filePath) {
@@ -987,7 +912,7 @@ function defaultDetectedProviders(detections) {
 
 /**
  * Decide which provider folders to install into.
- *  1. An explicit --providers=.claude,.cursor list wins.
+ *  1. An explicit --providers=.claude,.codex list wins.
  *  2. Otherwise, harness folders already present in the project.
  *  3. Otherwise, infer from globally installed harnesses (~/.claude, ~/.codex).
  *  4. Otherwise, a sensible default (.claude + .agents).
@@ -1269,9 +1194,7 @@ function copyProviderSkills(bundleDir, root, targets, { scope } = {}) {
 // `~/.github/`). On a name conflict Copilot lets the user-level file shadow
 // the project one, so both paths overwrite existing impeccable-* copies and a
 // project install reports any same-named user-level agents that would shadow
-// it. Cursor's live at `.cursor/agents/impeccable-*.md`, user scope
-// `~/.cursor/agents/`; project agents take precedence there, so no shadow
-// warning is needed.
+// it.
 const PROVIDER_AGENT_ARTIFACTS = {
   '.claude': {
     ext: '.md',
@@ -1282,11 +1205,6 @@ const PROVIDER_AGENT_ARTIFACTS = {
     ext: '.agent.md',
     userDir: home => join(home, '.copilot', 'agents'),
     userShadowsProject: true,
-  },
-  '.cursor': {
-    ext: '.md',
-    userDir: home => join(home, '.cursor', 'agents'),
-    userShadowsProject: false,
   },
 };
 
@@ -1394,8 +1312,7 @@ function hookArtifactsForProvider(bundleDir, root, provider) {
 // silently no-op it. Claude keeps its ${CLAUDE_PROJECT_DIR} token so a manifest
 // read from a nested cwd (or copied into settings.local.json) still resolves.
 function hookScriptRelPathForProvider(provider) {
-  const script = provider === '.cursor' ? 'hook-before-edit.mjs' : 'hook.mjs';
-  const rel = `${provider}/skills/impeccable/scripts/${script}`;
+  const rel = `${provider}/skills/impeccable/scripts/hook.mjs`;
   return provider === '.claude' ? '${CLAUDE_PROJECT_DIR}/' + rel : rel;
 }
 
@@ -1406,47 +1323,11 @@ function hookScriptPathForProvider(skillRoot, provider) {
   // (`$(git rev-parse --show-toplevel)/.github/skills/...`). Rewriting it to a
   // machine-local absolute skillRoot path would break those. GitHub skills are
   // project-scoped (not a home-provider), so the project-relative path resolves.
-  if (provider === '.cursor') {
-    return join(skillRoot, provider, 'skills', 'impeccable', 'scripts', 'hook-before-edit.mjs');
-  }
-  if (provider === '.claude' || provider === '.agents' || provider === '.grok') {
+  if (provider === '.claude' || provider === '.agents') {
     return join(skillRoot, provider, 'skills', 'impeccable', 'scripts', 'hook.mjs');
   }
   return null;
 }
-
-// Wrap a `node "PATH"` hook command so a missing skill file is a silent no-op
-// (exit 0) instead of a Node module-resolution crash. hook.mjs promises to
-// "never break a turn. Always exit 0.", but that only holds once Node can load
-// the file; a stale/missing path crashes before any of that logic runs. The
-// `[ ! -f X ] || node X` form (NOT `... || true`) preserves Node's own exit
-// code when the file exists, so Claude's exit-2 blocking signal still reaches
-// the agent. POSIX-shell form, consistent with the project's other hook
-// commands (e.g. the GitHub manifest's `$(git rev-parse ...)`).
-//
-// On Windows that guard is a hard failure, not a degraded one (issue #452).
-// Codex runs hook commands through COMSPEC (`cmd.exe /C`), where `[` is not a
-// command: the guard errors noisily and `||` then runs node even when the file
-// is missing, trading the silent no-op for a MODULE_NOT_FOUND crash. Two
-// remedies, by provider:
-//
-//   * Codex manifests support a `commandWindows` sibling that Codex 0.146.0+
-//     selects on Windows (`command_windows.unwrap_or(command)` in its hook
-//     discovery). rewriteHookCommandsForSkillRoot adds it with a cmd.exe
-//     `if exist` guard (form contributed and Windows-tested by @PatrickSys in
-//     issue #452; `exit /b` forwards node's errorlevel), so the same
-//     .codex/hooks.json is correct on every OS no matter where it was
-//     written, and `command` stays the plain POSIX guard.
-//   * Claude and Cursor manifests have no per-platform field, so a Windows
-//     install moves the existence check into node itself: a `node -e` wrapper
-//     that exits 0 when the target is missing and otherwise re-spawns node on
-//     it with inherited stdio, forwarding the hook's exit code. Cursor's
-//     hooks.json is committable and can be consumed on a teammate's POSIX
-//     machine, so the wrapper has to hold there too: it uses only characters
-//     that survive PowerShell, cmd.exe (issue #445: shims re-parse through
-//     `cmd /C`, which claims < > | & ^ % !), and sh double-quoting alike,
-//     with single quotes for the inner string literals.
-const WIN32_HOOK_GUARD_SCRIPT = "const p=process.argv[1];const f=require('fs');if(f.existsSync(p)){const r=require('child_process').spawnSync(process.execPath,[p],{stdio:'inherit'});process.exit(r.status===null?1:r.status);}";
 
 // POSIX single-quote escaping. JSON.stringify is not shell quoting: inside
 // double quotes /bin/sh still expands $(...), backticks, and ${}, and this
@@ -1464,11 +1345,7 @@ function windowsHookCommand(quotedPath) {
 
 // `quotedPath` carries one pre-quoted form per target shell: { posix, win32 }.
 function guardHookCommand(quotedPath, provider) {
-  // `.agents` (Codex) keeps the POSIX form unconditionally: its Windows
-  // consumers read the commandWindows sibling instead.
-  if (provider !== '.agents' && process.platform === 'win32') {
-    return `node -e "${WIN32_HOOK_GUARD_SCRIPT}" ${quotedPath.win32}`;
-  }
+
   return `[ ! -f ${quotedPath.posix} ] || node ${quotedPath.posix}`;
 }
 
@@ -1580,7 +1457,7 @@ function valueHasImpeccableHookMarker(value) {
 
 function stripImpeccableHookEntry(entry) {
   if (!entry || typeof entry !== 'object') return entry;
-  // `command`/`args`: Claude/Codex/Cursor. `bash`/`powershell`: GitHub Copilot's
+  // `command`/`args`: Claude/Codex. `bash`/`powershell`: GitHub Copilot's
   // flat entry shape, where the marker lives under the shell-command keys.
   if (valueHasImpeccableHookMarker(entry.command) || valueHasImpeccableHookMarker(entry.args)
     || valueHasImpeccableHookMarker(entry.bash) || valueHasImpeccableHookMarker(entry.powershell)) {
@@ -1730,11 +1607,9 @@ function copyProviderHooks(bundleDir, root, providers, { force = false, skillRoo
 
 const HOOK_EXPLAINER = [
   '',
-  'Impeccable can install a design hook for this project. In Claude/Codex it',
-  'checks UI files after edits; in Cursor it checks proposed writes before they',
-  'land and can block writes with detector findings. It feeds results back to',
-  'your agent so design slop gets caught as you build. Change it later with',
-  '/impeccable hooks on|off.',
+  'Impeccable can install a design hook for this project. It checks UI files',
+  'after edits and feeds detector findings back to your agent so design slop',
+  'gets caught as you build. Change it later with /impeccable hooks on|off.',
   '',
 ].join('\n');
 
@@ -1863,7 +1738,7 @@ async function link(flags) {
   const targets = resolveInstallTargets(root, providersValue);
   if (targets.length === 0) {
     console.error('Could not determine a target harness folder.');
-    console.error('Pass one explicitly, e.g. --providers=claude,cursor');
+    console.error('Pass one explicitly, e.g. --providers=claude,codex');
     process.exit(1);
   }
 
@@ -1872,7 +1747,7 @@ async function link(flags) {
     console.log(`Target harness folder(s): ${targets.join(', ')}`);
     const ans = await ask(`Link impeccable skills into ${targets.length} folder(s)? (Y/n) `);
     if (ans === 'n' || ans === 'no') {
-      console.log('Aborted. Re-run with --providers=<names> to choose explicitly (e.g. --providers=claude,cursor).');
+      console.log('Aborted. Re-run with --providers=<names> to choose explicitly (e.g. --providers=claude,codex).');
       process.exit(0);
     }
   }
@@ -1908,7 +1783,7 @@ async function install(flags) {
   } catch (e) {
     if (isPromptAbortError(e)) throw e;
     console.error(e.message);
-    console.error('Pass providers explicitly, e.g. --providers=claude,cursor');
+    console.error('Pass providers explicitly, e.g. --providers=claude,codex');
     process.exit(1);
   }
 
@@ -2003,7 +1878,7 @@ async function install(flags) {
   // Copying per-provider variants is the only correct install for this skill.
   if (targets.length === 0) {
     console.error('Could not determine a target harness folder.');
-    console.error('Pass one explicitly, e.g. --providers=.claude,.cursor');
+    console.error('Pass one explicitly, e.g. --providers=.claude,.codex');
     process.exit(1);
   }
 
@@ -2353,7 +2228,6 @@ export {
   expectedHookDests,
   extractZip,
   formatInstallDetectionLines,
-  hermesGlobalHome,
   HOME_SKILLS_DIR_OVERRIDES,
   linkProviderSkills,
   mergeHookManifests,

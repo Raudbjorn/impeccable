@@ -4,7 +4,6 @@
  * Build System for Cross-Provider Design Skills
  *
  * Transforms source skills into provider-specific formats:
- * - Cursor: .cursor/skills/
  * - Claude Code: .claude/skills/
  * - Gemini: .gemini/skills/
  * - Codex: dist/codex/ only (OpenAI-metadata bundle; not synced to repo root)
@@ -488,8 +487,9 @@ function syncRootHookManifests(rootDir) {
     if (!manifest) continue;
     const rel = config.hooksManifestRel || path.join('hooks', 'hooks.json');
     const dest = path.join(rootDir, config.configDir, rel);
+    const content = manifest.isModule ? manifest.content : JSON.stringify(manifest, null, 2) + '\n';
     fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.writeFileSync(dest, JSON.stringify(manifest, null, 2) + '\n');
+    fs.writeFileSync(dest, content);
     synced.push(path.join(config.configDir, rel).split(path.sep).join('/'));
   }
   return synced;
@@ -540,23 +540,17 @@ https://impeccable.style
 
 This folder contains skills for all supported tools:
 
-  .cursor/    -> Cursor
   .claude/    -> Claude Code
   .gemini/    -> Gemini CLI
   .codex/     -> Codex custom agents (Codex skills use .agents/)
   .agents/    -> Codex CLI
   .agent/     -> Antigravity
   .github/    -> GitHub Copilot
-  .grok/      -> Grok Build
-  .hermes/    -> Hermes Agent
   .kiro/      -> Kiro
   .opencode/  -> OpenCode
   .pi/        -> Pi
-  .trae-cn/   -> Trae China
-  .trae/      -> Trae International
-  .rovodev/   -> Rovo Dev
   .vibe/      -> Mistral Vibe
-  .qoder/     -> Qoder
+  .omp/       -> oh-my-pi
 
 To install, copy the relevant folder(s) into your project root.
 For Codex, repo and user skill installs come from .agents/skills.
@@ -683,18 +677,14 @@ async function build() {
     // Build the shared plugin subtree at ./plugin/.
     // Claude Code marketplace is configured with `source: "./plugin"`, so the
     // plugin cache only copies this slim directory (~0.3 MB) instead of the
-    // entire monorepo. Grok Build installs the same subtree via
-    // `grok plugin install pbakaus/impeccable#plugin --trust` (or the
-    // marketplace source). The harness dirs above stay where they are because
-    // `npx skills add pbakaus/impeccable` reads them from the GitHub repo.
+    // entire monorepo. The harness dirs above stay where they are because
+    // `npx skills add Raudbjorn/impeccable` reads them from the GitHub repo.
     const pluginRoot = path.join(ROOT_DIR, 'plugin');
     const pluginManifestDir = path.join(pluginRoot, '.claude-plugin');
-    const grokPluginManifestDir = path.join(pluginRoot, '.grok-plugin');
     const pluginSkillsDir = path.join(pluginRoot, 'skills');
     const pluginAgentsDir = path.join(pluginRoot, 'agents');
     const pluginHooksDir = path.join(pluginRoot, 'hooks');
     if (fs.existsSync(pluginManifestDir)) fs.rmSync(pluginManifestDir, { recursive: true });
-    if (fs.existsSync(grokPluginManifestDir)) fs.rmSync(grokPluginManifestDir, { recursive: true });
     if (fs.existsSync(pluginSkillsDir)) fs.rmSync(pluginSkillsDir, { recursive: true });
     if (fs.existsSync(pluginAgentsDir)) fs.rmSync(pluginAgentsDir, { recursive: true });
     if (fs.existsSync(pluginHooksDir)) fs.rmSync(pluginHooksDir, { recursive: true });
@@ -725,26 +715,6 @@ async function build() {
       JSON.stringify(pluginManifest, null, 2) + '\n',
     );
 
-    // Native Grok plugin manifest. Grok also reads `.claude-plugin/`; dual
-    // manifests keep both marketplaces and `grok plugin validate` happy when
-    // Claude compat is disabled.
-    // https://docs.x.ai/build/features/skills-plugins-marketplaces
-    const grokPluginManifest = {
-      name: pluginManifest.name,
-      version: pluginManifest.version,
-      description: pluginManifest.description,
-      author: pluginManifest.author,
-      homepage: pluginManifest.homepage,
-      repository: pluginManifest.repository,
-      license: pluginManifest.license || 'MIT',
-      keywords: ['design', 'frontend', 'ui', 'ux', 'skills', 'hooks'],
-    };
-    fs.mkdirSync(grokPluginManifestDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(grokPluginManifestDir, 'plugin.json'),
-      JSON.stringify(grokPluginManifest, null, 2) + '\n',
-    );
-
     const claudeSkillsSrc = path.join(DIST_DIR, 'claude-code', '.claude', 'skills', 'impeccable');
     if (fs.existsSync(claudeSkillsSrc)) {
       fs.mkdirSync(pluginSkillsDir, { recursive: true });
@@ -770,9 +740,8 @@ async function build() {
       }
     }
 
-    // Ship the design detector as a plugin-packaged hook. Claude Code and
-    // Grok Build both auto-discover `hooks/hooks.json` at the plugin root
-    // (Grok aliases CLAUDE_PLUGIN_ROOT → GROK_PLUGIN_ROOT), so marketplace /
+    // Ship the design detector as a plugin-packaged hook. Claude Code
+    // auto-discovers `hooks/hooks.json` at the plugin root, so marketplace /
     // plugin-install users get PostToolUse + Stop without merging into project
     // settings (that path remains the CLI's job for project-scoped installs).
     fs.mkdirSync(pluginHooksDir, { recursive: true });
@@ -781,7 +750,7 @@ async function build() {
       JSON.stringify(buildClaudePluginHooksManifest(), null, 2) + '\n',
     );
 
-    console.log('📦 Built Claude Code / Grok Build plugin subtree at ./plugin/');
+    console.log('📦 Built Claude Code plugin subtree at ./plugin/');
   } else {
     console.log('📋 Skipped root harness and plugin sync (--skip-root-sync)');
   }
