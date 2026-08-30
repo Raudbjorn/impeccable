@@ -170,7 +170,6 @@ The skill-behavior suite runs three providers (claude-haiku-4-5, gpt-5.4-mini, g
 - [Pi Skills](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/skills.md)
 - [Mistral Vibe Skills](https://docs.mistral.ai/vibe/code/cli/skills)
 
-
 ## Repository Structure
 
 ```
