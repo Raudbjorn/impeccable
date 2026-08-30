@@ -57,6 +57,12 @@ const SETUP_PLUGIN_TEXT =
 // rather than rewritten.) Grok Build reads this same subtree with its own
 // substitution behavior, so the embed instruction carries a sidecar
 // fallback for any harness that hands the agent the unexpanded literal.
+//
+// So the plugin subtree carries two path forms on purpose: files under
+// plugin/skills/ get PLUGIN_SCRIPTS_PATH below, files under plugin/agents/
+// get PLUGIN_AGENT_SCRIPTS_PATH here. That is the loader contract, not
+// drift; do not "align" them. AGENT_PATH_NOTE says the same thing inside
+// the generated agent file, for a reader who only ever sees that file.
 export const PLUGIN_AGENT_SCRIPTS_PATH = '${CLAUDE_PLUGIN_ROOT}/skills/impeccable/scripts';
 
 // Appended as its own sentence after the agent's embed instruction so
@@ -66,6 +72,18 @@ export const PLUGIN_AGENT_SCRIPTS_PATH = '${CLAUDE_PLUGIN_ROOT}/skills/impeccabl
 export const AGENT_EMBED_FALLBACK =
   ' When that script path is unreachable in your environment, write the same prompt to ' +
   '`<asset>.prompt.txt` beside the asset and note it in your manifest so the parent can embed it.';
+
+// Appended once at the end of an agent file, away from AGENT_EMBED_FALLBACK's
+// anchor so the two replacements cannot interleave. It explains, in the one
+// file a plugin reader sees, why these script paths differ from the ones in
+// the skill's reference docs. It must not name the skill-base-dir token
+// literally: verifyPluginAgentRewrite() rejects that string in agent files,
+// which is exactly the check that keeps this rewrite honest.
+export const AGENT_PATH_NOTE =
+  '\n\nScript paths above resolve against `$CLAUDE_PLUGIN_ROOT` because this file is loaded ' +
+  'as a plugin agent, and a spawned agent never loads SKILL.md. The skill reference docs ' +
+  'resolve the same scripts against the skill base directory Setup defines. The two forms are ' +
+  'the loader contract, not drift.\n';
 
 /**
  * Rewrite one markdown file's content for the plugin subtree. Pure, so the
@@ -94,7 +112,7 @@ export function rewritePluginMarkdown(content) {
  * because no SKILL.md travels with a spawned agent.
  */
 export function rewritePluginAgentMarkdown(content) {
-  return content
+  const rewritten = content
     .replaceAll(CLAUDE_PROJECT_SCRIPTS_PATH, PLUGIN_AGENT_SCRIPTS_PATH)
     .replace(
       /node \$\{CLAUDE_PLUGIN_ROOT\}\/skills\/impeccable\/scripts\/([^\s`"]+)/g,
@@ -107,6 +125,11 @@ export function rewritePluginAgentMarkdown(content) {
       /(`node "\$\{CLAUDE_PLUGIN_ROOT\}\/skills\/impeccable\/scripts\/embed-prompt\.mjs"[^`]*`[^.]*\.)/g,
       `$1${AGENT_EMBED_FALLBACK}`,
     );
+  // Idempotent: the tree rewrite copies from source each build, but a rerun
+  // over already-rewritten output must not stack a second copy of the note.
+  return rewritten.includes(AGENT_PATH_NOTE.trim())
+    ? rewritten
+    : rewritten.replace(/\s*$/, AGENT_PATH_NOTE);
 }
 
 /**
