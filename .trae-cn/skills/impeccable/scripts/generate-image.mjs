@@ -246,6 +246,21 @@ if (plateId) {
   const chromaLine = wantsChroma ? ` Render the artwork on a perfectly flat, uniform bright green background (${chromaColor}) that fills every pixel not covered by the artwork; no paper texture, no vignette, no shadow on the green; the green will be removed and the artwork composited onto the page's own surface.` : '';
   const prompt = [platePrompt(spec, region), extra, chromaLine].filter(Boolean).join(' ');
   plateCtx = { spec, specPath, region, ref, refPath, out, size, prompt, comp, encodePng, resize, chroma: wantsChroma ? chromaColor : null };
+  // Score a plate that already exists, without generating one. The harness's
+  // own image tool produces the plate on the native branch, and every step
+  // after that (read the score line, regenerate on a miss) needs the same
+  // number the API path prints. Placed above the API-key check on purpose:
+  // the native branch is exactly the case with no key. Scoring needs no
+  // generation state; gatePlates in build-phase.mjs already scores files on
+  // disk through this same plateReference + compare + plateVerdict path.
+  if (process.argv.includes('--score-only')) {
+    if (!fs.existsSync(out)) {
+      console.error(`generate-image: no plate at ${out} to score; produce it first, then run --score-only`);
+      process.exit(1);
+    }
+    await scorePlate(plateCtx, out);
+    process.exit(0);
+  }
   if (process.env.IMPECCABLE_IMAGE_GEN_FAKE) {
     const up = resize(ref, ref.width * 2, ref.height * 2);
     fs.writeFileSync(out, encodePng(up, { text: { 'impeccable:prompt': prompt, 'impeccable:fake': '1' } }));

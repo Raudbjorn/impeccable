@@ -27,3 +27,5 @@ Expect: the project root; the artifact path(s); the direction contract text (THE
 ## Output Contract
 
 Return: the file paths written, a five-line summary of the recorded system (palette strategy, type ramp shape, named rules), and one line naming anything in the build you deliberately did not canonize and why. No other prose.
+
+Script paths above resolve against `$CLAUDE_PLUGIN_ROOT` because this file is loaded as a plugin agent, and a spawned agent never loads SKILL.md. The skill reference docs resolve the same scripts against the skill base directory Setup defines. The two forms are the loader contract, not drift.

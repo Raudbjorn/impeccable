@@ -744,7 +744,96 @@ function addIgnoreValue(cwd, args) {
   return `Added ${parsed.rule}=${parsed.value}${scopeSuffix} to ${scope} (${path.relative(cwd, target) || target}).`;
 }
 
+/**
+ * True when a manifest file exists and its raw text carries an impeccable hook
+ * command, but the file does not parse as JSON. `pruneImpeccableHookFromManifest`
+ * reports that shape as `false` (no marker) rather than as an error, so without
+ * this pre-check reset would report success while the entry survived.
+ */
+function manifestIsUnreadableButWired(manifestPath) {
+  let text;
+  try {
+    if (!fs.existsSync(manifestPath)) return false;
+    text = fs.readFileSync(manifestPath, 'utf-8');
+  } catch {
+    return false;
+  }
+  if (!IMPECCABLE_HOOK_COMMAND_MARKERS.some((marker) => text.includes(marker))) return false;
+  try {
+    JSON.parse(text);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+/** Delete the hook's own state files. Never a kill switch, so always safe. */
+function removeHookStateFiles(cwd) {
+  const removed = [];
+  for (const filePath of [getCachePath(cwd), getPendingPath(cwd)]) {
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        removed.push(path.relative(cwd, filePath) || filePath);
+      }
+    } catch { /* ignore */ }
+  }
+  return removed;
+}
+
 function reset(cwd) {
+  // `on` writes three things: config, consent, and hook entries in the provider
+  // manifests. Reset must undo all three (issue #512). Order matters: a missing
+  // config falls back to enabled (DEFAULT_CONFIG in hook-lib.mjs), so deleting
+  // the config first and then failing to rewrite a manifest leaves the hook
+  // armed with its kill switch gone. Unwire the manifests first and strip the
+  // config only once nothing is left wired. The team-shared sharedDestRel is
+  // still never written, since `on` never writes it, but it is now read and
+  // reported rather than silently ignored. No skill-folder gate: a reset
+  // mid-uninstall (skill files gone, manifest still wired) is the case that
+  // most needs the prune.
+  const pruned = [];
+  const failed = [];
+  const unreadable = [];
+  const stillShared = [];
+  for (const target of HOOK_MANIFEST_TARGETS) {
+    const destPath = path.join(cwd, target.destRel);
+    if (manifestIsUnreadableButWired(destPath)) {
+      unreadable.push(target.destRel);
+    } else {
+      try {
+        if (pruneImpeccableHookFromManifest(destPath)) pruned.push(target.provider);
+      } catch (err) {
+        failed.push(`${target.destRel} (${err.message || err})`);
+      }
+    }
+    if (target.sharedDestRel && fileHasImpeccableHookMarker(path.join(cwd, target.sharedDestRel))) {
+      stillShared.push(target.sharedDestRel);
+    }
+  }
+
+  if (failed.length || unreadable.length) {
+    removeHookStateFiles(cwd);
+    const blocked = [...failed, ...unreadable.map((rel) => `${rel} (not valid JSON)`)];
+    const done = pruned.length ? ` Unwired: ${pruned.join(', ')}.` : '';
+    throw new Error(
+      `could not remove the hook entry from ${blocked.join('; ')}.${done}`
+      + ' The config was left in place, so a kill switch written by `off` survives'
+      + ' and no new one was created. Fix those files and run reset again.',
+    );
+  }
+
+  if (stillShared.length) {
+    removeHookStateFiles(cwd);
+    const done = pruned.length ? ` Removed hook entries from: ${pruned.join(', ')}.` : '';
+    const disabled = mergeHookConfig(readRawHookConfig(cwd)).enabled === false;
+    const state = disabled
+      ? 'The existing config still disables the hook here, so it was left in place.'
+      : 'The hook is still armed here: run `off` to disable it.';
+    return `Left the config alone: ${stillShared.join(', ')} still carries a hook entry,`
+      + ` and reset never writes a team-shared manifest.${done} ${state}`;
+  }
+
   const removed = [];
   // Unified files may hold non-hook keys (e.g. updateCheck); strip only the
   // hook/detector subtrees and keep the rest, deleting the file only if nothing remains.
@@ -762,26 +851,7 @@ function reset(cwd) {
     } catch { /* ignore */ }
   }
   // State files are wholly ours; delete outright.
-  for (const filePath of [getCachePath(cwd), getPendingPath(cwd)]) {
-    try {
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-        removed.push(path.relative(cwd, filePath) || filePath);
-      }
-    } catch { /* ignore */ }
-  }
-  // `on` writes three things: config, consent, and hook entries in the
-  // provider manifests. Reset must undo all three (issue #512): a leftover
-  // manifest entry kept invoking the hook after the config that said "off"
-  // was deleted. Local destRel only, since `on` never writes the team-shared
-  // sharedDestRel. No skill-folder gate: a reset mid-uninstall (skill files
-  // gone, manifest still wired) is the case that most needs the prune.
-  const pruned = [];
-  for (const target of HOOK_MANIFEST_TARGETS) {
-    try {
-      if (pruneImpeccableHookFromManifest(path.join(cwd, target.destRel))) pruned.push(target.provider);
-    } catch { /* ignore */ }
-  }
+  removed.push(...removeHookStateFiles(cwd));
   const parts = [];
   if (removed.length) parts.push(`Reset design hook config and cache (removed: ${removed.join(', ')}).`);
   if (pruned.length) parts.push(`Removed hook entries from: ${pruned.join(', ')}.`);
