@@ -25,8 +25,9 @@ export const SUITES = {
     description: 'Build, provider transforms, CLI helpers, context, and storage unit tests.',
     triggers: [
       ...COMMON_INFRA_PATTERNS,
+      /^picker\//,
       /^scripts\/(?!benchmark-detector|build-browser-detector|build-extension)/,
-      /^skill\/(SKILL\.src\.md|agents\/|reference\/|scripts\/(cleanup-deprecated|comp-diff|comp-spec|build-phase|font-match|data\/font-index|concept-seed|context|context-signals|critique-storage|design-parser|doctor|hook|impeccable-paths|is-generated|lib\/(artifact-schema|png|raster|image-metrics|font-fingerprint|font-index|hero-checks|composition-catalog|concept-catalog|provider|staleness|staleness-deep|staleness-notice|surface-briefs|target-slug|template-extensions)|pin|surface-brief))/,
+      /^skill\/(SKILL\.src\.md|agents\/|reference\/|scripts\/(cleanup-deprecated|comp-diff|comp-spec|build-phase|font-match|data\/font-index|concept-seed|context|context-signals|critique-storage|design-context|design-parser|doctor|hook|impeccable-paths|is-generated|lib\/(artifact-schema|png|raster|image-metrics|font-fingerprint|font-index|hero-checks|composition-catalog|concept-catalog|provider|staleness|staleness-deep|staleness-notice|surface-briefs|target-slug|template-extensions)|picker|pin|surface-brief))/,
       /^README(\.npm)?\.md$/,
       /^cli\/bin\//,
     ],
@@ -47,6 +48,7 @@ export const SUITES = {
           'tests/validate-plugin-versions.test.js',
           'tests/validate-plugin-manifest.test.js',
           'tests/plugin-paths.test.js',
+          'tests/hook-rule-presentation.test.js',
         ],
       },
       {
@@ -70,6 +72,7 @@ export const SUITES = {
           'tests/hook.test.mjs',
           'tests/impeccable-paths.test.mjs',
           'tests/openai-plugin.test.mjs',
+          'tests/picker-server.test.mjs',
           'tests/pin.test.mjs',
           'tests/release.test.mjs',
           'tests/doctor.test.mjs',
