@@ -990,39 +990,26 @@ describe('extractPlatform', () => {
     assert.equal(extractPlatform('# P\n\nno platform here\n'), null);
   });
 
-  it('reads web / ios / android / adaptive case-insensitively', () => {
+  it('reads web / android / adaptive case-insensitively', () => {
     assert.equal(extractPlatform('## Platform\n\nweb\n'), 'web');
-    assert.equal(extractPlatform('## Platform\n\nios\n'), 'ios');
     assert.equal(extractPlatform('## platform\n\nANDROID\n'), 'android');
     assert.equal(extractPlatform('## Platform\n\nAdaptive\n'), 'adaptive');
   });
 
-  it('reads a line naming both native targets as adaptive', () => {
-    assert.equal(extractPlatform('## Platform\n\nios, android\n'), 'adaptive');
-    assert.equal(extractPlatform('## Platform\n\nandroid and ios\n'), 'adaptive');
-    assert.equal(extractPlatform('## Platform\n\nios/android\n'), 'adaptive');
-  });
-
-  it('does not read prose mentioning both targets as adaptive', () => {
-    // Negations and explanations must fall through to the unrecognized-value
-    // warning, never silently classify as cross-platform native.
-    assert.equal(extractPlatform('## Platform\n\nweb only, not ios or android\n'), null);
-    assert.equal(extractPlatform('## Platform\n\nios first, android later this year\n'), null);
-  });
-
-  it('returns null for an unrecognized value', () => {
+  it('returns null for an unrecognized value, including the retired ios value', () => {
     assert.equal(extractPlatform('## Platform\n\ndesktop\n'), null);
     assert.equal(extractPlatform('## Platform\n\nflutter\n'), null);
+    assert.equal(extractPlatform('## Platform\n\nios\n'), null);
   });
 
   it('ignores a near-miss heading and reads the real one', () => {
     // `## Platform notes` must not be mistaken for the `## Platform` field.
-    const product = '## Platform notes\n\nsome prose here\n\n## Platform\n\nios\n';
-    assert.equal(extractPlatform(product), 'ios');
+    const product = '## Platform notes\n\nsome prose here\n\n## Platform\n\nandroid\n';
+    assert.equal(extractPlatform(product), 'android');
   });
 
   it('reads the first non-empty line after the heading', () => {
-    assert.equal(extractPlatform('## Platform\n\n\nios\n'), 'ios');
+    assert.equal(extractPlatform('## Platform\n\n\nandroid\n'), 'android');
   });
 
   it('treats an empty section followed by another heading as absent', () => {
@@ -1404,22 +1391,21 @@ related_targets: []
     assert.match(res.stdout, /WORLD_DISCOVERY_REQUIRED: PRODUCT\.md exists but no DESIGN\.md/);
   });
 
-  it('loads the native platform reference for an ios project', async () => {
+  it('warns on the retired ios value instead of loading a native reference', async () => {
     write('PRODUCT.md', '# Acme\n\n## Platform\n\nios\n');
     const { spawnSync } = await import('node:child_process');
     const res = spawnSync(process.execPath, [SCRIPT_PATH], { cwd: scratch, encoding: 'utf8', env: { ...process.env, IMPECCABLE_NO_UPDATE_CHECK: '1' } });
     assert.equal(res.status, 0);
-    assert.match(res.stdout, /# NATIVE PLATFORM REFERENCE: IOS \(reference\/ios\.md\)/);
-    assert.match(res.stdout, /Apple Human Interface Guidelines|iOS/i);
-    assert.doesNotMatch(res.stdout, /NEXT STEP:.*reference\/ios\.md/);
+    assert.match(res.stdout, /WARNING: PRODUCT\.md's `## Platform` value `ios` is not recognized/);
+    assert.match(res.stdout, /treating the project as `web`/);
+    assert.equal(res.stdout.includes('NATIVE PLATFORM REFERENCE'), false);
   });
 
-  it('loads both native platform references for an adaptive project', async () => {
+  it('loads the native platform reference for an adaptive project', async () => {
     write('PRODUCT.md', '# Acme\n\n## Platform\n\nadaptive\n');
     const { spawnSync } = await import('node:child_process');
     const res = spawnSync(process.execPath, [SCRIPT_PATH], { cwd: scratch, encoding: 'utf8', env: { ...process.env, IMPECCABLE_NO_UPDATE_CHECK: '1' } });
     assert.equal(res.status, 0);
-    assert.match(res.stdout, /# NATIVE PLATFORM REFERENCE: IOS \(reference\/ios\.md\)/);
     assert.match(res.stdout, /# NATIVE PLATFORM REFERENCE: ANDROID \(reference\/android\.md\)/);
   });
 
@@ -1429,7 +1415,7 @@ related_targets: []
     const res = spawnSync(process.execPath, [SCRIPT_PATH], { cwd: scratch, encoding: 'utf8', env: { ...process.env, IMPECCABLE_NO_UPDATE_CHECK: '1' } });
     assert.equal(res.status, 0);
     assert.equal(res.stdout.includes('This project targets'), false);
-    assert.equal(res.stdout.includes('reference/ios.md'), false);
+    assert.equal(res.stdout.includes('reference/android.md'), false);
   });
 
   it('loads the native platform reference for an android project', async () => {

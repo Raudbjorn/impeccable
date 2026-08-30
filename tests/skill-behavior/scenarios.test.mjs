@@ -28,8 +28,8 @@ import { detectProvider, getModel, hasKey, resolveModelList, PROVIDERS } from '.
 import {
   PRODUCT_MD_SAMPLE,
   PRODUCT_MD_SAMPLE_NO_REGISTER,
-  PRODUCT_MD_SAMPLE_IOS,
-  MINIMAL_IOS_SOURCE,
+  PRODUCT_MD_SAMPLE_ANDROID,
+  MINIMAL_ANDROID_SOURCE,
   DESIGN_MD_SAMPLE,
   MINIMAL_LANDING_HTML,
   SVELTE_PROJECT_FILES,
@@ -527,12 +527,12 @@ for (const modelId of resolveModelList()) {
       }
     });
 
-    it('scenario 14: native iOS project (context loads ios.md)', async () => {
-      // PRODUCT.md sets `## Platform` to `ios`. context.mjs now reads and emits
-      // reference/ios.md itself, so native guidance enters the conversation
-      // without relying on a second model-directed file read.
+    it('scenario 14: native Android project (context loads android.md)', async () => {
+      // PRODUCT.md sets `## Platform` to `android`. context.mjs now reads and
+      // emits reference/android.md itself, so native guidance enters the
+      // conversation without relying on a second model-directed file read.
       const workspace = prepareWorkspace({
-        files: { 'PRODUCT.md': PRODUCT_MD_SAMPLE_IOS, 'TideDetailView.swift': MINIMAL_IOS_SOURCE },
+        files: { 'PRODUCT.md': PRODUCT_MD_SAMPLE_ANDROID, 'TideDetailScreen.kt': MINIMAL_ANDROID_SOURCE },
       });
       try {
         const { trace, text } = await runTurn({
@@ -541,7 +541,7 @@ for (const modelId of resolveModelList()) {
           userPrompt: '/impeccable craft a tide detail screen for the project in this workspace',
           maxSteps: provider === 'google' ? 8 : 6,
         });
-        logTrace('S14', 'native-ios', modelId, trace, { textSample: text.slice(0, 400) });
+        logTrace('S14', 'native-android', modelId, trace, { textSample: text.slice(0, 400) });
         const loadCalls = bashCommandsMatching(trace, 'context.mjs');
         assert.ok(
           loadCalls.length >= 1,
@@ -550,8 +550,8 @@ for (const modelId of resolveModelList()) {
         );
         // Proof the native reference itself entered the agent's view.
         assert.ok(
-          trace.bashOutputs.some((o) => /# NATIVE PLATFORM REFERENCE: IOS \(reference\/ios\.md\)/.test(o)),
-          `context.mjs should have emitted reference/ios.md content (platform is ios).\n` +
+          trace.bashOutputs.some((o) => /# NATIVE PLATFORM REFERENCE: ANDROID \(reference\/android\.md\)/.test(o)),
+          `context.mjs should have emitted reference/android.md content (platform is android).\n` +
             `bashOutputs: ${JSON.stringify(trace.bashOutputs, null, 2)}`,
         );
       } finally {
@@ -567,7 +567,7 @@ for (const modelId of resolveModelList()) {
       // switching via its web-only guard is acceptable; never reaching the
       // variant is the failure).
       const workspace = prepareWorkspace({
-        files: { 'PRODUCT.md': PRODUCT_MD_SAMPLE_IOS, 'TideDetailView.swift': MINIMAL_IOS_SOURCE },
+        files: { 'PRODUCT.md': PRODUCT_MD_SAMPLE_ANDROID, 'TideDetailScreen.kt': MINIMAL_ANDROID_SOURCE },
       });
       try {
         const { trace, text } = await runTurn({
@@ -584,7 +584,7 @@ for (const modelId of resolveModelList()) {
         );
         assert.ok(
           fileLoaded(trace, 'audit.native.md'),
-          `agent should load audit.native.md (not just audit.md) when the platform is ios.\n` +
+          `agent should load audit.native.md (not just audit.md) when the platform is android.\n` +
             `Trace: ${JSON.stringify(summarizeTrace(trace), null, 2)}`,
         );
       } finally {

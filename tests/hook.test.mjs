@@ -1897,7 +1897,7 @@ rounded:
     // The web rule engine has no business flagging React Native screens; the
     // hook watches .tsx/.ts/.js, which is exactly what a native project is
     // made of, so the platform field gates the whole scan.
-    for (const platform of ['ios', 'android', 'adaptive']) {
+    for (const platform of ['android', 'adaptive']) {
       writeFixture('PRODUCT.md', `# App\n\n## Register\n\nproduct\n\n## Platform\n\n${platform}\n`);
       const file = writeFixture('src/Card.tsx', 'noop');
       const det = fakeDetector([finding('side-tab', 1)]);
@@ -3385,8 +3385,8 @@ describe('resolveProjectPlatform() / isNativePlatform()', () => {
   afterEach(() => fs.rmSync(cwd, { recursive: true, force: true }));
 
   it('reads the platform from PRODUCT.md via the same resolution the skill uses', () => {
-    fs.writeFileSync(path.join(cwd, 'PRODUCT.md'), '# App\n\n## Platform\n\nios\n');
-    assert.equal(resolveProjectPlatform(cwd), 'ios');
+    fs.writeFileSync(path.join(cwd, 'PRODUCT.md'), '# App\n\n## Platform\n\nandroid\n');
+    assert.equal(resolveProjectPlatform(cwd), 'android');
   });
 
   it('returns null when PRODUCT.md is absent or platform-less', () => {
@@ -3395,8 +3395,7 @@ describe('resolveProjectPlatform() / isNativePlatform()', () => {
     assert.equal(resolveProjectPlatform(cwd), null);
   });
 
-  it('isNativePlatform is true only for ios / android / adaptive', () => {
-    assert.equal(isNativePlatform('ios'), true);
+  it('isNativePlatform is true only for android / adaptive', () => {
     assert.equal(isNativePlatform('android'), true);
     assert.equal(isNativePlatform('adaptive'), true);
     assert.equal(isNativePlatform('web'), false);

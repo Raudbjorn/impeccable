@@ -568,7 +568,7 @@ describe('checkWorkspaces', () => {
 
   it('flags a native workspace inheriting a web product record', () => {
     write('PRODUCT.md', CURRENT_PRODUCT);
-    write('apps/mobile/ios/Podfile', '');
+    write('apps/mobile/android/build.gradle', '');
     const { findings } = sweep([
       { name: 'mobile', path: 'apps/mobile', productStatus: 'inherited', productPath: 'PRODUCT.md', designStatus: 'missing' },
     ]);
@@ -579,8 +579,8 @@ describe('checkWorkspaces', () => {
   });
 
   it('does not flag a workspace whose own record declares the native platform', () => {
-    write('apps/mobile/PRODUCT.md', CURRENT_PRODUCT.replace('web', 'ios'));
-    write('apps/mobile/ios/Podfile', '');
+    write('apps/mobile/PRODUCT.md', CURRENT_PRODUCT.replace('web', 'android'));
+    write('apps/mobile/android/build.gradle', '');
     const { findings } = sweep([
       { name: 'mobile', path: 'apps/mobile', productStatus: 'child', productPath: 'apps/mobile/PRODUCT.md', designStatus: 'missing' },
     ]);
@@ -694,7 +694,7 @@ describe('doctor CLI', () => {
     write('PRODUCT.md', CURRENT_PRODUCT);
     write('apps/web/package.json', JSON.stringify({ name: 'web' }));
     write('apps/mobile/package.json', JSON.stringify({ name: 'mobile', dependencies: { 'react-native': '0.74' } }));
-    write('apps/mobile/ios/Podfile', '');
+    write('apps/mobile/android/build.gradle', '');
     const res = run(['--json']);
     assert.equal(res.status, 0, res.stderr);
     const report = JSON.parse(res.stdout);
