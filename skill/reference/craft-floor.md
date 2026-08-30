@@ -40,6 +40,7 @@ Surface habits:
 - Unicode glyphs or emoji standing in for an icon system. Icons are drawn, from a real library or authored SVG, in one consistent stroke and weight. <!-- rule:skill-ban-glyph-icons -->
 - Geometric masks standing in for organic contours. A circle, polygon, or radial-gradient cutout approximating a photographic subject's edge is the cheap version of the effect and reads worse than omitting it. Derive an alpha matte from the actual image, or produce a cut-out asset. <!-- rule:skill-ban-geometric-occlusion-mask -->
 - Light or dark picked by category. Pick it from the use scene: who, where, under what ambient light. <!-- rule:skill-reflex-theme-by-habit -->
+- A cultural-symbol palette as the obvious pull for a domain that carries one (a nation's flag colors, a cuisine's stock hues, a holiday's palette). Reach past it; let the cultural reading come from typography, imagery, and copy, not the palette. <!-- rule:skill-reflex-cultural-palette -->
 
 <codex>
 - Tracking stops at -0.04em. -0.02 to -0.03em usually reads better. <!-- rule:skill-typo-codex-tracking-repeat -->
