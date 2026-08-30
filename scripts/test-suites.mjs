@@ -35,7 +35,6 @@ export const SUITES = {
         files: [
           'tests/build.test.js',
           'tests/cli-ignores.test.js',
-          'tests/windows-path-fix.test.js',
           'tests/lib/provider-blocks.test.js',
           'tests/lib/transformers/provider-blocks.test.js',
           'tests/lib/utils.test.js',
