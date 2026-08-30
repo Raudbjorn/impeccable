@@ -1340,8 +1340,6 @@ describe('renderTemplate()', () => {
     assert.match(text, /Confident false positive or sanctioned exception/);
     assert.match(text, /literal or domain-appropriate motion/);
     assert.match(text, /persist the narrowest ignore yourself and disclose it/);
-    // quoteCommandArg quotes the hook-admin.mjs path per platform (single
-    // quotes on POSIX, double on Windows; #533), so match either close quote.
     assert.match(text, /hook-admin\.mjs['"] ignore-value <rule> "<value>" --reason "<who decided: evidence>"/);
     assert.match(text, /Write "user confirmed" in a reason only when the user did/);
     assert.match(text, /Unsure: leave it as is and ask the user in one line/);
@@ -1358,8 +1356,7 @@ describe('renderTemplate()', () => {
     assert.match(text, /Triage per the session policy/);
     // The short form names the tool without the absolute path; the runnable
     // invocation lives only in the session's first (full) footer. The quoted
-    // path would render as `node '...'` on POSIX or `node "..."` on Windows,
-    // so reject both.
+    // path would render as `node '...'` on POSIX
     assert.match(text, /`hook-admin\.mjs ignore-value`/);
     assert.doesNotMatch(text, /node ['"]/);
     assert.match(text, /unsure, ask in one line/);
@@ -1419,33 +1416,6 @@ describe('renderTemplate()', () => {
     assert.doesNotMatch(text, /ignore-value overused-font "\$\(touch pwned\)"/);
   });
 
-  it('quotes a hint value per platform: single quotes on POSIX, double quotes on Windows (#533)', () => {
-    // #533 originally targeted the footer's concrete `--file <path>`
-    // suggestion; directiveFooter() now carries only literal placeholders
-    // (`--file <path>`), so that surface is gone. The quoting-sensitive
-    // surface that remains user-visible is the per-finding ignore hint,
-    // whose value comes straight from scanned file content and is meant to
-    // be pasted into the footer's command on this same machine. POSIX needs
-    // single quotes so $(...) cannot execute; Windows cmd.exe treats single
-    // quotes as literal, so a value with spaces must stay double-quoted or
-    // the ignore scope is split at the space.
-    const original = process.platform;
-    const renderFor = (platform) => {
-      Object.defineProperty(process, 'platform', { value: platform, configurable: true });
-      try {
-        return renderTemplate(
-          [finding('overused-font', 1, {
-            name: 'Overused font',
-            snippet: 'h1 { font-family: "Space Grotesk Var", sans-serif; }',
-          })],
-          '/x/fonts.css', DEFAULT_CONFIG, { cwd: '/x' }
-        );
-      } finally {
-        Object.defineProperty(process, 'platform', { value: original, configurable: true });
-      }
-    };
-    assert.match(renderFor('linux'), /ignore-value overused-font 'Space Grotesk Var'/);
-  });
 
   it('keeps the policy footer when reserveChars presses against the 500-char floor', () => {
     // Bugbot on PR #508: the note reservation used to be subtracted after

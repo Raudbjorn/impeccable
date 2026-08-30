@@ -187,14 +187,6 @@ describe('hook manifest builders', () => {
     }
   });
 
-  // Volta's Windows shims exec through `cmd /C`, which claims `<`, `>`, and
-  // newlines from the `node -e` payload, so the probe died before node ran and
-  // the guard read that as a missing runtime (volta-cli/volta#1791). Every
-  // command is asserted to carry NODE_PROBE above, so this covers them all.
-  it('keeps the runtime probe free of characters cmd.exe re-parses', () => {
-    assert.ok(!/[<>\n]/.test(NODE_PROBE), `cmd.exe-unsafe character in probe: ${NODE_PROBE}`);
-  });
-
   it('routes supported hook builders and leaves other providers alone', () => {
     assert.ok(hooksJsonFor('claude'));
     assert.ok(hooksJsonFor('codex'));

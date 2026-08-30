@@ -1604,9 +1604,7 @@ describe('context.mjs update check', () => {
     assert.equal(cache.latestVersion, undefined); // nothing learned
   });
 
-  // Targeted live-fetch boot: the Windows abort in issue #573 fired after
-  // stdout was already complete, so the contract is exit 0 with the full
-  // context still on stdout.
+  // Targeted live-fetch boot:
   it('exits 0 after a targeted live-fetch boot writes full context', async () => {
     const { srv, host } = await startStub({ skills: '2.0.0' });
     try {

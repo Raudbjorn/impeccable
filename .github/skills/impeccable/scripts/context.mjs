@@ -999,9 +999,7 @@ async function fetchLatestSkillVersion() {
   }
 }
 
-// Destroy fetch's global undici dispatcher before process.exit(): a live
-// keep-alive socket trips a libuv assertion on Windows/Node 24 after a
-// successful boot (nodejs/node#56645, issue #573).
+// Destroy fetch's global undici dispatcher before process.exit()
 async function destroyFetchDispatcher() {
   const dispatcher = globalThis[Symbol.for('undici.globalDispatcher.1')];
   if (dispatcher && typeof dispatcher.destroy === 'function') {
@@ -1010,8 +1008,7 @@ async function destroyFetchDispatcher() {
 }
 
 // Drain the boot payload before process.exit(): a live pipe that has not
-// flushed yet is truncated when Node tears down (issue #573 review). Then
-// close fetch so Windows teardown does not abort on the keep-alive socket.
+// flushed yet is truncated when Node tears down (issue #573 review). 
 async function finishCli(output) {
   await new Promise((resolve) => {
     process.stdout.write(output, () => resolve());

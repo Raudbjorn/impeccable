@@ -221,8 +221,7 @@ export function getLocalConfigPath(cwd) {
 // disposable state relocates.
 // Read from process.env (not runHook's injected env): the cache root is a
 // machine-scoped setting, not a per-invocation switch. Trim guards against
-// stray whitespace in env files; `~/` (or the
-// Windows `~\` spelling) expands via os.homedir(), and when no home dir can
+// stray whitespace in env files; `~/` expands via os.homedir(), and when no home dir can
 // be determined the expansion is rejected — state falls back to the
 // project-local default rather than anchoring under the hook process's cwd.
 // Resolving both sides makes the slug deterministic when callers hand in a
