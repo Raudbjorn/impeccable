@@ -20,7 +20,7 @@ When the parent hands you a decision card packet instead of an approved mock, th
 
 ## Input Contract
 
-Expect the measured spec (`.impeccable/build/spec.json`, written by `comp-spec.mjs` from the approved comp), the approved comp path, and the skill scripts path. Optionally: a subset of region ids to produce, extra prompt notes per region, and format or transparency needs. Everything else you need is in the spec: each raster region's id, kind (plate, image, texture), pixel box, sampled palette, aspect, note, and the plate path it must land on.
+Expect the measured spec (`.impeccable/build/spec.json`, written by `comp-spec.mjs` from the approved comp), the approved comp path, and the skill scripts path. Run every `node ...` command below from that scripts path. The path written into those commands is the one your loader substitutes, and some harnesses hand a spawned agent the unexpanded literal instead, so the parent's resolved path is the one to trust. If you have neither a working command nor a resolved path, stop and return one line asking the parent for it. Optionally: a subset of region ids to produce, extra prompt notes per region, and format or transparency needs. Everything else you need is in the spec: each raster region's id, kind (plate, image, texture), pixel box, sampled palette, aspect, note, and the plate path it must land on.
 
 If there is no spec, stop and return one line asking the parent to run `comp-spec.mjs` first. You do not inventory the comp yourself; the spec is the inventory, and a second inventory disagrees with the first.
 
