@@ -9,6 +9,10 @@ import { writeBuffer, readBuffer } from '../skill/scripts/live/manual-edits-buff
 import { buildManualEditEvidence } from '../skill/scripts/live-manual-edit-evidence.mjs';
 import { commitManualEdits } from '../skill/scripts/live-commit-manual-edits.mjs';
 import {
+  retriggerManualApplyFiles,
+  shouldRetriggerManualApply,
+} from '../skill/scripts/live/manual-apply.mjs';
+import {
   buildCopyEditBatchPrompt,
   runCopyEditPostApplyChecks,
 } from '../skill/scripts/live-copy-edit-agent.mjs';
@@ -59,6 +63,29 @@ describe('live-commit-manual-edits.mjs batched AI apply', () => {
       /currentWarnings = \[\.\.\.currentWarnings, \.\.\.\(repairResult\.warnings \|\| \[\]\)\]/,
       'repair agent warnings should be merged into the final manual Apply result instead of being dropped',
     );
+  });
+
+  it('re-triggers file watchers on the final verified source state', () => {
+    const file = path.join(tmpDir, 'src', 'page.html');
+    fs.writeFileSync(file, '<h1>Applied</h1>\n');
+    const oldTime = new Date('2020-01-01T00:00:00.000Z');
+    fs.utimesSync(file, oldTime, oldTime);
+    const before = fs.statSync(file).mtimeMs;
+
+    const result = retriggerManualApplyFiles(['src/page.html', '../outside.html'], tmpDir);
+
+    assert.deepEqual(result, { touched: ['src/page.html'], failures: [] });
+    assert.ok(fs.statSync(file).mtimeMs > before);
+    assert.equal(fs.readFileSync(file, 'utf8'), '<h1>Applied</h1>\n');
+  });
+
+  it('re-triggers only after the transaction reaches a committed final state', () => {
+    assert.equal(shouldRetriggerManualApply({ cleared: 2, failed: [] }), true);
+    assert.equal(shouldRetriggerManualApply({ cleared: 1, failed: [{ id: 'partial' }] }), true);
+    assert.equal(shouldRetriggerManualApply({ cleared: 1, repair: { status: 'repaired' } }), true);
+    assert.equal(shouldRetriggerManualApply({ cleared: 0, failed: [{ id: 'error' }] }), false);
+    assert.equal(shouldRetriggerManualApply({ cleared: 0, rolledBackFiles: ['src/page.html'] }), false);
+    assert.equal(shouldRetriggerManualApply({ cleared: 0, needsManualDecision: true }), false);
   });
 
   it('batches staged edits and clears successful entries only after AI success', () => {
