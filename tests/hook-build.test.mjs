@@ -16,6 +16,8 @@ import {
   buildCodexPluginHooksManifest,
   buildGitHubHooksManifest,
   buildOmpHookModule,
+  isImpeccableHookModule,
+  IMPECCABLE_HOOK_MODULE_MARKER,
   hooksJsonFor,
 } from '../scripts/lib/transformers/hooks.js';
 
@@ -189,12 +191,52 @@ describe('hook manifest builders', () => {
     // (packages/coding-agent/src/extensibility/shared-events.ts): the runner
     // takes `result.content ?? tool.content`, so returning a bare string both
     // discarded the edit's own output and handed back an unrenderable shape.
-    assert.match(source, /content: \[\.\.\.blocks, \{ type: "text", text \}\]/);
+    assert.match(source, /content: \[\.\.\.blocks, \{ type: "text", text: findings\.join\("/);
     assert.doesNotMatch(source, /return \{ content: text \}/);
     // SessionStopEventResult only reaches a continuation when `continue: true`
     // or a blocking decision accompanies the context; additionalContext on its
     // own is dropped as the session settles.
     assert.match(source, /return \{ continue: true, additionalContext: text \}/);
+    // ast_edit is a file-mutating oh-my-pi builtin; apply_patch is a
+    // Claude/Codex tool name and must not be copied across.
+    assert.match(source, /event\.toolName !== "ast_edit"/);
+    assert.doesNotMatch(source, /toolName !== "apply_patch"/);
+    // `paths` is the authoritative target list: the runner drops `path`
+    // entirely once an edit touches two or more files, so reading only
+    // `path` left every multi-file edit unscanned.
+    assert.match(source, /Array\.isArray\(input\.paths\)/);
+    assert.match(source, /for \(const filePath of targets\)/);
+    // Stamped so the installer and hook-admin can recognize their own file
+    // without parsing it as JSON.
+    assert.ok(source.startsWith(`// ${IMPECCABLE_HOOK_MODULE_MARKER} `), 'the marker must be the first line');
+  });
+
+  it('emits a self-relative hook path by default and an absolute one on request', () => {
+    // A project install can walk up from the module's own URL. A user-scope
+    // install puts the skill under ~/.omp/agent/skills while the hook stays in
+    // the project, so that case needs a resolved path baked in.
+    const relative = buildOmpHookModule();
+    assert.match(relative, /import\.meta\.url/);
+    assert.doesNotMatch(relative, /const HOOK_SCRIPT = "/);
+
+    const absolute = buildOmpHookModule({ hookScript: '/home/u/.omp/agent/skills/impeccable/scripts/hook.mjs' });
+    assert.match(absolute, /const HOOK_SCRIPT = "\/home\/u\/\.omp\/agent\/skills\/impeccable\/scripts\/hook\.mjs";/);
+    assert.doesNotMatch(absolute, /import\.meta\.url/);
+  });
+
+  it('recognizes its own modules, including ones written before the marker', () => {
+    // Modules emitted before the marker are already tracked and already
+    // shipping; refusing them would make reset report success while leaving
+    // the hook armed.
+    assert.equal(isImpeccableHookModule(buildOmpHookModule()), true);
+    assert.equal(
+      isImpeccableHookModule('export default function impeccableHook(pi) {}\n// hook.mjs'),
+      true,
+      'the pre-marker form must still be recognized',
+    );
+    assert.equal(isImpeccableHookModule('export default function mine(pi) {}'), false);
+    assert.equal(isImpeccableHookModule('{"hooks":{}}'), false);
+    assert.equal(isImpeccableHookModule(null), false);
   });
 
   it('probes the node runtime everywhere, and notices only where a channel exists', () => {
