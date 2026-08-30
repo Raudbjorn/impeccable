@@ -23,18 +23,11 @@ env:
   GENERATED_PATHS: >-
     .agents
     .claude
-    .cursor
     .gemini
     .github/skills
-    .grok
-    .hermes
     .kiro
     .opencode
     .pi
-    .qoder
-    .rovodev
-    .trae
-    .trae-cn
     .vibe
     plugin
 

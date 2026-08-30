@@ -24,7 +24,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const API_BASE = 'https://impeccable.style';
 
 // Provider folder names in project roots
-const PROVIDER_DIRS = ['.claude', '.cursor', '.gemini', '.agents', '.agent', '.github', '.grok', '.hermes', '.kiro', '.opencode', '.pi', '.qoder', '.trae', '.trae-cn', '.rovodev', '.vibe'];
+const PROVIDER_DIRS = ['.claude', '.gemini', '.codex', '.agents', '.agent', '.github', '.hermes', '.pi', '.opencode', '.kiro', '.vibe'];
 const PROVIDER_ALIASES = {
   agent: '.agent',
   agents: '.agents',
@@ -33,21 +33,11 @@ const PROVIDER_ALIASES = {
   'claude-code': '.claude',
   codex: '.agents',
   copilot: '.github',
-  cursor: '.cursor',
   gemini: '.gemini',
   github: '.github',
-  grok: '.grok',
-  'grok-build': '.grok',
-  hermes: '.hermes',
-  xai: '.grok',
   kiro: '.kiro',
   opencode: '.opencode',
   pi: '.pi',
-  qoder: '.qoder',
-  'rovo-dev': '.rovodev',
-  rovodev: '.rovodev',
-  trae: '.trae',
-  'trae-cn': '.trae-cn',
   vibe: '.vibe',
 };
 
@@ -55,21 +45,14 @@ const PROVIDER_DISPLAY = {
   '.agent': { name: 'Antigravity', input: 'antigravity' },
   '.agents': { name: 'Codex CLI', input: 'codex' },
   '.claude': { name: 'Claude Code', input: 'claude' },
-  '.cursor': { name: 'Cursor', input: 'cursor' },
   '.gemini': { name: 'Gemini CLI', input: 'gemini' },
   '.github': { name: 'GitHub Copilot', input: 'github' },
-  '.grok': { name: 'Grok Build', input: 'grok' },
-  '.hermes': { name: 'Hermes Agent', input: 'hermes' },
   '.kiro': { name: 'Kiro', input: 'kiro' },
   '.opencode': { name: 'OpenCode', input: 'opencode' },
   '.pi': { name: 'Pi Coding Agent', input: 'pi' },
-  '.qoder': { name: 'Qoder', input: 'qoder' },
-  '.rovodev': { name: 'Rovo Dev', input: 'rovo-dev' },
-  '.trae': { name: 'Trae', input: 'trae' },
-  '.trae-cn': { name: 'Trae CN', input: 'trae-cn' },
   '.vibe': { name: 'Mistral Vibe', input: 'vibe' },
 };
-const PROVIDER_INPUT_ORDER = ['antigravity', 'claude', 'codex', 'cursor', 'gemini', 'github', 'grok', 'hermes', 'kiro', 'opencode', 'pi', 'qoder', 'trae', 'trae-cn', 'rovo-dev', 'vibe'];
+const PROVIDER_INPUT_ORDER = ['antigravity', 'claude', 'codex', 'gemini', 'github','kiro', 'opencode', 'pi', 'vibe'];
 
 // OpenCode reads global skills from its config directory, not ~/.opencode:
 // $OPENCODE_CONFIG_DIR, else $XDG_CONFIG_HOME/opencode, else
@@ -81,44 +64,6 @@ function opencodeGlobalConfigDir(home) {
   return join(home, '.config', 'opencode');
 }
 
-// Hermes reads skills from `$HERMES_HOME/skills/`, where $HERMES_HOME defaults
-// to `~/.hermes` but is also set to a profile path (e.g.
-// `~/.hermes/profiles/forge`) when a non-default profile is active. Reading
-// the env var matters here at install time: writing to `~/.hermes/skills/`
-// from a profile-scoped Hermes invocation would land in the wrong profile
-// (the same cross-profile data-corruption class that the active_profile
-// fallback warning in hermes_constants.py exists to detect). Used by
-// HOME_SKILLS_DIR_OVERRIDES['.hermes'] only; GLOBAL_HARNESS_HINTS reads the
-// fixed `~/.hermes` location so detection doesn't leak the developer's real
-// HERMES_HOME into test output (test isolation).
-//
-// Ignore $HERMES_HOME when it doesn't sit under `home` (the caller-supplied
-// home dir, which tests inject via HOME=/tmp/...). Without this guard, an
-// inherited $HERMES_HOME=/home/<dev>/.hermes from the developer's shell leaks
-// into test output even when the test sets HOME=/tmp/imp-home-xxx: tests
-// expect ~/.hermes to live under their tmp home, not under the dev's real
-// home. The check uses `resolve()` on both sides so a symlinked test home
-// (e.g. /tmp -> /private/tmp on macOS) still compares correctly.
-function hermesGlobalHome(home) {
-  const envHome = process.env.HERMES_HOME;
-  if (envHome) {
-    try {
-      const resolvedEnv = resolve(envHome);
-      const resolvedHome = resolve(home);
-      // Honor HERMES_HOME only when it lives under the active home (real
-      // ~/.hermes or ~/.hermes/profiles/<name>). Cross-home inheritance is
-      // treated as not-set, so a test running under HOME=/tmp/... doesn't
-      // pick up the developer's real ~/.hermes.
-      if (resolvedEnv === resolvedHome || resolvedEnv.startsWith(resolvedHome + sep)) {
-        return resolvedEnv;
-      }
-    } catch {
-      // fall through to default
-    }
-  }
-  return join(home, '.hermes');
-}
-
 // Providers whose GLOBAL (home) skills dir is not `<provider>/skills`,
 // as a function of the home dir. Pi discovers global skills from
 // ~/.pi/agent/skills/ (issue #327); OpenCode from its config dir (issue
@@ -126,7 +71,6 @@ function hermesGlobalHome(home) {
 // for all three.
 const HOME_SKILLS_DIR_OVERRIDES = {
   '.agent': (home) => join(home, '.gemini', 'config', 'skills'),
-  '.hermes': (home) => join(hermesGlobalHome(home), 'skills'),
   '.pi': (home) => join(home, '.pi', 'agent', 'skills'),
   '.opencode': (home) => join(opencodeGlobalConfigDir(home), 'skills'),
 };
@@ -151,18 +95,13 @@ const GLOBAL_HARNESS_HINTS = [
   { home: '.gemini/antigravity-ide', provider: '.agent' },
   { home: '.claude', provider: '.claude' },
   { home: '.codex', provider: '.agents' },
-  { home: '.cursor', provider: '.cursor' },
   { home: '.gemini', provider: '.gemini' },
-  { home: '.grok', provider: '.grok' },
-  { home: '.hermes', provider: '.hermes' },
   { home: '.kiro', provider: '.kiro' },
   { home: '.opencode', provider: '.opencode' },
   // OpenCode's real global config dir (issue #406); the ~/.opencode entry
   // above keeps recognizing machines that only have the legacy dir.
   { resolve: opencodeGlobalConfigDir, provider: '.opencode' },
   { home: '.pi', provider: '.pi' },
-  { home: '.qoder', provider: '.qoder' },
-  { home: '.rovodev', provider: '.rovodev' },
   { home: '.vibe', provider: '.vibe' },
 ];
 
@@ -201,12 +140,6 @@ const PROVIDER_HOOK_ARTIFACTS = {
   // so source and dest are the same path.
   '.github': [
     { sourceProvider: '.github', rel: 'hooks/impeccable.json', destProvider: '.github' },
-  ],
-  // Grok Build discovers project hooks from `.grok/hooks/*.json`. Team-shared
-  // by default (commit them if the whole team uses Grok); folder trust is still
-  // required via `/hooks-trust` or `--trust` before they run.
-  '.grok': [
-    { sourceProvider: '.grok', rel: 'hooks/impeccable.json', destProvider: '.grok' },
   ],
 };
 
@@ -666,7 +599,7 @@ async function copyOrExtractLocalBundle(sourceValue) {
  */
 function normalizeForHash(content) {
   return content
-    .replace(/\.(claude|cursor|agents|agent|github|gemini|codex|grok|hermes|kiro|opencode|pi|qoder|trae|trae-cn|rovodev|vibe)\/skills\//g, '.PROVIDER/skills/');
+    .replace(/\.(claude|agents|agent|github|gemini|codex|kiro|opencode|pi|vibe)\/skills\//g, '.PROVIDER/skills/');
 }
 
 function hashSkillFile(filePath) {

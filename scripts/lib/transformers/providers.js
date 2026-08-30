@@ -102,35 +102,6 @@ export const PROVIDERS = {
     displayName: 'Pi',
     frontmatterFields: ['license', 'compatibility', 'metadata', 'allowed-tools'],
   },
-  qoder: {
-    provider: 'qoder',
-    providerTags: ['qoder'],
-    configDir: '.qoder',
-    displayName: 'Qoder',
-    frontmatterFields: ['user-invocable', 'argument-hint', 'license', 'compatibility', 'metadata', 'allowed-tools'],
-  },
-  'trae-cn': {
-    provider: 'trae-cn',
-    providerTags: ['trae-cn', 'trae'],
-    configDir: '.trae-cn',
-    displayName: 'Trae China',
-    placeholderProvider: 'trae',
-    frontmatterFields: ['user-invocable', 'argument-hint', 'license', 'compatibility', 'metadata'],
-  },
-  trae: {
-    provider: 'trae',
-    providerTags: ['trae'],
-    configDir: '.trae',
-    displayName: 'Trae',
-    frontmatterFields: ['user-invocable', 'argument-hint', 'license', 'compatibility', 'metadata'],
-  },
-  'rovo-dev': {
-    provider: 'rovo-dev',
-    providerTags: ['rovo-dev'],
-    configDir: '.rovodev',
-    displayName: 'Rovo Dev',
-    frontmatterFields: ['user-invocable', 'argument-hint', 'license', 'compatibility', 'metadata', 'allowed-tools'],
-  },
   vibe: {
     provider: 'vibe',
     providerTags: ['vibe'],
@@ -138,42 +109,11 @@ export const PROVIDERS = {
     displayName: 'Mistral Vibe',
     frontmatterFields: ['user-invocable', 'license', 'compatibility', 'metadata', 'allowed-tools'],
   },
-  grok: {
-    provider: 'grok',
-    providerTags: ['grok'],
-    configDir: '.grok',
-    displayName: 'Grok Build',
-    // Grok's skill frontmatter matches the Agent Skills spec plus Claude-style
-    // extensions (user-invocable, argument-hint, allowed-tools, model, effort).
-    // See https://docs.x.ai/build/features/skills-plugins-marketplaces and
-    // ~/.grok/docs/user-guide/08-skills.md.
-    frontmatterFields: ['user-invocable', 'argument-hint', 'license', 'compatibility', 'metadata', 'allowed-tools'],
-    // Project/user agents are markdown with YAML frontmatter (Claude-compatible).
-    agentFormat: 'claude-md',
-    emitHooks: 'grok',
-    // Grok discovers project hooks from `.grok/hooks/*.json` (not a single
-    // settings.json). Claude tool-name matchers alias to Grok tools.
-    hooksManifestRel: 'hooks/impeccable.json',
-  },
   antigravity: {
     provider: 'antigravity',
     providerTags: ['antigravity'],
     configDir: '.agent',
     displayName: 'Antigravity',
     frontmatterFields: ['license', 'compatibility', 'metadata', 'allowed-tools'],
-  },
-  hermes: {
-    provider: 'hermes',
-    providerTags: ['hermes'],
-    configDir: '.hermes',
-    displayName: 'Hermes Agent',
-    // Hermes ships the Agent Skills spec as-is. The optional fields below
-    // (license, compatibility, metadata) are spec-defined; harness-specific
-    // extensions (user-invocable, argument-hint, allowed-tools) are NOT
-    // recognized by the Hermes skill loader and would be silently ignored.
-    // Hermes also has no hook surface, no equivalent of Claude's slash
-    // commands, and no per-skill tool ACL -- so no emitHooks, no agentFormat,
-    // no writeOpenAIMetadata. See hermes-agent/SKILL.md "Skills" section.
-    frontmatterFields: ['license', 'compatibility', 'metadata'],
-  },
+  }
 };

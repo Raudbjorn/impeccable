@@ -168,10 +168,8 @@ The skill-behavior suite runs three providers (claude-haiku-4-5, gpt-5.4-mini, g
 - [Kiro Skills](https://kiro.dev/docs/skills/)
 - [OpenCode Skills](https://opencode.ai/docs/skills/)
 - [Pi Skills](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/skills.md)
-- [Qoder Skills](https://docs.qoder.com/extensions/skills)
 - [Mistral Vibe Skills](https://docs.mistral.ai/vibe/code/cli/skills)
-- [Grok Build Skills, Plugins & Marketplaces](https://docs.x.ai/build/features/skills-plugins-marketplaces)
-- [Grok Build Hooks](https://docs.x.ai/build/features/hooks)
+
 
 ## Repository Structure
 

@@ -88,13 +88,9 @@ Notes:
 | Kiro | `.kiro/skills/` | - |
 | OpenCode | `.opencode/skills/` | `.agents/skills/`, `.claude/skills/` |
 | Pi | `.pi/skills/` (project), `~/.pi/agent/skills/` (global) | `.agents/skills/` |
-| Qoder | `.qoder/skills/` | `~/.qoder/skills/` (user-level) |
 | Trae China | `.trae-cn/skills/` | TBD |
 | Trae International | `.trae/skills/` | TBD |
-| Rovo Dev | `.rovodev/skills/` | `~/.rovodev/skills/` (user-level) |
 | Mistral Vibe | `.vibe/skills/` (project), `~/.vibe/skills/` (global) | `.agents/skills/` (project), `~/.agents/skills/` (global) |
-| Grok Build | `.grok/skills/` (project), `~/.grok/skills/` (global) | `.agents/skills/`, `.claude/skills/`, `.cursor/skills/` (Claude/Cursor compat, configurable) |
-| Hermes Agent | `.hermes/skills/` (project), `~/.hermes/skills/` (global) | `skills.external_dirs` config (no automatic `.agents/skills/` fallback) |
 | Antigravity | `.agent/skills/` (project), `~/.gemini/config/skills/` (global) | `.agents/skills/` (project), `~/.agents/skills/` (global) |
 
 All harnesses support the `{skill-name}/SKILL.md` directory structure with optional `reference/`, `scripts/`, and `assets/` subdirectories.
@@ -110,7 +106,6 @@ All harnesses support the `{skill-name}/SKILL.md` directory structure with optio
 | Harness | Native directory | File format |
 |---------|------------------|-------------|
 | Claude Code | `.claude/agents/` (installed plugin) | Markdown with YAML frontmatter |
-| Grok Build | `.grok/agents/` (project) and plugin `agents/` | Markdown with YAML frontmatter (Claude-compatible) |
 | Codex CLI | `<skill>/agents/` (nested, auto-discovered) | TOML |
 
 Impeccable keeps canonical agent prompts under `skill/agents/` and emits provider-native files only for harnesses with a documented on-disk subagent format. Claude reads its agents from the installed plugin; Grok reads the same markdown agents from the plugin package and from project `.grok/agents/`; Codex auto-discovers the TOML bundled inside the installed skill's own `agents/` folder, so the normal skills install carries it with no separate sidecar.
@@ -120,9 +115,7 @@ Impeccable keeps canonical agent prompts under `skill/agents/` and emits provide
 | Harness | Who can spawn a subagent |
 |---------|--------------------------|
 | Claude Code | Programmatically, from within the skill/agent flow. |
-| Grok Build | Programmatically via `spawn_subagent` (built-in types plus project/user agents under `.grok/agents/`). |
 | Codex CLI | Only if the user has allowed sub-agents / parallel work; otherwise the skill must ask once, then stop (see `skill/reference/critique.md` `<codex>` gate). |
-| Cursor | Agent-chosen: auto-delegated by the Agent, or user-invoked via `/name`. Not reliably skill-spawnable. |
 | Others | Varies; treat as unavailable unless verified, and degrade loudly. |
 
 ## Placeholder / Variable Substitution

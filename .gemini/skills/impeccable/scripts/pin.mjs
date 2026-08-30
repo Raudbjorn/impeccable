@@ -21,9 +21,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // All known harness directories
 const HARNESS_DIRS = [
-  '.claude', '.cursor', '.gemini', '.codex', '.agents', '.agent', '.github', '.grok',
-  '.hermes',
-  '.trae', '.trae-cn', '.pi', '.opencode', '.kiro', '.rovodev', '.vibe', '.qoder',
+'.claude', '.gemini', '.codex', '.agents', '.agent', '.github', '.hermes', '.pi', '.opencode', '.kiro', '.vibe'
 ];
 
 const CODEX_HARNESSES = new Set(['.codex', '.agents']);

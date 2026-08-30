@@ -219,39 +219,6 @@ cp -r dist/agents/.agents/skills/* ~/.agents/skills/
 cp -r dist/github/.github your-project/
 ```
 
-**Trae:**
-```bash
-# Trae China (domestic version)
-cp -r dist/trae/.trae-cn/skills/* ~/.trae-cn/skills/
-
-# Trae International
-cp -r dist/trae/.trae/skills/* ~/.trae/skills/
-```
-
-> **Note:** Trae has two versions with different config directories:
-> - **Trae China**: `~/.trae-cn/skills/`
-> - **Trae International**: `~/.trae/skills/`
->
-> After copying, restart Trae IDE to activate the skills.
-
-**Rovo Dev:**
-```bash
-# Project-specific
-cp -r dist/rovo-dev/.rovodev your-project/
-
-# Or global (applies to all projects)
-cp -r dist/rovo-dev/.rovodev/skills/* ~/.rovodev/skills/
-```
-
-**Qoder:**
-```bash
-# Project-specific
-cp -r dist/qoder/.qoder your-project/
-
-# Or global (applies to all projects)
-cp -r dist/qoder/.qoder/skills/* ~/.qoder/skills/
-```
-
 **Mistral Vibe:**
 ```bash
 # Project-specific
@@ -260,17 +227,6 @@ cp -r dist/vibe/.vibe your-project/
 # Or global (applies to all projects)
 cp -r dist/vibe/.vibe/skills/* ~/.vibe/skills/
 ```
-
-**Grok Build:**
-```bash
-# Project-specific
-cp -r dist/grok/.grok your-project/
-
-# Or global (applies to all projects)
-cp -r dist/grok/.grok/skills/* ~/.grok/skills/
-```
-
-> Prefer `npx impeccable install --providers=grok` or `grok plugin install pbakaus/impeccable#plugin --trust` so the design hook installs too. Project hooks need `/hooks-trust` (or `--trust`) once per folder.
 
 **Google Antigravity:**
 ```bash
@@ -356,7 +312,6 @@ Installed hook surfaces:
 - GitHub Copilot: `.github/hooks/impeccable.json` (committed, shared by the Copilot CLI and the cloud agent) runs `.github/skills/impeccable/scripts/hook.mjs`. The Copilot CLI activates it once the file is on the repository's default branch and the folder is trusted.
 - Cursor: `.cursor/hooks.json` runs `.cursor/skills/impeccable/scripts/hook-before-edit.mjs`.
 - Codex: `.codex/hooks.json` runs `.agents/skills/impeccable/scripts/hook.mjs`.
-- Grok Build: `.grok/hooks/impeccable.json` runs `.grok/skills/impeccable/scripts/hook.mjs`. Requires `/hooks-trust` or `--trust`. Findings reach the model on Stop, not after each edit.
 
 The installer preserves unrelated hook entries and settings. If a hook manifest is malformed, install/update aborts by default; rerun with `--force` to back up the malformed file as `.bak` and replace it.
 
@@ -417,27 +372,12 @@ Full detector docs: [impeccable.style/docs/detector](https://impeccable.style/do
 - [GitHub Copilot](https://github.com/features/copilot)
 - [Gemini CLI](https://github.com/google-gemini/gemini-cli)
 - [Codex CLI](https://github.com/openai/codex)
-- [Grok Build](https://x.ai/cli)
 - [OpenCode](https://opencode.ai)
 - [Pi](https://pi.dev)
 - [Kiro](https://kiro.dev)
-- [Trae](https://trae.ai)
-- [Rovo Dev](https://www.atlassian.com/software/rovo)
-- [Qoder](https://qoder.com)
 - [Mistral Vibe](https://docs.mistral.ai/vibe/code/overview)
 - [Google Antigravity](https://antigravity.google)
 
-## Community & Ecosystem
-
-Join the community and ecosystem conversations:
-
-- GitHub Discussions: file bugs, request features, and help newcomers.
-- [Impeccable on npm](https://www.npmjs.com/package/impeccable): grab the CLI, follow releases, and star the package.
-- Follow @pbakaus on Twitter for release notes, sample lint reports, and video highlights of new rules.
-
-## Contributing
-
-See [DEVELOP.md](docs/DEVELOP.md) for contributor guidelines and build instructions.
 
 ## License
 
@@ -446,3 +386,5 @@ Apache 2.0. See [LICENSE](LICENSE).
 ---
 
 Created by [Paul Bakaus](https://www.paulbakaus.com)
+
+Improved by me.
