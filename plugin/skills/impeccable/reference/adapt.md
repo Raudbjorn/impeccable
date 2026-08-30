@@ -183,7 +183,7 @@ Test thoroughly across contexts:
 - **Real devices**: Test on actual phones, tablets, desktops
 - **Different orientations**: Portrait and landscape
 - **Different browsers**: Safari, Chrome, Firefox, Edge
-- **Different OS**: iOS, Android, Windows, macOS
+- **Different OS**: Android
 - **Different input methods**: Touch, mouse, keyboard
 - **Edge cases**: Very small screens (320px), very large screens (4K)
 - **Slow connections**: Test on throttled network
