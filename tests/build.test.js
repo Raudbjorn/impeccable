@@ -25,7 +25,7 @@ describe('build orchestration', () => {
       skills: []
     });
 
-    const transformCursorSpy = spyOn(transformers, 'transformCursor').mockImplementation(() => {});
+    const transformGitHubSpy = spyOn(transformers, 'transformGitHub').mockImplementation(() => {});
     const transformClaudeCodeSpy = spyOn(transformers, 'transformClaudeCode').mockImplementation(() => {});
     const transformGeminiSpy = spyOn(transformers, 'transformGemini').mockImplementation(() => {});
     const transformCodexSpy = spyOn(transformers, 'transformCodex').mockImplementation(() => {});
@@ -36,7 +36,7 @@ describe('build orchestration', () => {
 
     const { skills } = utils.readSourceFiles(ROOT_DIR);
     const patterns = utils.readPatterns(ROOT_DIR);
-    transformers.transformCursor(skills, DIST_DIR, patterns);
+    transformers.transformGitHub(skills, DIST_DIR, patterns);
     transformers.transformClaudeCode(skills, DIST_DIR, patterns);
     transformers.transformGemini(skills, DIST_DIR, patterns);
     transformers.transformCodex(skills, DIST_DIR, patterns);
@@ -44,7 +44,7 @@ describe('build orchestration', () => {
     expect(readSourceFilesSpy).toHaveBeenCalledWith(ROOT_DIR);
 
     readSourceFilesSpy.mockRestore();
-    transformCursorSpy.mockRestore();
+    transformGitHubSpy.mockRestore();
     transformClaudeCodeSpy.mockRestore();
     transformGeminiSpy.mockRestore();
     transformCodexSpy.mockRestore();
@@ -61,7 +61,7 @@ describe('build orchestration', () => {
     });
     const readPatternsSpy = spyOn(utils, 'readPatterns').mockReturnValue(patterns);
 
-    const transformCursorSpy = spyOn(transformers, 'transformCursor').mockImplementation(() => {});
+    const transformGitHubSpy = spyOn(transformers, 'transformGitHub').mockImplementation(() => {});
     const transformClaudeCodeSpy = spyOn(transformers, 'transformClaudeCode').mockImplementation(() => {});
     const transformGeminiSpy = spyOn(transformers, 'transformGemini').mockImplementation(() => {});
     const transformCodexSpy = spyOn(transformers, 'transformCodex').mockImplementation(() => {});
@@ -71,19 +71,19 @@ describe('build orchestration', () => {
 
     const sourceFiles = utils.readSourceFiles(ROOT_DIR);
     const patternData = utils.readPatterns(ROOT_DIR);
-    transformers.transformCursor(sourceFiles.skills, DIST_DIR, patternData);
+    transformers.transformGitHub(sourceFiles.skills, DIST_DIR, patternData);
     transformers.transformClaudeCode(sourceFiles.skills, DIST_DIR, patternData);
     transformers.transformGemini(sourceFiles.skills, DIST_DIR, patternData);
     transformers.transformCodex(sourceFiles.skills, DIST_DIR, patternData);
 
-    expect(transformCursorSpy).toHaveBeenCalledWith(skills, DIST_DIR, patterns);
+    expect(transformGitHubSpy).toHaveBeenCalledWith(skills, DIST_DIR, patterns);
     expect(transformClaudeCodeSpy).toHaveBeenCalledWith(skills, DIST_DIR, patterns);
     expect(transformGeminiSpy).toHaveBeenCalledWith(skills, DIST_DIR, patterns);
     expect(transformCodexSpy).toHaveBeenCalledWith(skills, DIST_DIR, patterns);
 
     readSourceFilesSpy.mockRestore();
     readPatternsSpy.mockRestore();
-    transformCursorSpy.mockRestore();
+    transformGitHubSpy.mockRestore();
     transformClaudeCodeSpy.mockRestore();
     transformGeminiSpy.mockRestore();
     transformCodexSpy.mockRestore();
@@ -97,7 +97,7 @@ describe('build orchestration', () => {
     });
     const readPatternsSpy = spyOn(utils, 'readPatterns').mockReturnValue(patterns);
 
-    const transformCursorSpy = spyOn(transformers, 'transformCursor').mockImplementation(() => {});
+    const transformGitHubSpy = spyOn(transformers, 'transformGitHub').mockImplementation(() => {});
     const transformClaudeCodeSpy = spyOn(transformers, 'transformClaudeCode').mockImplementation(() => {});
     const transformGeminiSpy = spyOn(transformers, 'transformGemini').mockImplementation(() => {});
     const transformCodexSpy = spyOn(transformers, 'transformCodex').mockImplementation(() => {});
@@ -107,19 +107,19 @@ describe('build orchestration', () => {
 
     const { skills } = utils.readSourceFiles(ROOT_DIR);
     const patternData = utils.readPatterns(ROOT_DIR);
-    transformers.transformCursor(skills, DIST_DIR, patternData);
+    transformers.transformGitHub(skills, DIST_DIR, patternData);
     transformers.transformClaudeCode(skills, DIST_DIR, patternData);
     transformers.transformGemini(skills, DIST_DIR, patternData);
     transformers.transformCodex(skills, DIST_DIR, patternData);
 
-    expect(transformCursorSpy).toHaveBeenCalledWith([], DIST_DIR, patterns);
+    expect(transformGitHubSpy).toHaveBeenCalledWith([], DIST_DIR, patterns);
     expect(transformClaudeCodeSpy).toHaveBeenCalledWith([], DIST_DIR, patterns);
     expect(transformGeminiSpy).toHaveBeenCalledWith([], DIST_DIR, patterns);
     expect(transformCodexSpy).toHaveBeenCalledWith([], DIST_DIR, patterns);
 
     readSourceFilesSpy.mockRestore();
     readPatternsSpy.mockRestore();
-    transformCursorSpy.mockRestore();
+    transformGitHubSpy.mockRestore();
     transformClaudeCodeSpy.mockRestore();
     transformGeminiSpy.mockRestore();
     transformCodexSpy.mockRestore();
@@ -144,14 +144,14 @@ This is a test skill body.`;
     const { skills } = utils.readSourceFiles(TEST_DIR);
     const patterns = utils.readPatterns(TEST_DIR);
 
-    transformers.transformCursor(skills, DIST_DIR, patterns);
+    transformers.transformGitHub(skills, DIST_DIR, patterns);
     transformers.transformClaudeCode(skills, DIST_DIR, patterns);
     transformers.transformGemini(skills, DIST_DIR, patterns);
     transformers.transformCodex(skills, DIST_DIR, patterns);
     transformers.transformAntigravity(skills, DIST_DIR, patterns);
 
-    // Verify Cursor outputs
-    expect(fs.existsSync(path.join(DIST_DIR, 'cursor/.cursor/skills/test-skill/SKILL.md'))).toBe(true);
+    // Verify GitHub Copilot outputs
+    expect(fs.existsSync(path.join(DIST_DIR, 'github/.github/skills/test-skill/SKILL.md'))).toBe(true);
 
     // Verify Claude Code outputs
     expect(fs.existsSync(path.join(DIST_DIR, 'claude-code/.claude/skills/test-skill/SKILL.md'))).toBe(true);
@@ -166,7 +166,7 @@ This is a test skill body.`;
     expect(fs.existsSync(path.join(DIST_DIR, 'antigravity/.agent/skills/test-skill/SKILL.md'))).toBe(true);
   });
 
-  test('integration: emits native subagent files for Codex, Claude Code, GitHub Copilot, and Cursor', () => {
+  test('integration: emits native subagent files for Codex, Claude Code, and GitHub Copilot', () => {
     const skillContent = `---
 name: test-skill
 description: A test skill
@@ -200,7 +200,6 @@ Do not redesign the approved crop.`;
     transformers.transformClaudeCode(skills, DIST_DIR, patterns);
     transformers.transformCodex(skills, DIST_DIR, patterns);
     transformers.transformGitHub(skills, DIST_DIR, patterns);
-    transformers.transformCursor(skills, DIST_DIR, patterns);
 
     const claudeAgentPath = path.join(DIST_DIR, 'claude-code/.claude/agents/asset-producer.md');
     // Codex auto-discovers agents nested inside an installed skill, so the .toml
@@ -208,13 +207,10 @@ Do not redesign the approved crop.`;
     const codexAgentPath = path.join(DIST_DIR, 'codex/.codex/skills/test-skill/agents/asset_producer.toml');
     // GitHub Copilot discovers repo-level custom agents at .github/agents/<name>.agent.md.
     const copilotAgentPath = path.join(DIST_DIR, 'github/.github/agents/asset-producer.agent.md');
-    // Cursor discovers repo-level subagents at .cursor/agents/<name>.md.
-    const cursorAgentPath = path.join(DIST_DIR, 'cursor/.cursor/agents/asset-producer.md');
 
     expect(fs.existsSync(claudeAgentPath)).toBe(true);
     expect(fs.existsSync(codexAgentPath)).toBe(true);
     expect(fs.existsSync(copilotAgentPath)).toBe(true);
-    expect(fs.existsSync(cursorAgentPath)).toBe(true);
 
     const claudeAgent = fs.readFileSync(claudeAgentPath, 'utf-8');
     expect(claudeAgent).toContain('name: asset-producer');
@@ -238,19 +234,6 @@ Do not redesign the approved crop.`;
     expect(copilotAgent).not.toContain('model:');
     expect(copilotAgent).not.toContain('effort:');
     expect(copilotAgent).not.toContain('maxTurns:');
-
-    // Cursor keeps model (inherit maps directly) and derives readonly from the
-    // tool list; this agent carries Write, so no readonly field is emitted.
-    const cursorAgent = fs.readFileSync(cursorAgentPath, 'utf-8');
-    expect(cursorAgent).toContain('name: asset-producer');
-    expect(cursorAgent).toContain('description: Produces assets from approved crops');
-    expect(cursorAgent).toContain('model: inherit');
-    expect(cursorAgent).toContain('is_background: false');
-    expect(cursorAgent).toContain('Do not redesign the approved crop.');
-    expect(cursorAgent).not.toContain('readonly:');
-    expect(cursorAgent).not.toContain('tools:');
-    expect(cursorAgent).not.toContain('effort:');
-    expect(cursorAgent).not.toContain('maxTurns:');
   });
 
   test('integration: verify transformations are correct', () => {
@@ -271,17 +254,17 @@ Please audit {{target}} for technical quality. Ask {{model}} for help.`;
     const { skills } = utils.readSourceFiles(TEST_DIR);
     const patterns = utils.readPatterns(TEST_DIR);
 
-    transformers.transformCursor(skills, DIST_DIR, patterns);
+    transformers.transformGitHub(skills, DIST_DIR, patterns);
     transformers.transformClaudeCode(skills, DIST_DIR, patterns);
     transformers.transformGemini(skills, DIST_DIR, patterns);
     transformers.transformCodex(skills, DIST_DIR, patterns);
 
-    // Verify Cursor: full frontmatter with user-invocable
-    const cursorContent = fs.readFileSync(path.join(DIST_DIR, 'cursor/.cursor/skills/audit/SKILL.md'), 'utf-8');
-    expect(cursorContent).toContain('---');
-    expect(cursorContent).toContain('name: audit');
-    expect(cursorContent).toContain('{{target}}');
-    expect(cursorContent).toContain('the model');
+    // Verify GitHub Copilot: full frontmatter with user-invocable
+    const githubContent = fs.readFileSync(path.join(DIST_DIR, 'github/.github/skills/audit/SKILL.md'), 'utf-8');
+    expect(githubContent).toContain('---');
+    expect(githubContent).toContain('name: audit');
+    expect(githubContent).toContain('{{target}}');
+    expect(githubContent).toContain('the model');
 
     // Verify Claude Code: full frontmatter with user-invocable and argument-hint
     const claudeContent = fs.readFileSync(path.join(DIST_DIR, 'claude-code/.claude/skills/audit/SKILL.md'), 'utf-8');
@@ -312,8 +295,8 @@ Please audit {{target}} for technical quality. Ask {{model}} for help.`;
     });
     const readPatternsSpy = spyOn(utils, 'readPatterns').mockReturnValue({ patterns: [], antipatterns: [] });
 
-    const transformCursorSpy = spyOn(transformers, 'transformCursor').mockImplementation(() => {
-      callOrder.push('cursor');
+    const transformGitHubSpy = spyOn(transformers, 'transformGitHub').mockImplementation(() => {
+      callOrder.push('github');
     });
     const transformClaudeCodeSpy = spyOn(transformers, 'transformClaudeCode').mockImplementation(() => {
       callOrder.push('claude-code');
@@ -330,16 +313,16 @@ Please audit {{target}} for technical quality. Ask {{model}} for help.`;
 
     const { skills } = utils.readSourceFiles(ROOT_DIR);
     const patterns = utils.readPatterns(ROOT_DIR);
-    transformers.transformCursor(skills, DIST_DIR, patterns);
+    transformers.transformGitHub(skills, DIST_DIR, patterns);
     transformers.transformClaudeCode(skills, DIST_DIR, patterns);
     transformers.transformGemini(skills, DIST_DIR, patterns);
     transformers.transformCodex(skills, DIST_DIR, patterns);
 
-    expect(callOrder).toEqual(['cursor', 'claude-code', 'gemini', 'codex']);
+    expect(callOrder).toEqual(['github', 'claude-code', 'gemini', 'codex']);
 
     readSourceFilesSpy.mockRestore();
     readPatternsSpy.mockRestore();
-    transformCursorSpy.mockRestore();
+    transformGitHubSpy.mockRestore();
     transformClaudeCodeSpy.mockRestore();
     transformGeminiSpy.mockRestore();
     transformCodexSpy.mockRestore();
@@ -584,67 +567,6 @@ describe('GitHub Copilot custom agent generation', () => {
       'finish-reviewer.md',
       'manual-edit-applier.md',
     ]);
-  });
-});
-
-describe('Cursor subagent generation', () => {
-  const ROOT = process.cwd();
-  const CURSOR_TEST_DIR = path.join(ROOT, 'test-tmp-cursor-agents');
-  const DIST = path.join(CURSOR_TEST_DIR, 'dist');
-  const AGENTS_DIR = path.join(DIST, 'cursor', '.cursor', 'agents');
-
-  beforeEach(() => {
-    if (fs.existsSync(CURSOR_TEST_DIR)) fs.rmSync(CURSOR_TEST_DIR, { recursive: true, force: true });
-    fs.mkdirSync(CURSOR_TEST_DIR, { recursive: true });
-    const { skills } = utils.readSourceFiles(ROOT);
-    transformers.transformCursor(skills, DIST);
-  });
-
-  afterEach(() => {
-    if (fs.existsSync(CURSOR_TEST_DIR)) fs.rmSync(CURSOR_TEST_DIR, { recursive: true, force: true });
-  });
-
-  test('emits .cursor/agents/<name>.md for every shipped agent', () => {
-    const files = fs.readdirSync(AGENTS_DIR).sort();
-    expect(files).toEqual([
-      'impeccable-asset-producer.md',
-      'impeccable-documenter.md',
-      'impeccable-finish-reviewer.md',
-      'impeccable-manual-edit-applier.md',
-    ]);
-  });
-
-  test('frontmatter maps name, description, model inherit, is_background false; readonly only on the reviewer', () => {
-    for (const name of fs.readdirSync(AGENTS_DIR)) {
-      const content = fs.readFileSync(path.join(AGENTS_DIR, name), 'utf-8');
-      const frontmatter = content.split('---')[1];
-      expect(frontmatter).toContain(`name: ${name.replace(/\.md$/, '')}`);
-      expect(frontmatter).toContain('description: ');
-      expect(frontmatter).toContain('model: inherit');
-      expect(frontmatter).toContain('is_background: false');
-      // Cursor's effort option requires an explicit model id, incompatible
-      // with inherit, and our tool names are not Cursor's vocabulary.
-      expect(frontmatter).not.toContain('tools:');
-      expect(frontmatter).not.toContain('effort:');
-      expect(frontmatter).not.toContain('maxTurns:');
-      // The finish reviewer is the only role whose tool list has no Write or
-      // Edit; it reviews, the other three write.
-      if (name === 'impeccable-finish-reviewer.md') {
-        expect(frontmatter).toContain('readonly: true');
-      } else {
-        expect(frontmatter).not.toContain('readonly:');
-      }
-    }
-  });
-
-  test('bodies are compiled: placeholders resolved, rule markers stripped', () => {
-    for (const name of fs.readdirSync(AGENTS_DIR)) {
-      const content = fs.readFileSync(path.join(AGENTS_DIR, name), 'utf-8');
-      expect(content).not.toContain('{{');
-      expect(content).not.toMatch(/<!--\s*rule:/);
-    }
-    const assetProducer = fs.readFileSync(path.join(AGENTS_DIR, 'impeccable-asset-producer.md'), 'utf-8');
-    expect(assetProducer).toContain('.cursor/skills/impeccable/scripts');
   });
 });
 

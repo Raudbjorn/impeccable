@@ -9,7 +9,7 @@
  * `pin audit` creates a lightweight audit skill that redirects to Impeccable's audit workflow.
  * `unpin audit` removes that shortcut.
  *
- * The script discovers harness directories (.claude/skills, .cursor/skills, etc.)
+ * The script discovers harness directories (.claude/skills, .gemini/skills, etc.)
  * in the project root and creates/removes the pin in all of them.
  */
 

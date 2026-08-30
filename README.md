@@ -103,7 +103,7 @@ From the root of your project, run:
 npx impeccable install
 ```
 
-This shows the harness folders it detected (for example `~/.claude`, `~/.codex`, or project-local `.cursor`), lets you keep the detected set or customize providers, then asks whether to install into the current project or globally. Use `--providers=claude,codex,cursor` and `--scope=project|global` to skip those choices in scripts. On Claude Code, Cursor, Codex, and GitHub Copilot, it also installs the provider-native hook manifest for the current project. Works with Cursor, Claude Code, Gemini CLI, Codex CLI, and every other supported tool. Reload your harness afterward.
+This shows the harness folders it detected (for example `~/.claude`, `~/.codex`, or project-local `.gemini`), lets you keep the detected set or customize providers, then asks whether to install into the current project or globally. Use `--providers=claude,codex,gemini` and `--scope=project|global` to skip those choices in scripts. On Claude Code, Codex, and GitHub Copilot, it also installs the provider-native hook manifest for the current project. Works with Claude Code, Gemini CLI, Codex CLI, and every other supported tool. Reload your harness afterward.
 
 To refresh an existing install, run:
 
@@ -121,8 +121,8 @@ For teams that want to keep Impeccable vendored and updated through Git, add thi
 
 ```bash
 git submodule add https://github.com/pbakaus/impeccable .impeccable
-npx impeccable link --source=.impeccable --providers=claude,cursor
-git add .gitmodules .impeccable .claude .cursor
+npx impeccable link --source=.impeccable --providers=claude,gemini
+git add .gitmodules .impeccable .claude .gemini
 git commit -m "Add Impeccable skills"
 ```
 
@@ -132,7 +132,7 @@ To update later:
 
 ```bash
 git submodule update --remote .impeccable
-npx impeccable link --source=.impeccable --providers=claude,cursor
+npx impeccable link --source=.impeccable --providers=claude,gemini
 ```
 
 ### Option 3: Plugin install
@@ -149,17 +149,6 @@ npx impeccable link --source=.impeccable --providers=claude,cursor
 Visit [impeccable.style](https://impeccable.style), download the ZIP for your tool, and extract to your project.
 
 ### Option 5: Copy from Repository
-
-**Cursor:**
-```bash
-cp -r dist/cursor/.cursor your-project/
-```
-
-> **Note:** Cursor skills require setup:
-> 1. Switch to Nightly channel in Cursor Settings → Beta
-> 2. Enable Agent Skills in Cursor Settings → Rules
->
-> [Learn more about Cursor skills](https://cursor.com/docs/context/skills)
 
 **Claude Code:**
 ```bash
@@ -297,13 +286,12 @@ If an ephemeral file (a screenshot, `config.local.json`) was committed before yo
 
 ## Design hook
 
-On Claude Code, GitHub Copilot, Codex, and Cursor, `npx impeccable install` and `npx impeccable update` install a provider-native hook manifest along with the skill payload. The hook runs the Impeccable design detector on direct UI file edits and surfaces findings back into the agent flow. Claude Code, GitHub Copilot, and Codex surface findings after the edit (and run a deeper pass on Stop where supported). Cursor blocks bad proposed writes before they land.
+On Claude Code, GitHub Copilot, and Codex, `npx impeccable install` and `npx impeccable update` install a provider-native hook manifest along with the skill payload. The hook runs the Impeccable design detector on direct UI file edits and surfaces findings back into the agent flow, and runs a deeper pass on Stop where supported.
 
 Installed hook surfaces:
 
 - Claude Code: `.claude/settings.local.json` (gitignored, machine-local) runs `${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/hook.mjs`. A hook moved into the shared `settings.json` is honored in place.
 - GitHub Copilot: `.github/hooks/impeccable.json` (committed, shared by the Copilot CLI and the cloud agent) runs `.github/skills/impeccable/scripts/hook.mjs`. The Copilot CLI activates it once the file is on the repository's default branch and the folder is trusted.
-- Cursor: `.cursor/hooks.json` runs `.cursor/skills/impeccable/scripts/hook-before-edit.mjs`.
 - Codex: `.codex/hooks.json` runs `.agents/skills/impeccable/scripts/hook.mjs`.
 
 The installer preserves unrelated hook entries and settings. If a hook manifest is malformed, install/update aborts by default; rerun with `--force` to back up the malformed file as `.bak` and replace it.
@@ -360,7 +348,6 @@ Full detector docs: [impeccable.style/docs/detector](https://impeccable.style/do
 
 ## Supported Tools
 
-- [Cursor](https://cursor.com)
 - [Claude Code](https://claude.ai/code)
 - [GitHub Copilot](https://github.com/features/copilot)
 - [Gemini CLI](https://github.com/google-gemini/gemini-cli)

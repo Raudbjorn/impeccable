@@ -1139,7 +1139,7 @@ describe('hook-admin.mjs', () => {
   it('hooks on accepts declined consent and installs missing provider manifests', () => {
     fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
     fs.writeFileSync(getLocalConfigPath(cwd), JSON.stringify({ hook: { consent: 'declined', quiet: true } }));
-    for (const provider of ['.claude', '.agents', '.cursor', '.github']) {
+    for (const provider of ['.claude', '.agents', '.github']) {
       fs.mkdirSync(path.join(cwd, provider, 'skills', 'impeccable', 'scripts'), { recursive: true });
     }
     fs.mkdirSync(path.join(cwd, '.claude'), { recursive: true });
@@ -1154,7 +1154,7 @@ describe('hook-admin.mjs', () => {
 
     const out = runAdmin(['on']);
     assert.match(out, /Recorded local hook consent/);
-    assert.match(out, /Installed or repaired hook manifests for: \.claude, \.agents, \.cursor, \.github/);
+    assert.match(out, /Installed or repaired hook manifests for: \.claude, \.agents, \.github/);
 
     const shared = JSON.parse(fs.readFileSync(getConfigPath(cwd), 'utf-8')).hook;
     assert.equal(shared.enabled, true);
@@ -1176,8 +1176,6 @@ describe('hook-admin.mjs', () => {
 
     const codex = fs.readFileSync(path.join(cwd, '.codex', 'hooks.json'), 'utf-8');
     assert.match(codex, /\.agents\/skills\/impeccable\/scripts\/hook\.mjs/);
-    const cursor = fs.readFileSync(path.join(cwd, '.cursor', 'hooks.json'), 'utf-8');
-    assert.match(cursor, /\.cursor\/skills\/impeccable\/scripts\/hook-before-edit\.mjs/);
     const github = JSON.parse(fs.readFileSync(path.join(cwd, '.github', 'hooks', 'impeccable.json'), 'utf-8'));
     assert.equal(github.hooks.postToolUse[0].matcher, 'edit|create|apply_patch');
     assert.match(github.hooks.postToolUse[0].bash, /\.github\/skills\/impeccable\/scripts\/hook\.mjs/);
@@ -1611,12 +1609,6 @@ describe('payload()', () => {
     const obj = JSON.parse(payload('hello', 'Stop', 'claude'));
     assert.equal(obj.hookSpecificOutput.hookEventName, 'Stop');
     assert.equal(obj.hookSpecificOutput.additionalContext, 'hello');
-  });
-
-  it('produces additional_context for Cursor', () => {
-    const obj = JSON.parse(payload('hello', 'PostToolUse', 'cursor'));
-    assert.equal(obj.additional_context, 'hello');
-    assert.equal(obj.hookSpecificOutput, undefined);
   });
 
   it('produces top-level additionalContext for GitHub Copilot', () => {
@@ -2945,38 +2937,22 @@ describe('resolveTargetFiles()', () => {
     );
   });
 
-  it('accepts Cursor Write/StrReplace path field and top-level file_path', () => {
-    assert.deepEqual(resolveTargetFiles({ tool_input: { path: '/a/b.tsx' } }, '/proj'), ['/a/b.tsx']);
+  it('accepts a top-level file_path', () => {
     assert.deepEqual(resolveTargetFiles({ file_path: '/a/c.css' }, '/proj'), ['/a/c.css']);
   });
 });
 
 describe('resolveHarness() / normalizeHookEvent()', () => {
-  it('routes explicit env and Cursor conversation_id to cursor harness', () => {
-    assert.equal(resolveHarness({ IMPECCABLE_HOOK_HARNESS: 'cursor' }), 'cursor');
+  it('routes explicit env harnesses and falls back to claude', () => {
     assert.equal(resolveHarness({ IMPECCABLE_HOOK_HARNESS: 'codex' }), 'codex');
-    assert.equal(resolveHarness({}, { conversation_id: 'c1' }), 'cursor');
     assert.equal(resolveHarness({}, { turn_id: 'turn-1' }), 'codex');
     assert.equal(resolveHarness({}), 'claude');
   });
 
-  it('prefers explicit harness and Cursor detection over the Codex turn_id', () => {
+  it('prefers explicit harness over the Codex turn_id', () => {
     assert.equal(resolveHarness({ IMPECCABLE_HOOK_HARNESS: 'claude' }, { turn_id: 'turn-1' }), 'claude');
-    assert.equal(resolveHarness({}, { conversation_id: 'c1', turn_id: 'turn-1' }), 'cursor');
     assert.equal(resolveHarness({}, { turn_id: '' }), 'claude');
     assert.equal(resolveHarness({}, { turn_id: 42 }), 'claude');
-  });
-
-  it('maps Cursor postToolUse Write path into file_path + cwd', () => {
-    const normalized = normalizeHookEvent({
-      conversation_id: 'c1',
-      workspace_roots: ['/proj'],
-      tool_name: 'Write',
-      tool_input: { path: 'src/App.jsx' },
-    }, '/fallback', 'cursor');
-    assert.equal(normalized.session_id, 'c1');
-    assert.equal(normalized.cwd, '/proj');
-    assert.equal(normalized.tool_input.file_path, 'src/App.jsx');
   });
 
   it('routes a GitHub Copilot postToolUse event (toolName/toolArgs) to the github harness', () => {
@@ -3428,443 +3404,6 @@ describe('resolveProjectPlatform() / isNativePlatform()', () => {
   });
 });
 
-describe('Cursor hook scripts', () => {
-  let cwd;
-  beforeEach(() => { cwd = mkTmp(); });
-  afterEach(() => fs.rmSync(cwd, { recursive: true, force: true }));
-
-  it('preToolUse denies proposed writes with detector findings before they land', () => {
-    const logPath = path.join(cwd, 'hook.ndjson');
-    const filePath = path.join(cwd, 'src/Card.html');
-
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        cwd,
-        tool_name: 'Write',
-        tool_input: {
-          file_path: filePath,
-          content: `
-            <style>
-              .card { border-left: 4px solid #7c3aed; border-radius: 16px; }
-            </style>
-            <div class="card">Hello</div>
-          `,
-        },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: logPath },
-      encoding: 'utf-8',
-    });
-
-    const payload = JSON.parse(out);
-    assert.equal(payload.permission, 'deny');
-    assert.match(payload.user_message, /blocked this write/);
-    assert.match(payload.user_message, /side-tab/);
-    assert.match(payload.agent_message, /Triage each finding/);
-    assert.match(payload.agent_message, /Full suppression ladder/, 'the deny message carries the complete policy, not a truncated head');
-    assert.ok(payload.agent_message.length <= 4000, 'the deny message respects the Cursor cap');
-
-    const entries = fs.readFileSync(logPath, 'utf-8').trim().split('\n').map((line) => JSON.parse(line));
-    assert.equal(entries[0].event, 'preToolUse');
-    assert.equal(entries[0].blocked, true);
-    assert.equal(entries[0].blockedFindings, 1);
-  });
-
-  it('preToolUse delivers the stale-sidecar note within a 500-char budget (PR #508)', () => {
-    fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
-    fs.writeFileSync(getConfigPath(cwd), JSON.stringify({
-      hook: { limits: { maxChars: 500 } },
-    }));
-
-    const designMd = path.join(cwd, 'DESIGN.md');
-    const sidecarPath = path.join(cwd, '.impeccable', 'design.json');
-    fs.writeFileSync(designMd, `---
-typography:
-  body:
-    fontFamily: "IBM Plex Sans, Arial, sans-serif"
-colors:
-  ink: "#241f1a"
-rounded:
-  "2xl": "80px"
----
-
-# Design System
-`);
-    fs.writeFileSync(sidecarPath, JSON.stringify({
-      extensions: {
-        colorMeta: {
-          accent: {
-            canonical: '#b8422e',
-            tonalRamp: ['#d55a42'],
-          },
-        },
-        roundedMeta: {
-          lg: { canonical: '24px' },
-        },
-      },
-    }));
-    const past = new Date(Date.now() - 10000);
-    fs.utimesSync(sidecarPath, past, past);
-
-    const filePath = path.join(cwd, 'src/Card.html');
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        session_id: 'sid-508',
-        cwd,
-        tool_name: 'Write',
-        tool_input: {
-          file_path: filePath,
-          content: `
-            <style>
-              .card { border-left: 4px solid #7c3aed; border-radius: 16px; }
-            </style>
-            <div class="card">Hello</div>
-          `,
-        },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-      encoding: 'utf-8',
-    });
-
-    const payload = JSON.parse(out);
-    assert.equal(payload.permission, 'deny');
-    assert.match(payload.agent_message, /DESIGN\.md is newer/);
-    assert.ok(payload.agent_message.length <= 500, `deny message length ${payload.agent_message.length} exceeds 500-char budget`);
-    assert.equal(readCache(cwd).sessions['sid-508'].designNoteShown, true);
-  });
-
-  it('preToolUse allows writes with findings when the project platform is native', () => {
-    // Same slop content the deny test blocks, but the project declares a
-    // native platform, so the web rule engine must stand aside.
-    fs.writeFileSync(path.join(cwd, 'PRODUCT.md'), '# App\n\n## Platform\n\nios\n');
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        cwd,
-        tool_name: 'Write',
-        tool_input: {
-          file_path: path.join(cwd, 'src/Card.html'),
-          content: `
-            <style>
-              .card { border-left: 4px solid #7c3aed; border-radius: 16px; }
-            </style>
-            <div class="card">Hello</div>
-          `,
-        },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-      encoding: 'utf-8',
-    });
-
-    assert.deepEqual(JSON.parse(out), { permission: 'allow' });
-  });
-
-  it('preToolUse allows clean proposed writes', () => {
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        cwd,
-        tool_name: 'Write',
-        tool_input: {
-          path: 'src/Card.jsx',
-          streamContent: 'export default function Card() { return <section className="card">Hello</section>; }',
-        },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-      encoding: 'utf-8',
-    });
-
-    assert.deepEqual(JSON.parse(out), { permission: 'allow' });
-  });
-
-  it('preToolUse gates configured template extensions (issue #316)', () => {
-    const filePath = path.join(cwd, 'resources/views/card.blade.php');
-    const content = `
-      <style>
-        .card { border-left: 4px solid #7c3aed; border-radius: 16px; }
-      </style>
-      <div class="card">Hello</div>
-    `;
-    const run = () => execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        cwd,
-        tool_name: 'Write',
-        tool_input: { file_path: filePath, content },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-      encoding: 'utf-8',
-    });
-
-    // Without config the file is invisible to the gate: allowed untouched.
-    assert.equal(JSON.parse(run()).permission, 'allow');
-
-    // With a detector.extensions entry the same proposed write is scanned and denied.
-    fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
-    fs.writeFileSync(path.join(cwd, '.impeccable', 'config.json'), JSON.stringify({
-      detector: { extensions: [{ ext: '.blade.php' }] },
-    }));
-    const payload = JSON.parse(run());
-    assert.equal(payload.permission, 'deny');
-    assert.match(payload.user_message, /card\.blade\.php/);
-    assert.match(payload.user_message, /side-tab/);
-  });
-
-  it('preToolUse routes configured html-engine templates through the HTML engine (issue #316)', () => {
-    // oversized-h1 is only detectable by the static HTML engine (detectText has
-    // no such rule), so a denial here proves the proposed content went through
-    // detectHtml rather than the old always-detectText path.
-    const filePath = path.join(cwd, 'resources/views/hero.blade.php');
-    fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
-    fs.writeFileSync(path.join(cwd, '.impeccable', 'config.json'), JSON.stringify({
-      detector: { extensions: [{ ext: '.blade.php' }] },
-    }));
-
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        cwd,
-        tool_name: 'Write',
-        tool_input: {
-          file_path: filePath,
-          content: '<style>h1 { font-size: 84px; }</style>\n<h1>This is a very long headline that keeps going on and on for a while</h1>',
-        },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-      encoding: 'utf-8',
-    });
-
-    const payload = JSON.parse(out);
-    assert.equal(payload.permission, 'deny');
-    assert.match(payload.user_message, /oversized-h1/);
-  });
-
-  it('preToolUse denies shell heredoc writes that bypass the Write tool', () => {
-    const filePath = path.join(cwd, 'src/ShellCard.html');
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        cwd,
-        tool_name: 'Shell',
-        tool_input: {
-          command: `cat > "${filePath}" <<'EOF'\n<style>.card { border-left: 4px solid #7c3aed; border-radius: 16px; padding: 16px; }</style>\n<div class="card">Hello</div>\nEOF\n`,
-        },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-      encoding: 'utf-8',
-    });
-
-    const payload = JSON.parse(out);
-    assert.equal(payload.permission, 'deny');
-    assert.match(payload.user_message, /ShellCard\.html/);
-    assert.match(payload.user_message, /side-tab/);
-  });
-
-  it('preToolUse denies Python heredoc file writes that bypass the Write tool', () => {
-    const filePath = path.join(cwd, 'src/PythonCard.html');
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        cwd,
-        tool_name: 'Shell',
-        tool_input: {
-          command: `python3 - <<'PY'\nfrom pathlib import Path\npath = Path('${filePath}')\npath.write_text('''<style>.card { border-left: 4px solid #7c3aed; border-radius: 16px; padding: 16px; }</style>\n<div class="card">Hello</div>\n''', encoding='utf-8')\nPY\n`,
-        },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-      encoding: 'utf-8',
-    });
-
-    const payload = JSON.parse(out);
-    assert.equal(payload.permission, 'deny');
-    assert.match(payload.user_message, /PythonCard\.html/);
-    assert.match(payload.user_message, /side-tab/);
-  });
-
-  it('preToolUse denies shell append redirects that bypass the Write tool', () => {
-    const filePath = path.join(cwd, 'src/AppendedCard.html');
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        cwd,
-        tool_name: 'Shell',
-        tool_input: {
-          command: `cat >> "${filePath}" <<'EOF'\n<style>.card { border-left: 4px solid #7c3aed; border-radius: 16px; padding: 16px; }</style>\n<div class="card">Hello</div>\nEOF\n`,
-        },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-      encoding: 'utf-8',
-    });
-
-    const payload = JSON.parse(out);
-    assert.equal(payload.permission, 'deny');
-    assert.match(payload.user_message, /AppendedCard\.html/);
-    assert.match(payload.user_message, /side-tab/);
-  });
-
-  it('preToolUse denies shell tee writes that bypass the Write tool', () => {
-    const filePath = path.join(cwd, 'src/TeeCard.html');
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        cwd,
-        tool_name: 'Shell',
-        tool_input: {
-          command: `cat <<'EOF' | tee -a "${filePath}"\n<style>.card { border-left: 4px solid #7c3aed; border-radius: 16px; padding: 16px; }</style>\n<div class="card">Hello</div>\nEOF\n`,
-        },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-      encoding: 'utf-8',
-    });
-
-    const payload = JSON.parse(out);
-    assert.equal(payload.permission, 'deny');
-    assert.match(payload.user_message, /TeeCard\.html/);
-    assert.match(payload.user_message, /side-tab/);
-  });
-
-  it('preToolUse denies shell copy writes when copied content has detector findings', () => {
-    const sourcePath = path.join(cwd, 'src/SourceCard.html');
-    const destPath = path.join(cwd, 'src/CopiedCard.html');
-    fs.mkdirSync(path.dirname(sourcePath), { recursive: true });
-    fs.writeFileSync(sourcePath, `
-      <style>.card { border-left: 4px solid #7c3aed; border-radius: 16px; padding: 16px; }</style>
-      <div class="card">Hello</div>
-    `);
-
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        cwd,
-        tool_name: 'Shell',
-        tool_input: {
-          command: `cp "${sourcePath}" "${destPath}"`,
-        },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-      encoding: 'utf-8',
-    });
-
-    const payload = JSON.parse(out);
-    assert.equal(payload.permission, 'deny');
-    assert.match(payload.user_message, /CopiedCard\.html/);
-    assert.match(payload.user_message, /side-tab/);
-  });
-
-  it('preToolUse reconstructs Edit old_string/new_string into a full proposed file before scanning', () => {
-    const filePath = path.join(cwd, 'src/EditCard.html');
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    const oldString = '<div class="card">Hello</div>';
-    fs.writeFileSync(filePath, oldString);
-    const newString = '<style>.card { border-left: 4px solid #7c3aed; border-radius: 16px; padding: 16px; }</style>\n<div class="card">Hello</div>';
-
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        cwd,
-        tool_name: 'Edit',
-        tool_input: {
-          file_path: filePath,
-          old_string: oldString,
-          new_string: newString,
-        },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-      encoding: 'utf-8',
-    });
-
-    const payload = JSON.parse(out);
-    assert.equal(payload.permission, 'deny');
-    assert.match(payload.user_message, /EditCard\.html/);
-    assert.match(payload.user_message, /side-tab/);
-  });
-
-  it('preToolUse allows fragment-only edits instead of denying on partial context', () => {
-    const filePath = path.join(cwd, 'src/MissingEditCard.html');
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: JSON.stringify({
-        hook_event_name: 'preToolUse',
-        cwd,
-        tool_name: 'Edit',
-        tool_input: {
-          file_path: filePath,
-          new_string: '<div style="border-left: 4px solid #7c3aed; border-radius: 16px;">Hello</div>',
-        },
-      }),
-      env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-      encoding: 'utf-8',
-    });
-
-    assert.deepEqual(JSON.parse(out), { permission: 'allow' });
-  });
-
-  it('preToolUse downgrades repeated identical denials to allow-with-warning after the edit threshold', () => {
-    const filePath = path.join(cwd, 'src/LoopCard.html');
-    const input = JSON.stringify({
-      hook_event_name: 'preToolUse',
-      cwd,
-      session_id: 'cursor-loop',
-      tool_name: 'Write',
-      tool_input: {
-        file_path: filePath,
-        content: '<style>.card { border-left: 4px solid #7c3aed; border-radius: 16px; padding: 16px; }</style><div class="card">Hello</div>',
-      },
-    });
-
-    let payload;
-    for (let i = 0; i < 7; i++) {
-      const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-        cwd: path.resolve('.'),
-        input,
-        env: { ...process.env, IMPECCABLE_HOOK_LOG: '' },
-        encoding: 'utf-8',
-      });
-      payload = JSON.parse(out);
-    }
-
-    assert.equal(payload.permission, 'allow');
-    assert.match(payload.agent_message, /allowing this write to avoid a loop/);
-    const cache = readCache(cwd);
-    const denials = cache.sessions['cursor-loop'].files[filePath].cursorDenials;
-    assert.equal(Object.values(denials)[0], 7);
-  });
-
-  it('preToolUse honors truthy IMPECCABLE_HOOK_DISABLED values before stdin parsing', () => {
-    const logPath = path.join(cwd, 'hook.ndjson');
-
-    const out = execFileSync(process.execPath, [path.join('skill', 'scripts', 'hook-before-edit.mjs')], {
-      cwd: path.resolve('.'),
-      input: '{not-json',
-      env: {
-        ...process.env,
-        IMPECCABLE_HOOK_DISABLED: 'true',
-        IMPECCABLE_HOOK_LOG: logPath,
-      },
-      encoding: 'utf-8',
-    });
-
-    assert.deepEqual(JSON.parse(out), { permission: 'allow' });
-    const entries = fs.readFileSync(logPath, 'utf-8').trim().split('\n').map((line) => JSON.parse(line));
-    assert.equal(entries[0].event, 'preToolUse');
-    assert.equal(entries[0].skipped, 'env-disabled');
-  });
-
-});
-
 describe('runHook() — emission enrichment', () => {
   let cwd;
   beforeEach(() => { cwd = mkTmp(); });
@@ -3932,11 +3471,10 @@ describe('runHook() — per-edit tiering', () => {
     for (const f of immediate) assert.ok(IMMEDIATE_TIER_RULES.has(f.antipattern));
   });
 
-  it('perEditTieringActive is on for claude, off for cursor/github and perEditRules:"all"', () => {
+  it('perEditTieringActive is on for claude, off for github and perEditRules:"all"', () => {
     assert.equal(perEditTieringActive({ perEditRules: 'immediate' }, 'claude'), true);
     assert.equal(perEditTieringActive({ perEditRules: 'all' }, 'claude'), false);
     assert.equal(perEditTieringActive({ perEditRules: 'immediate' }, 'github'), false);
-    assert.equal(perEditTieringActive({ perEditRules: 'immediate' }, 'cursor'), false);
     assert.equal(perEditTieringActive({}, 'claude'), true);
   });
 

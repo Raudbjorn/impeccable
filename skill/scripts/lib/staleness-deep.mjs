@@ -23,7 +23,6 @@ const HOOK_MANIFESTS_BY_PROVIDER = Object.freeze({
   'claude-code': ['.claude/settings.local.json', '.claude/settings.json'],
   codex: ['.codex/hooks.json'],
   agents: ['.codex/hooks.json'],
-  cursor: ['.cursor/hooks.json'],
   github: ['.github/hooks/impeccable.json'],
 });
 

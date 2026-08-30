@@ -14,7 +14,6 @@ Last verified: 2026-04-28 (subagent landscape spot-checked 2026-06-28; Mistral V
 | Harness | Docs URL |
 |---------|----------|
 | Claude Code | https://code.claude.com/docs/en/skills |
-| Cursor | https://cursor.com/docs/context/skills |
 | Gemini CLI | https://geminicli.com/docs/cli/skills/ |
 | Codex CLI | https://developers.openai.com/codex/skills |
 | GitHub Copilot (Agents) | https://code.visualstudio.com/docs/copilot/customization/agent-skills |
@@ -34,22 +33,22 @@ Provider-specific extensions beyond the spec: `user-invocable`, `argument-hint`,
 
 Fields marked with * are spec-standard. Others are provider extensions.
 
-| Field | Claude Code | Cursor | Gemini | Codex | Copilot | Kiro | OpenCode | Pi | Mistral Vibe | Antigravity |
-|-------|:-----------:|:------:|:------:|:-----:|:-------:|:----:|:--------:|:--:|:------------:|:-----------:|
-| `name`* | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| `description`* | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| `license`* | Yes | Yes | Ignored | No | Yes | Yes | Yes | Yes | Yes | Yes |
-| `compatibility`* | Yes | Yes | Ignored | No | Yes | Yes | Yes | Yes | Yes | Yes |
-| `metadata`* | Yes | Yes | Ignored | No | Yes | Yes | Yes | Yes | Yes | Yes |
-| `allowed-tools`* | Yes | No | Ignored | No | No | No | Yes | Yes | Yes | Yes |
-| `user-invocable` | Yes | No | No | No | Yes | No | Yes | No | Yes | No |
-| `argument-hint` | Yes | No | No | No | Yes | No | Yes | No | No | No |
-| `disable-model-invocation` | Yes | Yes | No | No | Yes | No | Yes | Yes | No | No |
-| `model` | Yes | No | No | No | No | No | Yes | No | No | No |
-| `effort` | Yes | No | No | No | No | No | No | No | No | No |
-| `context` | Yes | No | No | No | No | No | No | No | No | No |
-| `agent` | Yes | No | No | No | No | No | Yes | No | No | No |
-| `hooks` | Yes | No | No | Yes | No | No | No | No | No | No |
+| Field | Claude Code | Gemini | Codex | Copilot | Kiro | OpenCode | Pi | Mistral Vibe | Antigravity |
+|-------|:-----------:|:------:|:-----:|:-------:|:----:|:--------:|:--:|:------------:|:-----------:|
+| `name`* | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `description`* | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `license`* | Yes | Ignored | No | Yes | Yes | Yes | Yes | Yes | Yes |
+| `compatibility`* | Yes | Ignored | No | Yes | Yes | Yes | Yes | Yes | Yes |
+| `metadata`* | Yes | Ignored | No | Yes | Yes | Yes | Yes | Yes | Yes |
+| `allowed-tools`* | Yes | Ignored | No | No | No | Yes | Yes | Yes | Yes |
+| `user-invocable` | Yes | No | No | Yes | No | Yes | No | Yes | No |
+| `argument-hint` | Yes | No | No | Yes | No | Yes | No | No | No |
+| `disable-model-invocation` | Yes | No | No | Yes | No | Yes | Yes | No | No |
+| `model` | Yes | No | No | No | No | Yes | No | No | No |
+| `effort` | Yes | No | No | No | No | No | No | No | No |
+| `context` | Yes | No | No | No | No | No | No | No | No |
+| `agent` | Yes | No | No | No | No | Yes | No | No | No |
+| `hooks` | Yes | No | Yes | No | No | No | No | No | No |
 
 Notes:
 - Gemini CLI validates only `name` and `description`; other spec fields are parsed but ignored.
@@ -65,7 +64,6 @@ Notes:
 |---------|:---------:|:------------:|-------------------|-------|
 | Claude Code | Yes (`PostToolUse`) | No | `.claude/settings.json` | Project-local settings entry installed by `npx impeccable skills install/update`. Runs `.claude/skills/impeccable/scripts/hook.mjs`. |
 | Codex CLI | Yes (`PostToolUse`) | No | `.codex/hooks.json` | Project-local manifest installed with the `.agents/skills/impeccable` payload. Runs `.agents/skills/impeccable/scripts/hook.mjs` from the git root. Requires normal `/hooks` trust approval. |
-| Cursor | Yes (`preToolUse`) | No | `.cursor/hooks.json` | Project-level manifest installed with `.cursor/skills/impeccable`. Runs `hook-before-edit.mjs` to block bad proposed writes before they land. Reloads on save; restart Cursor if hooks do not pick up. |
 | All other harnesses | No | No | n/a | No documented hook surface today. Skill and commands still ship. |
 
 ## Skill Directory Structure
@@ -73,7 +71,6 @@ Notes:
 | Harness | Native directory | Also reads |
 |---------|-----------------|------------|
 | Claude Code | `.claude/skills/` | - |
-| Cursor | `.cursor/skills/` | `.agents/skills/`, `.claude/skills/` |
 | Gemini CLI | `.gemini/skills/` | `.agents/skills/` |
 | Codex CLI | `.agents/skills/` (primary) | - |
 | GitHub Copilot | `.github/skills/` | `.agents/skills/`, `.claude/skills/` |
@@ -89,8 +86,7 @@ All harnesses support the `{skill-name}/SKILL.md` directory structure with optio
 
 > **Scope:** this table is **where Impeccable emits native subagent files**, not a
 > map of which harnesses support subagents. Subagents are broadly supported now:
-> Cursor (auto-delegation + `/name` invocation, https://cursor.com/docs/subagents),
-> GitHub Copilot, and Google Antigravity ship them too. Impeccable only writes
+> GitHub Copilot and Google Antigravity ship them too. Impeccable only writes
 > native files where there is a stable, documented on-disk format to target.
 
 | Harness | Native directory | File format |

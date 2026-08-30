@@ -10,20 +10,6 @@
  * - bodyTransform: optional function (body, skill) => transformed body
  */
 export const PROVIDERS = {
-  cursor: {
-    provider: 'cursor',
-    providerTags: ['cursor'],
-    configDir: '.cursor',
-    displayName: 'Cursor',
-    frontmatterFields: ['license', 'compatibility', 'metadata'],
-    // Cursor subagents: `.cursor/agents/<name>.md` at repo level,
-    // `~/.cursor/agents/` at user level. Project agents take precedence over
-    // user ones, so installs simply overwrite on update.
-    agentFormat: 'cursor-md',
-    emitHooks: 'cursor',
-    // Cursor reads `.cursor/hooks.json`, not `.cursor/hooks/hooks.json`.
-    hooksManifestRel: 'hooks.json',
-  },
   'claude-code': {
     provider: 'claude-code',
     providerTags: ['claude-code', 'claude'],

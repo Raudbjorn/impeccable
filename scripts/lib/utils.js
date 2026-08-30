@@ -462,12 +462,6 @@ export const PROVIDER_PLACEHOLDERS = {
     ask_instruction: 'STOP and call the AskUserQuestion tool to clarify.',
     command_prefix: '/'
   },
-  'cursor': {
-    model: 'the model',
-    config_file: '.cursorrules',
-    ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
-    command_prefix: '/'
-  },
   'gemini': {
     model: 'Gemini',
     config_file: 'GEMINI.md',
@@ -519,6 +513,14 @@ export const PROVIDER_PLACEHOLDERS = {
     config_file: 'AGENTS.md',
     ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
     command_prefix: '/'
+  },
+  // Fallback for any provider id not in this map (backwards compat for
+  // forks that add a provider config without a matching placeholder entry).
+  'default': {
+    model: 'the model',
+    config_file: 'AGENTS.md',
+    ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
+    command_prefix: '/'
   }
 };
 
@@ -528,7 +530,6 @@ export const PROVIDER_BLOCK_TAGS = new Set([
   'claude',
   'claude-code',
   'codex',
-  'cursor',
   'gemini',
   'github',
   'kiro',
@@ -602,7 +603,7 @@ const IMPECCABLE_SUB_COMMANDS = [
 ];
 
 export function replacePlaceholders(content, provider, commandNames = [], allSkillNames = []) {
-  const placeholders = PROVIDER_PLACEHOLDERS[provider] || PROVIDER_PLACEHOLDERS['cursor'];
+  const placeholders = PROVIDER_PLACEHOLDERS[provider] || PROVIDER_PLACEHOLDERS.default;
   const cmdPrefix = placeholders.command_prefix || '/';
 
   // Build the available_commands list.
@@ -654,7 +655,7 @@ export function replacePlaceholders(content, provider, commandNames = [], allSki
  * here by an exact string match.
  */
 export function replaceScriptProviderMarker(content, provider, buildProvider = provider) {
-  const placeholders = PROVIDER_PLACEHOLDERS[provider] || PROVIDER_PLACEHOLDERS.cursor;
+  const placeholders = PROVIDER_PLACEHOLDERS[provider] || PROVIDER_PLACEHOLDERS.default;
   const commandPrefix = placeholders.command_prefix || '/';
   const prefixMarker = "export const IMPECCABLE_COMMAND_PREFIX = '/'; // @impeccable-provider-command-prefix";
   const providerMarker = "export const IMPECCABLE_PROVIDER_ID = 'source'; // @impeccable-provider-id";

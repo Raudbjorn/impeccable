@@ -14,7 +14,7 @@ describe('pin command provider syntax', () => {
   beforeEach(() => {
     project = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-pin-'));
     fs.writeFileSync(path.join(project, 'package.json'), '{}\n');
-    for (const harness of ['.claude', '.cursor', '.agents', '.codex']) {
+    for (const harness of ['.claude', '.agents', '.codex']) {
       fs.mkdirSync(path.join(project, harness, 'skills', 'impeccable'), { recursive: true });
     }
   });
@@ -31,7 +31,7 @@ describe('pin command provider syntax', () => {
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
 
-    for (const harness of ['.claude', '.cursor']) {
+    for (const harness of ['.claude']) {
       const skill = fs.readFileSync(path.join(project, harness, 'skills', 'audit', 'SKILL.md'), 'utf8');
       assert.match(skill, /\/impeccable audit/);
       assert.doesNotMatch(skill, /\$impeccable audit/);

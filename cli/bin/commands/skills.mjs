@@ -119,9 +119,6 @@ const PROVIDER_HOOK_ARTIFACTS = {
     // into `settings.json` is honored in place; see copyProviderHooks.
     { sourceProvider: '.claude', rel: 'settings.json', destProvider: '.claude', destRel: 'settings.local.json' },
   ],
-  '.cursor': [
-    { sourceProvider: '.cursor', rel: 'hooks.json', destProvider: '.cursor' },
-  ],
   // Codex reads skills from `.agents/skills`, but project hooks from
   // `.codex/hooks.json`, so the `.agents` install target owns this sidecar.
   '.agents': [
@@ -912,7 +909,7 @@ function defaultDetectedProviders(detections) {
 
 /**
  * Decide which provider folders to install into.
- *  1. An explicit --providers=.claude,.cursor list wins.
+ *  1. An explicit --providers=.claude,.codex list wins.
  *  2. Otherwise, harness folders already present in the project.
  *  3. Otherwise, infer from globally installed harnesses (~/.claude, ~/.codex).
  *  4. Otherwise, a sensible default (.claude + .agents).
@@ -1194,9 +1191,7 @@ function copyProviderSkills(bundleDir, root, targets, { scope } = {}) {
 // `~/.github/`). On a name conflict Copilot lets the user-level file shadow
 // the project one, so both paths overwrite existing impeccable-* copies and a
 // project install reports any same-named user-level agents that would shadow
-// it. Cursor's live at `.cursor/agents/impeccable-*.md`, user scope
-// `~/.cursor/agents/`; project agents take precedence there, so no shadow
-// warning is needed.
+// it.
 const PROVIDER_AGENT_ARTIFACTS = {
   '.claude': {
     ext: '.md',
@@ -1207,11 +1202,6 @@ const PROVIDER_AGENT_ARTIFACTS = {
     ext: '.agent.md',
     userDir: home => join(home, '.copilot', 'agents'),
     userShadowsProject: true,
-  },
-  '.cursor': {
-    ext: '.md',
-    userDir: home => join(home, '.cursor', 'agents'),
-    userShadowsProject: false,
   },
 };
 
@@ -1319,8 +1309,7 @@ function hookArtifactsForProvider(bundleDir, root, provider) {
 // silently no-op it. Claude keeps its ${CLAUDE_PROJECT_DIR} token so a manifest
 // read from a nested cwd (or copied into settings.local.json) still resolves.
 function hookScriptRelPathForProvider(provider) {
-  const script = provider === '.cursor' ? 'hook-before-edit.mjs' : 'hook.mjs';
-  const rel = `${provider}/skills/impeccable/scripts/${script}`;
+  const rel = `${provider}/skills/impeccable/scripts/hook.mjs`;
   return provider === '.claude' ? '${CLAUDE_PROJECT_DIR}/' + rel : rel;
 }
 
@@ -1331,9 +1320,6 @@ function hookScriptPathForProvider(skillRoot, provider) {
   // (`$(git rev-parse --show-toplevel)/.github/skills/...`). Rewriting it to a
   // machine-local absolute skillRoot path would break those. GitHub skills are
   // project-scoped (not a home-provider), so the project-relative path resolves.
-  if (provider === '.cursor') {
-    return join(skillRoot, provider, 'skills', 'impeccable', 'scripts', 'hook-before-edit.mjs');
-  }
   if (provider === '.claude' || provider === '.agents') {
     return join(skillRoot, provider, 'skills', 'impeccable', 'scripts', 'hook.mjs');
   }
@@ -1362,15 +1348,15 @@ function hookScriptPathForProvider(skillRoot, provider) {
 //     issue #452; `exit /b` forwards node's errorlevel), so the same
 //     .codex/hooks.json is correct on every OS no matter where it was
 //     written, and `command` stays the plain POSIX guard.
-//   * Claude and Cursor manifests have no per-platform field, so a Windows
-//     install moves the existence check into node itself: a `node -e` wrapper
-//     that exits 0 when the target is missing and otherwise re-spawns node on
-//     it with inherited stdio, forwarding the hook's exit code. Cursor's
-//     hooks.json is committable and can be consumed on a teammate's POSIX
-//     machine, so the wrapper has to hold there too: it uses only characters
-//     that survive PowerShell, cmd.exe (issue #445: shims re-parse through
-//     `cmd /C`, which claims < > | & ^ % !), and sh double-quoting alike,
-//     with single quotes for the inner string literals.
+//   * Other manifests (Claude, GitHub) have no per-platform field, so a
+//     Windows install moves the existence check into node itself: a `node -e`
+//     wrapper that exits 0 when the target is missing and otherwise re-spawns
+//     node on it with inherited stdio, forwarding the hook's exit code. A
+//     committable manifest can be consumed on a teammate's POSIX machine, so
+//     the wrapper has to hold there too: it uses only characters that survive
+//     PowerShell, cmd.exe (issue #445: shims re-parse through `cmd /C`, which
+//     claims < > | & ^ % !), and sh double-quoting alike, with single quotes
+//     for the inner string literals.
 const WIN32_HOOK_GUARD_SCRIPT = "const p=process.argv[1];const f=require('fs');if(f.existsSync(p)){const r=require('child_process').spawnSync(process.execPath,[p],{stdio:'inherit'});process.exit(r.status===null?1:r.status);}";
 
 // POSIX single-quote escaping. JSON.stringify is not shell quoting: inside
@@ -1505,7 +1491,7 @@ function valueHasImpeccableHookMarker(value) {
 
 function stripImpeccableHookEntry(entry) {
   if (!entry || typeof entry !== 'object') return entry;
-  // `command`/`args`: Claude/Codex/Cursor. `bash`/`powershell`: GitHub Copilot's
+  // `command`/`args`: Claude/Codex. `bash`/`powershell`: GitHub Copilot's
   // flat entry shape, where the marker lives under the shell-command keys.
   if (valueHasImpeccableHookMarker(entry.command) || valueHasImpeccableHookMarker(entry.args)
     || valueHasImpeccableHookMarker(entry.bash) || valueHasImpeccableHookMarker(entry.powershell)) {
@@ -1655,11 +1641,9 @@ function copyProviderHooks(bundleDir, root, providers, { force = false, skillRoo
 
 const HOOK_EXPLAINER = [
   '',
-  'Impeccable can install a design hook for this project. In Claude/Codex it',
-  'checks UI files after edits; in Cursor it checks proposed writes before they',
-  'land and can block writes with detector findings. It feeds results back to',
-  'your agent so design slop gets caught as you build. Change it later with',
-  '/impeccable hooks on|off.',
+  'Impeccable can install a design hook for this project. It checks UI files',
+  'after edits and feeds detector findings back to your agent so design slop',
+  'gets caught as you build. Change it later with /impeccable hooks on|off.',
   '',
 ].join('\n');
 
@@ -1788,7 +1772,7 @@ async function link(flags) {
   const targets = resolveInstallTargets(root, providersValue);
   if (targets.length === 0) {
     console.error('Could not determine a target harness folder.');
-    console.error('Pass one explicitly, e.g. --providers=claude,cursor');
+    console.error('Pass one explicitly, e.g. --providers=claude,codex');
     process.exit(1);
   }
 
@@ -1797,7 +1781,7 @@ async function link(flags) {
     console.log(`Target harness folder(s): ${targets.join(', ')}`);
     const ans = await ask(`Link impeccable skills into ${targets.length} folder(s)? (Y/n) `);
     if (ans === 'n' || ans === 'no') {
-      console.log('Aborted. Re-run with --providers=<names> to choose explicitly (e.g. --providers=claude,cursor).');
+      console.log('Aborted. Re-run with --providers=<names> to choose explicitly (e.g. --providers=claude,codex).');
       process.exit(0);
     }
   }
@@ -1833,7 +1817,7 @@ async function install(flags) {
   } catch (e) {
     if (isPromptAbortError(e)) throw e;
     console.error(e.message);
-    console.error('Pass providers explicitly, e.g. --providers=claude,cursor');
+    console.error('Pass providers explicitly, e.g. --providers=claude,codex');
     process.exit(1);
   }
 
@@ -1928,7 +1912,7 @@ async function install(flags) {
   // Copying per-provider variants is the only correct install for this skill.
   if (targets.length === 0) {
     console.error('Could not determine a target harness folder.');
-    console.error('Pass one explicitly, e.g. --providers=.claude,.cursor');
+    console.error('Pass one explicitly, e.g. --providers=.claude,.codex');
     process.exit(1);
   }
 

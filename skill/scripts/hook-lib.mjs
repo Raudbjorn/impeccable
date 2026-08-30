@@ -220,8 +220,8 @@ export function getLocalConfigPath(cwd) {
 // config.local.json, design.json) deliberately stays project-local — only
 // disposable state relocates.
 // Read from process.env (not runHook's injected env): the cache root is a
-// machine-scoped setting like CURSOR_PROJECT_DIR, not a per-invocation
-// switch. Trim guards against stray whitespace in env files; `~/` (or the
+// machine-scoped setting, not a per-invocation switch. Trim guards against
+// stray whitespace in env files; `~/` (or the
 // Windows `~\` spelling) expands via os.homedir(), and when no home dir can
 // be determined the expansion is rejected — state falls back to the
 // project-local default rather than anchoring under the hook process's cwd.
@@ -259,7 +259,6 @@ export function getPendingPath(cwd) {
 export function resolveProjectCwd(event, fallback = process.cwd()) {
   return event?.cwd
     || (Array.isArray(event?.workspace_roots) && event.workspace_roots[0])
-    || envProjectDir(fallback)
     || fallback;
 }
 
@@ -855,10 +854,10 @@ export function splitFindingsByTier(findings) {
 
 // Whether the per-edit pass for this harness should defer non-immediate
 // findings to a Stop deep pass. Claude Code and Codex dispatch our Stop
-// hook; Cursor and GitHub Copilot have no deep pass wired, so deferring
-// for them would silently drop the non-immediate rules entirely.
+// hook; GitHub Copilot has no deep pass wired, so deferring for it would
+// silently drop the non-immediate rules entirely.
 export function perEditTieringActive(config, harness) {
-  if (harness === 'cursor' || harness === 'github') return false;
+  if (harness === 'github') return false;
   return (config?.perEditRules || DEFAULT_CONFIG.perEditRules) !== 'all';
 }
 
@@ -1275,10 +1274,6 @@ export function resolveTargetFiles(event, projectCwd) {
   if (ti && typeof ti.file_path === 'string' && ti.file_path) {
     add(ti.file_path);
   }
-  // Cursor Write / StrReplace use `path`, not `file_path`.
-  if (ti && typeof ti.path === 'string' && ti.path) {
-    add(ti.path);
-  }
   if (typeof event?.file_path === 'string' && event.file_path) {
     add(event.file_path);
   }
@@ -1287,7 +1282,6 @@ export function resolveTargetFiles(event, projectCwd) {
 
 export function resolveHarness(env = {}, event = null) {
   const explicit = env?.IMPECCABLE_HOOK_HARNESS;
-  if (explicit === 'cursor') return 'cursor';
   if (explicit === 'github') return 'github';
   if (explicit === 'claude') return 'claude';
   if (explicit === 'codex') return 'codex';
@@ -1297,7 +1291,6 @@ export function resolveHarness(env = {}, event = null) {
     && event.tool_name === undefined && event.tool_input === undefined) {
     return 'github';
   }
-  if (typeof event?.conversation_id === 'string' && event.conversation_id) return 'cursor';
   // Codex turn-scoped events carry `turn_id`. Claude Code does not. Detecting
   // it here means an already-installed Codex hook emits the Codex Stop
   // contract without rewriting the hook command to set IMPECCABLE_HOOK_HARNESS.
@@ -1372,7 +1365,7 @@ function applyPatchText(rawArgs) {
 }
 
 function normalizeGitHubEvent(event, projectCwd) {
-  const cwd = event.cwd || envProjectDir(projectCwd) || projectCwd;
+  const cwd = event.cwd || projectCwd;
   const sessionId = event.sessionId || event.session_id || 'unknown';
   const toolName = event.toolName || event.tool_name || null;
   const toolInput = event.tool_input && typeof event.tool_input === 'object' ? { ...event.tool_input } : {};
@@ -1406,33 +1399,7 @@ function normalizeGitHubEvent(event, projectCwd) {
 export function normalizeHookEvent(event, projectCwd, harness = 'claude') {
   if (!event || typeof event !== 'object') return event;
   if (harness === 'github') return normalizeGitHubEvent(event, projectCwd);
-  if (harness !== 'cursor') return event;
-
-  const cwd = event.cwd
-    || (Array.isArray(event.workspace_roots) && event.workspace_roots[0])
-    || envProjectDir(projectCwd)
-    || projectCwd;
-  const sessionId = event.session_id || event.conversation_id || 'unknown';
-
-  const ti = event.tool_input && typeof event.tool_input === 'object' ? event.tool_input : {};
-  const filePath = ti.file_path || ti.path || event.file_path;
-  if (filePath) {
-    return {
-      ...event,
-      cwd,
-      session_id: sessionId,
-      tool_input: { ...ti, file_path: filePath },
-    };
-  }
-
-  return { ...event, cwd, session_id: sessionId };
-}
-
-function envProjectDir(fallback) {
-  if (typeof process.env.CURSOR_PROJECT_DIR === 'string' && process.env.CURSOR_PROJECT_DIR) {
-    return process.env.CURSOR_PROJECT_DIR;
-  }
-  return fallback;
+  return event;
 }
 
 // UI components often keep slop in a sibling/co-located stylesheet while the
@@ -1769,9 +1736,9 @@ export function designNoteReserve(scanOptions, cache, sessionId) {
   return DESIGN_STALE_NOTE.length + 2;
 }
 
-// Full directive footer once per session, the short reminder after. Fresh
-// emissions and Cursor denials share the session flag (`footerShown`), so a
-// session pays the full policy exactly once however it first fires. The mode
+// Full directive footer once per session, the short reminder after. All
+// emissions share the session flag (`footerShown`), so a session pays the
+// full policy exactly once however it first fires. The mode
 // is a peek: the clamp can downgrade a requested full footer under a tight
 // budget, so the flag commits only when the complete full policy actually
 // reached the output. Matching the whole footer text (not a sentinel) keeps
@@ -2260,9 +2227,9 @@ export async function runStopHook({ stdinJson, env = {}, cwd = process.cwd(), no
     // before any scan. Claude Code and Codex both send this field: Codex
     // mirrors the Claude contract (StopCommandInput in
     // codex-rs/hooks/src/schema.rs) and latches it true for the rest of the
-    // turn once a block is honored (codex-rs/core/src/session/turn.rs). Cursor
-    // and GitHub Copilot omit the field, so the strict `=== true` is a no-op
-    // for them. The guard makes the loop impossible regardless of the finding
+    // turn once a block is honored (codex-rs/core/src/session/turn.rs). GitHub
+    // Copilot omits the field, so the strict `=== true` is a no-op for it.
+    // The guard makes the loop impossible regardless of the finding
     // cache key's line-number sensitivity (out of scope here; see
     // findingCacheKey).
     if (event.stop_hook_active === true) {
@@ -2401,9 +2368,6 @@ export async function runStopHook({ stdinJson, env = {}, cwd = process.cwd(), no
 }
 
 export function payload(text, eventName = 'PostToolUse', harness = 'claude') {
-  if (harness === 'cursor') {
-    return JSON.stringify({ additional_context: text });
-  }
   // GitHub Copilot's postToolUse hook injects context via a top-level
   // `additionalContext` string (alongside an optional `modifiedResult`).
   if (harness === 'github') {

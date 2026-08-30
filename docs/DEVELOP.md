@@ -37,7 +37,7 @@ Your skill instructions here...
 
 **Body placeholders** (replaced per-provider during build):
 - `{{model}}` -- Provider-specific model name (e.g., "Claude", "Gemini", "GPT")
-- `{{config_file}}` -- Provider-specific config file (e.g., "CLAUDE.md", ".cursorrules")
+- `{{config_file}}` -- Provider-specific config file (e.g., "CLAUDE.md", "AGENTS.md")
 - `{{ask_instruction}}` -- How to ask the user for clarification
 - `{{command_prefix}}` -- Slash command prefix (`/` for most, `$` for Codex)
 - `{{available_commands}}` -- Comma-separated list of user-invocable commands
@@ -160,7 +160,6 @@ The skill-behavior suite runs three providers (claude-haiku-4-5, gpt-5.4-mini, g
 
 - [Agent Skills Specification](https://agentskills.io/specification) - Open standard
 - [HARNESSES.md](HARNESSES.md) - Provider capabilities matrix
-- [Cursor Skills](https://cursor.com/docs/context/skills)
 - [Claude Code Skills](https://code.claude.com/docs/en/skills)
 - [Gemini CLI Skills](https://geminicli.com/docs/cli/skills/)
 - [Codex CLI Skills](https://developers.openai.com/codex/skills/)

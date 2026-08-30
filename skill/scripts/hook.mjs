@@ -2,8 +2,8 @@
 /**
  * Impeccable design hook — PostToolUse + Stop entry point.
  *
- * Reads the Claude Code / Codex / Cursor hook event from stdin and routes by
- * Stop vs everything else. Claude uses `hook_event_name: "Stop"`.
+ * Reads the Claude Code / Codex / GitHub Copilot hook event from stdin and
+ * routes by Stop vs everything else. Claude uses `hook_event_name: "Stop"`.
  *
  *   - PostToolUse: runs the immediate-tier detector rules against the touched
  *     file and emits a system reminder via

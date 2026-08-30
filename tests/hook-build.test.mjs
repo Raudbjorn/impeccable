@@ -14,7 +14,6 @@ import {
   buildClaudePluginHooksManifest,
   buildCodexHooksManifest,
   buildCodexPluginHooksManifest,
-  buildCursorHooksManifest,
   buildGitHubHooksManifest,
   hooksJsonFor,
 } from '../scripts/lib/transformers/hooks.js';
@@ -138,20 +137,6 @@ describe('hook manifest builders', () => {
     );
   });
 
-  it('builds one Cursor pre-write blocking hook', () => {
-    const manifest = buildCursorHooksManifest();
-    const beforeEdit = manifest.hooks.preToolUse[0];
-
-    assert.equal(manifest.version, 1);
-    assert.ok(Array.isArray(manifest.hooks.preToolUse));
-    assert.equal(Object.keys(manifest.hooks).length, 1);
-    assert.equal(manifest.hooks.afterFileEdit, undefined);
-    assert.equal(manifest.hooks.stop, undefined);
-    assert.equal(manifest.hooks.sessionStart, undefined);
-    expectCommand(beforeEdit.command, '.cursor/skills/impeccable/scripts/hook-before-edit.mjs');
-    assert.equal(beforeEdit.timeout, 5);
-  });
-
   it('builds GitHub Copilot repo-level hooks for the real detector hook', () => {
     const manifest = buildGitHubHooksManifest();
     const entry = manifest.hooks.postToolUse[0];
@@ -173,9 +158,8 @@ describe('hook manifest builders', () => {
 
   it('probes the node runtime everywhere, and notices only where a channel exists', () => {
     // Claude Code and Codex render a `systemMessage` from hook stdout, so their
-    // manifests carry the one-time unsupported-runtime notice. Cursor (output is
-    // permission-shaped; a message would block the edit) and Copilot (contract
-    // unconfirmed) get the silent probe only.
+    // manifests carry the one-time unsupported-runtime notice. Copilot (contract
+    // unconfirmed) gets the silent probe only.
     const withNotice = [
       buildClaudeSettingsManifest(),
       buildClaudePluginHooksManifest(),
@@ -183,7 +167,6 @@ describe('hook manifest builders', () => {
       buildCodexPluginHooksManifest(),
     ];
     const probeOnly = [
-      buildCursorHooksManifest(),
       buildGitHubHooksManifest(),
     ];
     for (const manifest of [...withNotice, ...probeOnly]) {
@@ -215,16 +198,15 @@ describe('hook manifest builders', () => {
   it('routes supported hook builders and leaves other providers alone', () => {
     assert.ok(hooksJsonFor('claude'));
     assert.ok(hooksJsonFor('codex'));
-    assert.ok(hooksJsonFor('cursor'));
     assert.ok(hooksJsonFor('github'));
     assert.equal(hooksJsonFor('gemini'), null);
+    assert.equal(hooksJsonFor('cursor'), null);
   });
 });
 
 describe('generated hook artifacts in repo', () => {
   for (const rel of [
     '.claude/settings.json',
-    '.cursor/hooks.json',
     '.codex/hooks.json',
     '.github/hooks/impeccable.json',
   ]) {
@@ -237,7 +219,6 @@ describe('generated hook artifacts in repo', () => {
 
   it('root hook manifests exactly match the hook builders', () => {
     assert.deepEqual(readJson('.claude/settings.json'), buildClaudeSettingsManifest());
-    assert.deepEqual(readJson('.cursor/hooks.json'), buildCursorHooksManifest());
     assert.deepEqual(readJson('.codex/hooks.json'), buildCodexHooksManifest());
     assert.deepEqual(readJson('.github/hooks/impeccable.json'), buildGitHubHooksManifest());
   });
@@ -250,19 +231,6 @@ describe('generated hook artifacts in repo', () => {
     assert.ok(fs.existsSync(path.join(REPO_ROOT, '.claude/skills/impeccable/scripts/hook.mjs')));
     assert.ok(fs.existsSync(path.join(REPO_ROOT, '.claude/skills/impeccable/scripts/hook-lib.mjs')));
     assert.ok(fs.existsSync(path.join(REPO_ROOT, '.claude/skills/impeccable/scripts/detector/detect-antipatterns.mjs')));
-  });
-
-  it('Cursor project hooks reference only the pre-write runtime in .cursor/skills', () => {
-    const manifest = readJson('.cursor/hooks.json');
-    const beforeEdit = manifest.hooks.preToolUse[0];
-
-    assert.equal(Object.keys(manifest.hooks).length, 1);
-    expectCommand(beforeEdit.command, '.cursor/skills/impeccable/scripts/hook-before-edit.mjs');
-    assert.ok(fs.existsSync(path.join(REPO_ROOT, '.cursor/skills/impeccable/scripts/hook-before-edit.mjs')));
-    assert.equal(fs.existsSync(path.join(REPO_ROOT, '.cursor/skills/impeccable/scripts/hook-after-edit.mjs')), false);
-    assert.equal(fs.existsSync(path.join(REPO_ROOT, '.cursor/skills/impeccable/scripts/hook-stop.mjs')), false);
-    assert.ok(fs.existsSync(path.join(REPO_ROOT, '.cursor/skills/impeccable/scripts/hook-lib.mjs')));
-    assert.ok(fs.existsSync(path.join(REPO_ROOT, '.cursor/skills/impeccable/scripts/detector/detect-antipatterns.mjs')));
   });
 
   it('Codex project hooks reference hook.mjs in the .codex skill payload', () => {
@@ -303,7 +271,7 @@ describe('generated hook artifacts in repo', () => {
   });
 
   it('does not generate probe scripts into provider skill payloads', () => {
-    for (const providerDir of ['.claude', '.cursor', '.agents', 'plugin']) {
+    for (const providerDir of ['.claude', '.agents', 'plugin']) {
       const probe = path.join(REPO_ROOT, providerDir, 'skills', 'impeccable', 'scripts', 'hook-probe.mjs');
       assert.equal(fs.existsSync(probe), false, `${providerDir} still has hook-probe.mjs`);
     }
@@ -364,7 +332,6 @@ describe('generated hook artifacts in repo', () => {
   it('generated hook runtime can import the bundled detector', async () => {
     for (const scriptDir of [
       '.claude/skills/impeccable/scripts',
-      '.cursor/skills/impeccable/scripts',
       '.agents/skills/impeccable/scripts',
       'plugin/skills/impeccable/scripts',
     ]) {

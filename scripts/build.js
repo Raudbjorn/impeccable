@@ -4,7 +4,6 @@
  * Build System for Cross-Provider Design Skills
  *
  * Transforms source skills into provider-specific formats:
- * - Cursor: .cursor/skills/
  * - Claude Code: .claude/skills/
  * - Gemini: .gemini/skills/
  * - Codex: dist/codex/ only (OpenAI-metadata bundle; not synced to repo root)
@@ -534,7 +533,6 @@ https://impeccable.style
 
 This folder contains skills for all supported tools:
 
-  .cursor/    -> Cursor
   .claude/    -> Claude Code
   .gemini/    -> Gemini CLI
   .codex/     -> Codex custom agents (Codex skills use .agents/)

@@ -81,7 +81,7 @@ Compatibility:
     // The follow-up mistake from issue #472: `/impeccable init` belongs in an AI
     // coding agent's chat, and a user who typed it into their shell is likely to
     // retry it here as `npx impeccable init`.
-    console.error(`"init" is not a CLI command. Type /impeccable init in your AI coding agent's chat (Claude Code, Cursor, Codex, ...), not in this terminal.`);
+    console.error(`"init" is not a CLI command. Type /impeccable init in your AI coding agent's chat (Claude Code, Codex, ...), not in this terminal.`);
     process.exit(1);
   } else {
     // An unknown bareword: a mistyped command (or an old cached version run

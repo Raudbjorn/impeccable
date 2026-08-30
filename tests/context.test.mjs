@@ -1200,13 +1200,21 @@ describe('context.mjs CLI', () => {
 
   it('adds no detector directive when a per-edit-only hook is active', () => {
     const scripts = path.join(scratch, 'bundle', 'skills', 'impeccable', 'scripts');
-    stageContextBundle(scripts, { providerId: 'cursor' });
+    stageContextBundle(scripts, { providerId: 'github' });
 
     const project = path.join(scratch, 'project');
-    fs.mkdirSync(path.join(project, '.cursor'), { recursive: true });
+    fs.mkdirSync(path.join(project, '.github', 'hooks'), { recursive: true });
     fs.writeFileSync(path.join(project, 'PRODUCT.md'), '# Acme\n');
-    fs.writeFileSync(path.join(project, '.cursor', 'hooks.json'), JSON.stringify({
-      hooks: { preToolUse: [{ command: 'node .cursor/skills/impeccable/scripts/hook-before-edit.mjs' }] },
+    fs.writeFileSync(path.join(project, '.github', 'hooks', 'impeccable.json'), JSON.stringify({
+      version: 1,
+      hooks: {
+        postToolUse: [{
+          type: 'command',
+          matcher: 'edit|create|apply_patch',
+          bash: 'node "$(git rev-parse --show-toplevel)/.github/skills/impeccable/scripts/hook.mjs"',
+          timeoutSec: 5,
+        }],
+      },
     }));
 
     const res = spawnSync(process.execPath, [path.join(scripts, 'context.mjs')], {

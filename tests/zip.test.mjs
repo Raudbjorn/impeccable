@@ -38,7 +38,7 @@ function makeUniversalTree(distDir) {
  * unpacker fails the count assertion instead of shipping silently. Returns the
  * number of files written.
  */
-function makeLargeUniversalTree(distDir, { providers = ['.claude', '.cursor', '.agents', '.gemini', '.github', '.kiro'], scriptCount = 8, extraSkills = ['audit', 'polish'] } = {}) {
+function makeLargeUniversalTree(distDir, { providers = ['.claude', '.pi', '.agents', '.gemini', '.github', '.kiro'], scriptCount = 8, extraSkills = ['audit', 'polish'] } = {}) {
   let files = 0;
   for (const provider of providers) {
     // The impeccable skill ships a scripts/ dir with many files, like the real
@@ -59,7 +59,7 @@ function makeLargeUniversalTree(distDir, { providers = ['.claude', '.cursor', '.
       writeFileSync(join(refDir, `${name}.md`), `# ${name} reference\n`);
       files += 2;
     }
-    // Provider root config (mirrors .claude/settings.json, .cursor/hooks.json).
+    // Provider root config (mirrors .claude/settings.json, .codex/hooks.json).
     writeFileSync(join(distDir, 'universal', provider, 'config.json'), '{}\n');
     files += 1;
   }

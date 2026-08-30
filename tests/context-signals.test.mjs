@@ -219,10 +219,10 @@ describe('gatherSignals', () => {
     git('config', 'user.email', 't@example.com');
     git('config', 'user.name', 'Test');
     write('src/Hero.tsx', 'export const Hero = () => null;\n');
-    write('.cursor/skills/impeccable/example.css', 'a{}\n');
+    write('.gemini/skills/impeccable/example.css', 'a{}\n');
     git('add', '.');
     git('commit', '-qm', 'init');
-    write('.cursor/skills/impeccable/example.css', 'a{color:red}\n'); // only harness dirty
+    write('.gemini/skills/impeccable/example.css', 'a{color:red}\n'); // only harness dirty
     const s = await gatherSignals(scratch);
     assert.equal(s.scan.via, 'source-dir');
     assert.deepEqual(s.scan.targets, ['src']);

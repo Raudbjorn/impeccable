@@ -6,7 +6,6 @@
  * 1. Project-local install (the `npx impeccable skills install` CLI path):
  *      - Claude Code: `.claude/settings.json`   (${CLAUDE_PROJECT_DIR}-relative)
  *      - Codex:       `.codex/hooks.json`
- *      - Cursor:      `.cursor/hooks.json`
  *
  * 2. Claude Code plugin package (the marketplace / `/plugin install` path):
  *      - `plugin/hooks/hooks.json`              (${CLAUDE_PLUGIN_ROOT}-relative)
@@ -26,8 +25,8 @@ const STATUS_MESSAGE = 'Checking UI changes';
 // The Stop deep pass scans every UI file touched in the session with the
 // full rule set, so it gets a longer budget than the single-file per-edit
 // pass. Wired only for Claude Code and Codex, which both dispatch a native
-// `Stop` hook event; Cursor's stop hook is not consistently dispatched and
-// GitHub Copilot's stop-style events do not feed context back to the model.
+// `Stop` hook event; GitHub Copilot's stop-style events do not feed context
+// back to the model.
 const STOP_TIMEOUT_SECONDS = 30;
 const STOP_STATUS_MESSAGE = 'Design deep pass';
 
@@ -66,8 +65,6 @@ const NODE_MAJOR_FLOOR = 22;
 // because only some have a channel for it, checked against each harness's own
 // hook reference on the events we hook:
 //   Claude Code / Codex: `systemMessage` on stdout is shown to the user -> notice
-//   Cursor: preToolUse output is permission-shaped and its `user_message`
-//     renders only on DENY, so warning would block the edit    -> probe only
 //   Copilot: output contract unconfirmed; do not guess a shape -> probe only
 //
 // The clamp avoids `<` and `>` deliberately: Volta's Windows shims run through
@@ -125,7 +122,6 @@ const CODEX_PLUGIN_HOOK = '${PLUGIN_ROOT}/skills/impeccable/scripts/hook.mjs';
 // so each generated manifest points at its own payload rather than a hardcoded
 // `.agents` — otherwise the guarded hook silently no-ops on `.codex` installs.
 const codexProjectHook = (skillDir) => `${skillDir}/skills/impeccable/scripts/hook.mjs`;
-const CURSOR_BEFORE_EDIT_SCRIPT = '.cursor/skills/impeccable/scripts/hook-before-edit.mjs';
 const GITHUB_PROJECT_HOOK = '$(git rev-parse --show-toplevel)/.github/skills/impeccable/scripts/hook.mjs';
 
 export function buildClaudeSettingsManifest() {
@@ -182,22 +178,8 @@ export function buildCodexHooksManifest(skillDir = '.codex') {
   };
 }
 
-export function buildCursorHooksManifest() {
-  return {
-    version: 1,
-    hooks: {
-      preToolUse: [
-        {
-          command: guardedNode(CURSOR_BEFORE_EDIT_SCRIPT),
-          timeout: TIMEOUT_SECONDS,
-        },
-      ],
-    },
-  };
-}
-
 // GitHub Copilot reads project hooks from `.github/hooks/*.json`. Its schema
-// differs from Claude/Codex/Cursor: the event key is lowercase `postToolUse`,
+// differs from Claude/Codex: the event key is lowercase `postToolUse`,
 // each entry is flat (no nested `hooks` array), the command lives under `bash`
 // (with an optional `powershell` sibling), the timeout key is `timeoutSec`, and
 // `matcher` is a full-match regex (`^(?:PATTERN)$`) tested against the tool name.
@@ -229,8 +211,6 @@ export function hooksJsonFor(provider, options = {}) {
       return buildClaudeSettingsManifest();
     case 'codex':
       return buildCodexHooksManifest(options.configDir || '.codex');
-    case 'cursor':
-      return buildCursorHooksManifest();
     case 'github':
       return buildGitHubHooksManifest();
     default:

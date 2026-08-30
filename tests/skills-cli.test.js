@@ -94,13 +94,6 @@ function createFakeUniversalBundle(root, providers = ['.claude', '.agents']) {
     writeFileSync(join(bundleRoot, '.claude', 'agents', 'impeccable-finish-reviewer.md'),
       '---\nname: impeccable-finish-reviewer\ndescription: Reviews a finished build.\n---\nClaude reviewer body.\n');
   }
-  if (providers.includes('.cursor')) {
-    mkdirSync(join(bundleRoot, '.cursor'), { recursive: true });
-    writeFileSync(join(bundleRoot, '.cursor', 'hooks.json'), JSON.stringify({
-      version: 1,
-      hooks: { preToolUse: [{ command: 'node ".cursor/skills/impeccable/scripts/hook-before-edit.mjs"' }] },
-    }, null, 2));
-  }
   if (providers.includes('.agents')) {
     mkdirSync(join(bundleRoot, '.codex'), { recursive: true });
     // Mirror production: the Codex bundle's `.codex/hooks.json` targets its own
@@ -118,11 +111,6 @@ function createFakeUniversalBundle(root, providers = ['.claude', '.agents']) {
       '---\nname: impeccable-finish-reviewer\ndescription: Reviews a finished build.\n---\nCopilot reviewer body.\n');
     writeFileSync(join(bundleRoot, '.github', 'agents', 'impeccable-asset-producer.agent.md'),
       '---\nname: impeccable-asset-producer\ndescription: Produces assets.\n---\nCopilot producer body.\n');
-  }
-  if (providers.includes('.cursor')) {
-    mkdirSync(join(bundleRoot, '.cursor', 'agents'), { recursive: true });
-    writeFileSync(join(bundleRoot, '.cursor', 'agents', 'impeccable-finish-reviewer.md'),
-      '---\nname: impeccable-finish-reviewer\ndescription: Reviews a finished build.\nmodel: inherit\nreadonly: true\nis_background: false\n---\nCursor reviewer body.\n');
   }
   return bundleRoot;
 }
@@ -233,7 +221,7 @@ describe('copyProviderSkills: symlink handling', () => {
   });
 });
 
-describe('copyProviderAgents: Claude, Copilot, and Cursor subagents', () => {
+describe('copyProviderAgents: Claude and Copilot subagents', () => {
   test('Claude project and user scopes use .claude/agents, with project copies taking precedence', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'imp-agents-claude-'));
     const home = mkdtempSync(join(tmpdir(), 'imp-agents-claude-home-'));
@@ -278,7 +266,7 @@ describe('copyProviderAgents: Claude, Copilot, and Cursor subagents', () => {
     rmSync(home, { recursive: true, force: true });
   }, 15000);
 
-  test('project scope places agents at .github/agents/ and .cursor/agents/', () => {
+  test('project scope places agents at .github/agents/', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'imp-agents-project-'));
     const bundle = createFakeUniversalBundle(tmp, ['.github']);
 
@@ -287,12 +275,12 @@ describe('copyProviderAgents: Claude, Copilot, and Cursor subagents', () => {
     expect(existsSync(join(tmp, '.github', 'agents', 'impeccable-finish-reviewer.agent.md'))).toBe(true);
     expect(existsSync(join(tmp, '.github', 'agents', 'impeccable-asset-producer.agent.md'))).toBe(true);
 
-    expect(results.map(r => r.provider).sort()).toEqual(['.cursor', '.github']);
+    expect(results.map(r => r.provider).sort()).toEqual(['.github']);
 
     rmSync(tmp, { recursive: true, force: true });
   });
 
-  test('user scope places Copilot agents at ~/.copilot/agents (not ~/.github) and Cursor agents at ~/.cursor/agents, overwriting stale copies', () => {
+  test('user scope places Copilot agents at ~/.copilot/agents (not ~/.github), overwriting stale copies', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'imp-agents-user-'));
     const home = mkdtempSync(join(tmpdir(), 'imp-agents-user-home-'));
     const bundle = createFakeUniversalBundle(tmp, ['.github']);
@@ -304,7 +292,6 @@ describe('copyProviderAgents: Claude, Copilot, and Cursor subagents', () => {
 
     const copilotAgent = readFileSync(join(home, '.copilot', 'agents', 'impeccable-finish-reviewer.agent.md'), 'utf8');
     expect(copilotAgent).toContain('Copilot reviewer body.');
-    expect(existsSync(join(home, '.cursor', 'agents', 'impeccable-finish-reviewer.md'))).toBe(true);
     expect(existsSync(join(home, '.github', 'agents'))).toBe(false);
 
     rmSync(tmp, { recursive: true, force: true });
@@ -351,21 +338,17 @@ describe('copyProviderAgents: Claude, Copilot, and Cursor subagents', () => {
     rmSync(home, { recursive: true, force: true });
   }, 20000);
 
-  test('project scope reports user-level Copilot agents that shadow the installed ones; Cursor never does (project wins there)', () => {
+  test('project scope reports user-level Copilot agents that shadow the installed ones', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'imp-agents-shadow-'));
     const home = mkdtempSync(join(tmpdir(), 'imp-agents-shadow-home-'));
     const bundle = createFakeUniversalBundle(tmp, ['.github']);
     mkdirSync(join(home, '.copilot', 'agents'), { recursive: true });
     writeFileSync(join(home, '.copilot', 'agents', 'impeccable-finish-reviewer.agent.md'), 'user-level copy\n');
-    mkdirSync(join(home, '.cursor', 'agents'), { recursive: true });
-    writeFileSync(join(home, '.cursor', 'agents', 'impeccable-finish-reviewer.md'), 'user-level copy\n');
 
     const results = copyProviderAgents(bundle, tmp, ['.github'], { scope: 'project', home });
 
     const github = results.find(r => r.provider === '.github');
-    const cursor = results.find(r => r.provider === '.cursor');
     expect(github.shadowed).toEqual(['impeccable-finish-reviewer.agent.md']);
-    expect(cursor.shadowed).toEqual([]);
     // The project copies still land; the shadow report is a warning, not a block.
     expect(existsSync(join(tmp, '.github', 'agents', 'impeccable-finish-reviewer.agent.md'))).toBe(true);
 
@@ -384,9 +367,8 @@ describe('copyProviderAgents: Claude, Copilot, and Cursor subagents', () => {
       env: { ...process.env, HOME: home, IMPECCABLE_BUNDLE_PATH: bundleRoot },
     });
 
-    expect(output).toContain('Installed impeccable into: .github, .cursor (project)');
+    expect(output).toContain('Installed impeccable into: .github (project)');
     expect(output).toContain('Installed GitHub Copilot agents into:');
-    expect(output).toContain('Installed Cursor agents into:');
     expect(existsSync(join(tmp, '.github', 'agents', 'impeccable-finish-reviewer.agent.md'))).toBe(true);
 
 
@@ -445,16 +427,10 @@ describe('skills install: already-installed detection', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'imp-test-'));
     execSync('git init', { cwd: tmp });
 
-    const skillDir = join(tmp, '.cursor', 'skills', 'i-impeccable');
+    const skillDir = join(tmp, '.gemini', 'skills', 'i-impeccable');
     mkdirSync(skillDir, { recursive: true });
     writeFileSync(join(skillDir, 'SKILL.md'), '---\nname: i-impeccable\n---\n');
-    const bundleRoot = createFakeUniversalBundle(tmp, ['.cursor']);
-    // Seed the hook so the already-installed path sees it wired up and doesn't
-    // try to repair it (which would need the bundle).
-    writeFileSync(join(tmp, '.cursor', 'hooks.json'), JSON.stringify({
-      version: 1,
-      hooks: { preToolUse: [{ command: 'node ".cursor/skills/impeccable/scripts/hook-before-edit.mjs"' }] },
-    }));
+    const bundleRoot = createFakeUniversalBundle(tmp, ['.gemini']);
 
     const output = run('skills install -y', {
       cwd: tmp,
@@ -559,8 +535,8 @@ describe('skills link: submodule installs', () => {
     execSync('git init', { cwd: tmp });
     createFakeLinkSource(tmp, ['.claude']);
 
-    const output = run('skills link --source=.impeccable --providers=claude,cursor -y', { cwd: tmp });
-    expect(output).toContain('Linked impeccable into: .claude, .cursor');
+    const output = run('skills link --source=.impeccable --providers=claude -y', { cwd: tmp });
+    expect(output).toContain('Linked impeccable into: .claude');
 
     for (const provider of ['.claude']) {
       const dest = join(tmp, provider, 'skills', 'impeccable');
@@ -608,7 +584,10 @@ describe('skills link: submodule installs', () => {
   test('maps codex provider alias to its install folder', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'imp-test-link-alias-'));
     execSync('git init', { cwd: tmp });
+    createFakeLinkSource(tmp, ['.agents']);
+
     run('skills link --source=.impeccable --providers=codex -y', { cwd: tmp });
+
     expect(lstatSync(join(tmp, '.agents', 'skills', 'impeccable')).isSymbolicLink()).toBe(true);
     rmSync(tmp, { recursive: true, force: true });
   }, 15000);
@@ -634,22 +613,23 @@ describe('skills link: submodule installs', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'imp-test-link-install-'));
     execSync('git init', { cwd: tmp });
     createFakeLinkSource(tmp);
-    const bundleRoot = createFakeUniversalBundle(tmp, ['.claude']);
+    const bundleRoot = createFakeUniversalBundle(tmp, ['.claude', '.gemini']);
     run('skills link --source=.impeccable --providers=claude -y', { cwd: tmp });
 
     const linkedDest = join(tmp, '.claude', 'skills', 'impeccable');
     const before = readlinkSync(linkedDest);
-    const copiedDest = join(tmp, '.cursor', 'skills', 'impeccable');
+    const copiedDest = join(tmp, '.gemini', 'skills', 'impeccable');
     mkdirSync(join(copiedDest, 'scripts'), { recursive: true });
     writeFileSync(join(copiedDest, 'SKILL.md'), '---\nname: impeccable\nstale: true\n---\nOld content.\n');
     writeFileSync(join(copiedDest, 'scripts', 'context.mjs'), 'console.log("old broken script");\n');
 
-    const output = run('skills install -y --providers=claude --no-hooks', {
+    const output = run('skills install -y --providers=claude,gemini --no-hooks', {
       cwd: tmp,
       env: { ...process.env, IMPECCABLE_BUNDLE_PATH: bundleRoot },
     });
 
     expect(output).toContain('Linked skills found in: .claude');
+    expect(output).toContain('Continuing with copied installs in: .gemini');
     expect(output).toContain('Updated');
     expect(readlinkSync(linkedDest)).toBe(before);
     expect(lstatSync(linkedDest).isSymbolicLink()).toBe(true);
@@ -690,12 +670,12 @@ describe('skills link: submodule installs', () => {
 describe('skills: unprefix migration', () => {
   test('renames i-impeccable back to impeccable across every provider', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'imp-test-mig-'));
-    createPrefixedInstall(tmp, { prefix: 'i-', providers: ['.claude'] });
+    createPrefixedInstall(tmp, { prefix: 'i-', providers: ['.claude', '.gemini'] });
 
     const migrated = migrateUnprefixImpeccable(tmp);
     expect(migrated).toBe(2); // one skill x two providers
 
-    for (const provider of ['.claude']) {
+    for (const provider of ['.claude', '.gemini']) {
       const skills = readdirSync(join(tmp, provider, 'skills'));
       expect(skills).toContain('impeccable');
       expect(skills).not.toContain('i-impeccable');
@@ -956,10 +936,10 @@ describe('skills install/update: local universal bundle e2e', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'imp-test-interactive-project-'));
     const home = mkdtempSync(join(tmpdir(), 'imp-home-interactive-project-'));
     execSync('git init', { cwd: tmp });
-    for (const dir of ['.claude', '.codex', '.cursor', '.gemini']) {
+    for (const dir of ['.claude', '.codex', '.gemini']) {
       mkdirSync(join(home, dir), { recursive: true });
     }
-    const bundleRoot = createFakeUniversalBundle(tmp, ['.claude', '.agents', '.cursor', '.gemini']);
+    const bundleRoot = createFakeUniversalBundle(tmp, ['.claude', '.agents', '.gemini']);
 
     const output = run('skills install --no-hooks', {
       cwd: tmp,
@@ -970,8 +950,8 @@ describe('skills install/update: local universal bundle e2e', () => {
     expect(output).toContain('Detected harnesses:');
     expect(output).toContain('Claude Code  ~/.claude');
     expect(output).toContain('~/.codex');
-    expect(output).toContain('Install target: [1] Detected only (claude, codex, cursor, gemini)  [2] Customize [1]:');
-    for (const provider of ['.claude', '.agents', '.cursor', '.gemini']) {
+    expect(output).toContain('Install target: [1] Detected only (claude, codex, gemini)  [2] Customize [1]:');
+    for (const provider of ['.claude', '.agents', '.gemini']) {
       expect(existsSync(join(tmp, provider, 'skills', 'impeccable', 'SKILL.md'))).toBe(true);
       expect(existsSync(join(home, provider, 'skills', 'impeccable', 'SKILL.md'))).toBe(false);
     }
@@ -1007,10 +987,10 @@ describe('skills install/update: local universal bundle e2e', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'imp-test-interactive-config-only-'));
     const home = mkdtempSync(join(tmpdir(), 'imp-home-interactive-config-only-'));
     execSync('git init', { cwd: tmp });
-    for (const dir of ['.claude', '.codex', '.cursor', '.gemini']) {
+    for (const dir of ['.claude', '.codex', '.gemini']) {
       mkdirSync(join(home, dir), { recursive: true });
     }
-    const bundleRoot = createFakeUniversalBundle(tmp, ['.claude', '.agents', '.cursor', '.gemini']);
+    const bundleRoot = createFakeUniversalBundle(tmp, ['.claude', '.agents', '.gemini']);
 
     const output = run('skills install --no-hooks', {
       cwd: tmp,
@@ -1018,8 +998,8 @@ describe('skills install/update: local universal bundle e2e', () => {
       env: { ...process.env, HOME: home, IMPECCABLE_BUNDLE_PATH: bundleRoot },
     });
 
-    expect(output).toContain('Installed impeccable into: .claude, .agents, .cursor, .gemini (project)');
-    for (const provider of ['.claude', '.agents', '.cursor', '.gemini']) {
+    expect(output).toContain('Installed impeccable into: .claude, .agents, .gemini (project)');
+    for (const provider of ['.claude', '.agents', '.gemini']) {
       expect(existsSync(join(tmp, provider, 'skills', 'impeccable', 'SKILL.md'))).toBe(true);
       expect(existsSync(join(home, provider, 'skills', 'impeccable', 'SKILL.md'))).toBe(false);
     }
@@ -1032,11 +1012,11 @@ describe('skills install/update: local universal bundle e2e', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'imp-test-interactive-user-'));
     const home = mkdtempSync(join(tmpdir(), 'imp-home-interactive-user-'));
     execSync('git init', { cwd: tmp });
-    for (const dir of ['.claude', '.codex', '.cursor', '.gemini']) {
+    for (const dir of ['.claude', '.codex', '.gemini']) {
       mkdirSync(join(home, dir), { recursive: true });
     }
     writeSkill(home, '.claude', 'existing-user-skill');
-    const bundleRoot = createFakeUniversalBundle(tmp, ['.claude', '.agents', '.cursor', '.gemini']);
+    const bundleRoot = createFakeUniversalBundle(tmp, ['.claude', '.agents', '.gemini']);
 
     const output = run('skills install --no-hooks', {
       cwd: tmp,
@@ -1044,8 +1024,8 @@ describe('skills install/update: local universal bundle e2e', () => {
       env: { ...process.env, HOME: home, IMPECCABLE_BUNDLE_PATH: bundleRoot },
     });
 
-    expect(output).toContain('Installed impeccable into: .claude, .agents, .cursor, .gemini (global)');
-    for (const provider of ['.claude', '.agents', '.cursor', '.gemini']) {
+    expect(output).toContain('Installed impeccable into: .claude, .agents, .gemini (global)');
+    for (const provider of ['.claude', '.agents', '.gemini']) {
       expect(existsSync(join(home, provider, 'skills', 'impeccable', 'SKILL.md'))).toBe(true);
       expect(existsSync(join(tmp, provider, 'skills', 'impeccable', 'SKILL.md'))).toBe(false);
     }
@@ -1571,18 +1551,20 @@ describe('skills install/update: local universal bundle e2e', () => {
   test('explicit --providers installs a missing provider without --force (#500)', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'imp-test-explicit-missing-'));
     execSync('git init', { cwd: tmp });
-    const bundleRoot = createFakeUniversalBundle(tmp, ['.claude']);
+    const bundleRoot = createFakeUniversalBundle(tmp, ['.claude', '.gemini']);
 
+    // Seed an existing .claude install; .gemini has nothing yet.
     const skillDir = join(tmp, '.claude', 'skills', 'impeccable');
     mkdirSync(skillDir, { recursive: true });
     writeFileSync(join(skillDir, 'SKILL.md'), '---\nname: impeccable\nversion: 9.9.9-local\n---\nSeeded install.\n');
 
-    const output = run('skills install -y --providers=claude --no-hooks', {
+    const output = run('skills install -y --providers=gemini --no-hooks', {
       cwd: tmp,
       env: { ...process.env, IMPECCABLE_BUNDLE_PATH: bundleRoot },
     });
 
-    
+    expect(output).toContain('Installed impeccable into: .gemini');
+    expect(readFileSync(join(tmp, '.gemini', 'skills', 'impeccable', 'SKILL.md'), 'utf8')).toContain('version: 9.9.9-local');
     // The unselected .claude install is left alone.
     expect(readFileSync(join(skillDir, 'SKILL.md'), 'utf8')).toContain('Seeded install.');
 
@@ -1618,21 +1600,22 @@ describe('skills install/update: local universal bundle e2e', () => {
   test('skills update --no-hooks refreshes skills without touching malformed hook manifests', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'imp-test-update-no-hooks-'));
     execSync('git init', { cwd: tmp });
-    const bundleRoot = createFakeUniversalBundle(tmp, ['.cursor']);
+    const bundleRoot = createFakeUniversalBundle(tmp, ['.agents']);
 
-    run('skills install -y --providers=cursor --no-hooks', {
+    run('skills install -y --providers=codex --no-hooks', {
       cwd: tmp,
       env: { ...process.env, IMPECCABLE_BUNDLE_PATH: bundleRoot },
     });
-    
-    writeFileSync(join(tmp, '.cursor', 'hooks.json'), '{ malformed');
+
+    mkdirSync(join(tmp, '.codex'), { recursive: true });
+    writeFileSync(join(tmp, '.codex', 'hooks.json'), '{ malformed');
 
     const output = run('skills update -y --no-hooks', {
       cwd: tmp,
       env: { ...process.env, IMPECCABLE_BUNDLE_PATH: bundleRoot },
     });
     expect(output).toContain('Skills are up to date');
-    
+
 
     rmSync(tmp, { recursive: true, force: true });
   }, 15000);
@@ -1640,13 +1623,13 @@ describe('skills install/update: local universal bundle e2e', () => {
   test('skills update reports malformed hook manifests cleanly on the up-to-date path', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'imp-test-update-bad-hooks-'));
     execSync('git init', { cwd: tmp });
-    const bundleRoot = createFakeUniversalBundle(tmp, ['.cursor']);
+    const bundleRoot = createFakeUniversalBundle(tmp, ['.agents']);
 
-    run('skills install -y --providers=cursor', {
+    run('skills install -y --providers=codex', {
       cwd: tmp,
       env: { ...process.env, IMPECCABLE_BUNDLE_PATH: bundleRoot },
     });
-    writeFileSync(join(tmp, '.cursor', 'hooks.json'), '{ malformed');
+    writeFileSync(join(tmp, '.codex', 'hooks.json'), '{ malformed');
 
     expect(() => run('skills update -y', {
       cwd: tmp,
@@ -1687,7 +1670,7 @@ describe('hook manifest merge helpers', () => {
         hooks: {
           preToolUse: [
             { command: 'node third-party.mjs' },
-            { command: 'node .cursor/skills/impeccable/scripts/hook-before-edit.mjs' },
+            { command: 'node .claude/skills/impeccable/scripts/hook.mjs' },
           ],
         },
       },
@@ -1696,7 +1679,7 @@ describe('hook manifest merge helpers', () => {
         description: 'fresh description',
         hooks: {
           preToolUse: [
-            { command: 'node .cursor/skills/impeccable/scripts/hook-before-edit.mjs' },
+            { command: 'node .claude/skills/impeccable/scripts/hook.mjs' },
           ],
         },
       },
@@ -1706,7 +1689,7 @@ describe('hook manifest merge helpers', () => {
     expect(merged.description).toBe('fresh description');
     expect(merged.hooks.preToolUse.map((entry) => entry.command)).toEqual([
       'node third-party.mjs',
-      'node .cursor/skills/impeccable/scripts/hook-before-edit.mjs',
+      'node .claude/skills/impeccable/scripts/hook.mjs',
     ]);
   });
 
