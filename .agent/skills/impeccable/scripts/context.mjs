@@ -1423,7 +1423,6 @@ function appendDetectorFallback(parts, ctx) {
 // harnesses and OSes differ (cwebp, sips on macOS, magick, ffmpeg), and the
 // agent should read this line instead of running command -v per image.
 function appendImageToolsDirective(parts) {
-  const probe = process.platform === 'win32' ? 'where' : 'which';
   const found = ['cwebp', 'sips', 'magick', 'ffmpeg'].filter((tool) => {
     try { return spawnSync(probe, [tool], { stdio: 'ignore' }).status === 0; } catch { return false; }
   });

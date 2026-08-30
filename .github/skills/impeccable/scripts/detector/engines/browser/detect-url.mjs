@@ -22,15 +22,7 @@ import { checkContentHiddenAtRest } from '../../rules/checks.mjs';
 // cause so the real failure is not lost.
 async function launchBrowser(puppeteer, { headless = true, args = [] } = {}) {
   let channelError;
-  if (process.platform === 'win32') {
-    try {
-      return await puppeteer.default.launch({ channel: 'chrome', headless, args });
-    } catch (err) {
-      // System Chrome unavailable or unlaunchable; fall through to the bundled
-      // browser, but keep the error in case the fallback fails too.
-      channelError = err;
-    }
-  }
+
   try {
     return await puppeteer.default.launch({ headless, args });
   } catch (err) {

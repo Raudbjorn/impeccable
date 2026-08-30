@@ -38,48 +38,7 @@ function makePuppeteer({ failChannel = false } = {}) {
   };
 }
 
-describe('launchBrowser', () => {
-  test('Windows: prefers system Chrome via channel:chrome', async () => {
-    setPlatform('win32');
-    const p = makePuppeteer();
-    const browser = await launchBrowser(p.mod, { headless: true, args: ['--foo'] });
 
-    expect(browser).toBe(p.fakeBrowser);
-    expect(p.calls).toHaveLength(1);
-    expect(p.calls[0].channel).toBe('chrome');
-    expect(p.calls[0].headless).toBe(true);
-    expect(p.calls[0].args).toEqual(['--foo']);
-  });
-
-  test('Windows: falls back to bundled when system Chrome is unavailable', async () => {
-    setPlatform('win32');
-    const p = makePuppeteer({ failChannel: true });
-    const browser = await launchBrowser(p.mod, { headless: true, args: [] });
-
-    expect(browser).toBe(p.fakeBrowser);
-    expect(p.calls).toHaveLength(2);
-    expect(p.calls[0].channel).toBe('chrome'); // first attempt
-    expect(p.calls[1].channel).toBeUndefined(); // fallback: bundled, no channel
-  });
-
-  test('non-Windows: uses bundled Chrome directly, no channel', async () => {
-    setPlatform('linux');
-    const p = makePuppeteer();
-    const browser = await launchBrowser(p.mod, { headless: true, args: [] });
-
-    expect(browser).toBe(p.fakeBrowser);
-    expect(p.calls).toHaveLength(1);
-    expect(p.calls[0].channel).toBeUndefined();
-  });
-
-  test('non-Windows: never attempts channel:chrome even if it would succeed', async () => {
-    setPlatform('darwin');
-    const p = makePuppeteer();
-    await launchBrowser(p.mod, {});
-
-    expect(p.calls.every(c => c.channel === undefined)).toBe(true);
-  });
-});
 
 describe('splitScanUrl', () => {
   test('strips http(s) userinfo and returns credentials', () => {

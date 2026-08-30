@@ -1326,39 +1326,6 @@ function hookScriptPathForProvider(skillRoot, provider) {
   return null;
 }
 
-// Wrap a `node "PATH"` hook command so a missing skill file is a silent no-op
-// (exit 0) instead of a Node module-resolution crash. hook.mjs promises to
-// "never break a turn. Always exit 0.", but that only holds once Node can load
-// the file; a stale/missing path crashes before any of that logic runs. The
-// `[ ! -f X ] || node X` form (NOT `... || true`) preserves Node's own exit
-// code when the file exists, so Claude's exit-2 blocking signal still reaches
-// the agent. POSIX-shell form, consistent with the project's other hook
-// commands (e.g. the GitHub manifest's `$(git rev-parse ...)`).
-//
-// On Windows that guard is a hard failure, not a degraded one (issue #452).
-// Codex runs hook commands through COMSPEC (`cmd.exe /C`), where `[` is not a
-// command: the guard errors noisily and `||` then runs node even when the file
-// is missing, trading the silent no-op for a MODULE_NOT_FOUND crash. Two
-// remedies, by provider:
-//
-//   * Codex manifests support a `commandWindows` sibling that Codex 0.146.0+
-//     selects on Windows (`command_windows.unwrap_or(command)` in its hook
-//     discovery). rewriteHookCommandsForSkillRoot adds it with a cmd.exe
-//     `if exist` guard (form contributed and Windows-tested by @PatrickSys in
-//     issue #452; `exit /b` forwards node's errorlevel), so the same
-//     .codex/hooks.json is correct on every OS no matter where it was
-//     written, and `command` stays the plain POSIX guard.
-//   * Other manifests (Claude, GitHub) have no per-platform field, so a
-//     Windows install moves the existence check into node itself: a `node -e`
-//     wrapper that exits 0 when the target is missing and otherwise re-spawns
-//     node on it with inherited stdio, forwarding the hook's exit code. A
-//     committable manifest can be consumed on a teammate's POSIX machine, so
-//     the wrapper has to hold there too: it uses only characters that survive
-//     PowerShell, cmd.exe (issue #445: shims re-parse through `cmd /C`, which
-//     claims < > | & ^ % !), and sh double-quoting alike, with single quotes
-//     for the inner string literals.
-const WIN32_HOOK_GUARD_SCRIPT = "const p=process.argv[1];const f=require('fs');if(f.existsSync(p)){const r=require('child_process').spawnSync(process.execPath,[p],{stdio:'inherit'});process.exit(r.status===null?1:r.status);}";
-
 // POSIX single-quote escaping. JSON.stringify is not shell quoting: inside
 // double quotes /bin/sh still expands $(...), backticks, and ${}, and this
 // string is baked into a hook manifest the harness re-executes on every edit,
@@ -1375,11 +1342,7 @@ function windowsHookCommand(quotedPath) {
 
 // `quotedPath` carries one pre-quoted form per target shell: { posix, win32 }.
 function guardHookCommand(quotedPath, provider) {
-  // `.agents` (Codex) keeps the POSIX form unconditionally: its Windows
-  // consumers read the commandWindows sibling instead.
-  if (provider !== '.agents' && process.platform === 'win32') {
-    return `node -e "${WIN32_HOOK_GUARD_SCRIPT}" ${quotedPath.win32}`;
-  }
+
   return `[ ! -f ${quotedPath.posix} ] || node ${quotedPath.posix}`;
 }
 

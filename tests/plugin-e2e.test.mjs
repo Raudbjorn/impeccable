@@ -37,12 +37,9 @@ const PLUGIN_REF = `impeccable@${MARKETPLACE_NAME}`;
 // without a shell, so commands there go through one with every argument
 // double-quoted (paths under %TEMP% routinely contain spaces). Elsewhere
 // execFileSync runs the binary directly with no quoting concerns.
-const IS_WINDOWS = process.platform === 'win32';
 const quoteForCmd = (arg) => `"${String(arg).replace(/"/g, '""')}"`;
-const runClaude = (args, opts) =>
-  IS_WINDOWS
-    ? execSync(['claude', ...args.map(quoteForCmd)].join(' '), opts)
-    : execFileSync('claude', args, opts);
+const runClaude = (args, opts) => execFileSync('claude', args, opts);
+
 
 const claudeAvailable = (() => {
   try {

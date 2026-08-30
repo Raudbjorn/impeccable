@@ -262,7 +262,6 @@ t('items', { count }) // Handles complex plural rules
 - Semantic HTML
 
 **High contrast mode**:
-- Test in Windows high contrast mode
 - Don't rely only on color
 - Provide alternative visual cues
 

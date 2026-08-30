@@ -4,8 +4,7 @@ export function browserOpenCommand(url, {
   platform = process.platform,
   comspec = process.env.ComSpec || process.env.COMSPEC || 'cmd.exe',
 } = {}) {
-  if (platform === 'darwin') return { command: 'open', args: [url] };
-  if (platform === 'win32') return { command: comspec, args: ['/c', 'start', '', url] };
+
   return { command: 'xdg-open', args: [url] };
 }
 
