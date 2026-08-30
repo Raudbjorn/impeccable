@@ -1491,6 +1491,27 @@ describe('hook-admin.mjs', () => {
     );
   });
 
+  it('reset refuses when the shared manifest is wired but does not parse', () => {
+    // fileHasImpeccableHookMarker() returns false on a parse error, so a
+    // corrupt marker-bearing settings.json read as unwired and let the
+    // disabling config be deleted: the same re-arm the local pre-check
+    // closes, through the shared door.
+    fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
+    fs.writeFileSync(getConfigPath(cwd), JSON.stringify({ hook: { enabled: false } }));
+    fs.mkdirSync(path.join(cwd, '.claude'), { recursive: true });
+    const broken = '{"hooks":{"PostToolUse":[{"hooks":[{"command":"node .claude/skills/impeccable/scripts/hook.mjs"';
+    fs.writeFileSync(path.join(cwd, '.claude', 'settings.json'), broken);
+
+    let err = null;
+    try { runAdmin(['reset']); } catch (e) { err = e; }
+
+    assert.ok(err, 'a wired shared manifest that does not parse must fail the reset');
+    assert.equal(err.status, 1);
+    assert.match(err.stderr, /\.claude\/settings\.json/);
+    assert.equal(fs.readFileSync(path.join(cwd, '.claude', 'settings.json'), 'utf-8'), broken, 'the shared manifest is never written');
+    assert.equal(JSON.parse(fs.readFileSync(getConfigPath(cwd), 'utf-8')).hook.enabled, false);
+  });
+
   it('reset reports the armed state rather than inventing a config that was never there', () => {
     // reset preserves a kill switch; it does not manufacture one. A fresh
     // clone of a repo whose committed settings.json carries a hook entry must

@@ -297,6 +297,7 @@ export async function main(argv = process.argv.slice(2)) {
   if (options.issue) {
     const issue = fetchIssue(repo, options.issue);
     if (!issue) throw new Error(`Issue #${options.issue} not found.`);
+    if (skipIfPullRequest(issue, options.issue)) return;
     const plan = evaluateIssue(issue, options);
     printPlan(plan, options);
     if (options.apply) applyIssuePlan(repo, plan);
@@ -310,6 +311,7 @@ function runCommentGate(repo, options) {
   const comment = fetchComment(repo, options.commentId);
   const issue = fetchIssue(repo, options.issue);
   if (!comment || !issue) throw new Error('Comment or issue not found.');
+  if (skipIfPullRequest(issue, options.issue)) return;
 
   const result = evaluateComment({
     commentBody: comment.body,
@@ -418,6 +420,18 @@ function normalizeIssue(raw) {
     isPullRequest: Boolean(raw.pull_request),
     comments: [],
   };
+}
+
+/**
+ * GitHub's issues endpoint returns pull requests too, so `--issue <n>` with a
+ * PR number (a manual workflow_dispatch is the reachable path) lands here with
+ * a PR in hand. A PR carries no issue template, so gating it would label,
+ * comment on, or close it for headings it was never meant to have.
+ */
+export function skipIfPullRequest(issue, number) {
+  if (!issue.isPullRequest) return false;
+  console.log(`#${number} is a pull request, not an issue. The gate only runs on issues; nothing to do.`);
+  return true;
 }
 
 function fetchIssue(repo, number) {

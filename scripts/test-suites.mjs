@@ -266,7 +266,7 @@ export const SUITES = {
     needsPlaywright: true,
     triggers: [
       ...COMMON_INFRA_PATTERNS,
-      /^skill\/scripts\/(serve-question|generate-image|concept-seed)\.mjs$/,
+      /^skill\/scripts\/(serve-question|generate-image|concept-seed|embed-prompt)\.mjs$/,
       /^tests\/new-work-e2e(\.test\.mjs|\/)/,
     ],
     commands: [

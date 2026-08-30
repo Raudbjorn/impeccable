@@ -12,6 +12,7 @@ import {
   evaluateIssue,
   loadTemplates,
   parseArgs,
+  skipIfPullRequest,
   proseWordCount,
 } from '../scripts/github/issue-gate.mjs';
 
@@ -381,6 +382,25 @@ describe('comment gate', () => {
       commentBody: words(400),
     });
     assert.equal(member.shouldMinimize, false);
+  });
+});
+
+describe('pull request guard', () => {
+  it('skips a pull request handed to --issue', () => {
+    // GitHub's issues endpoint returns PRs too, so a manual workflow_dispatch
+    // with a PR number reaches the gate with a PR in hand. A PR has no issue
+    // template, so gating it would label or close it for missing headings.
+    const logged = [];
+    const original = console.log;
+    console.log = (...args) => logged.push(args.join(' '));
+    try {
+      assert.equal(skipIfPullRequest({ isPullRequest: true }, 7), true);
+      assert.equal(skipIfPullRequest({ isPullRequest: false }, 7), false);
+    } finally {
+      console.log = original;
+    }
+    assert.equal(logged.length, 1);
+    assert.match(logged[0], /#7 is a pull request/);
   });
 });
 

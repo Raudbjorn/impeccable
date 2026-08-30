@@ -791,8 +791,15 @@ function reset(cwd) {
         failed.push(`${target.destRel} (${err.message || err})`);
       }
     }
-    if (target.sharedDestRel && fileHasImpeccableHookMarker(path.join(cwd, target.sharedDestRel))) {
-      stillShared.push(target.sharedDestRel);
+    // The shared manifest needs the same two-way read as the local one:
+    // fileHasImpeccableHookMarker() returns false when the JSON does not
+    // parse, so a corrupt marker-bearing settings.json would read as unwired
+    // and let the config be deleted, which is the re-arm this ordering exists
+    // to stop.
+    if (target.sharedDestRel) {
+      const sharedPath = path.join(cwd, target.sharedDestRel);
+      if (manifestIsUnreadableButWired(sharedPath)) unreadable.push(target.sharedDestRel);
+      else if (fileHasImpeccableHookMarker(sharedPath)) stillShared.push(target.sharedDestRel);
     }
   }
 
