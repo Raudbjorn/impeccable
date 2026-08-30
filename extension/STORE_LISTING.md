@@ -54,7 +54,7 @@ FEATURES
 - Works on any website
 - Runs 100% locally, no data sent anywhere
 
-Open source at https://github.com/pbakaus/impeccable
+Open source at https://github.com/Raudbjorn/impeccable
 
 ## Category
 Developer Tools

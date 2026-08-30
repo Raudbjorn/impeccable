@@ -688,11 +688,11 @@ describe('init gate', () => {
       id, familyId: `${id}-family`, surface: 'operate', status: 'approved',
       ...(platforms ? { platforms } : {}), review: { status: 'approved' },
     });
-    const pool = [make('web-only', ['web']), make('anywhere', null), make('native', ['ios', 'android'])];
-    const onIos = dealCompositions({ scope: 'surface', key: 'plat', mode: 'operate', platform: 'ios', sourceCompositions: pool });
-    const ids = onIos.picks.map(pick => pick.id);
-    assert.equal(ids.includes('web-only'), false, 'a web-only composition must not reach an iOS build');
-    assert.equal(onIos.match.platformExcluded, 1);
+    const pool = [make('web-only', ['web']), make('anywhere', null), make('native', ['android'])];
+    const onAndroid = dealCompositions({ scope: 'surface', key: 'plat', mode: 'operate', platform: 'android', sourceCompositions: pool });
+    const ids = onAndroid.picks.map(pick => pick.id);
+    assert.equal(ids.includes('web-only'), false, 'a web-only composition must not reach an Android build');
+    assert.equal(onAndroid.match.platformExcluded, 1);
 
     const allWebOnly = [make('x', ['web']), make('y', ['web'])];
     const starved = dealCompositions({ scope: 'surface', key: 'plat2', mode: 'operate', platform: 'android', sourceCompositions: allWebOnly });

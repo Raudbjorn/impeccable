@@ -120,7 +120,7 @@ See [Allow the hook in your harness](https://impeccable.style/docs/hooks#allow-t
 For teams that want to keep Impeccable vendored and updated through Git, add this repo as a submodule and link the compiled provider build into your harness folders:
 
 ```bash
-git submodule add https://github.com/pbakaus/impeccable .impeccable
+git submodule add https://github.com/Raudbjorn/impeccable .impeccable
 npx impeccable link --source=.impeccable --providers=claude,gemini
 git add .gitmodules .impeccable .claude .gemini
 git commit -m "Add Impeccable skills"
@@ -139,7 +139,7 @@ npx impeccable link --source=.impeccable --providers=claude,gemini
 
 **Claude Code:**
 ```bash
-/plugin marketplace add pbakaus/impeccable
+/plugin marketplace add Raudbjorn/impeccable
 ```
 
 > Claude Code only. After adding the marketplace, open `/plugin` and install Impeccable from the list.
