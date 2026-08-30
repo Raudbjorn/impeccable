@@ -3,7 +3,7 @@
 Source of truth for what each AI coding harness supports in terms of agent skills.
 Used to inform provider configs in `scripts/lib/transformers/providers.js`.
 
-Last verified: 2026-04-28 (subagent landscape spot-checked 2026-06-28; Mistral Vibe row verified 2026-07-16)
+Last verified: 2026-04-28 (subagent landscape spot-checked 2026-06-28; Mistral Vibe row verified 2026-07-16; oh-my-pi row added 2026-08-30)
 
 > This file is point-in-time. Capabilities move fast; verify live before relying
 > on any "only X supports Y" claim. Notably, the subagent table below lists
@@ -22,6 +22,7 @@ Last verified: 2026-04-28 (subagent landscape spot-checked 2026-06-28; Mistral V
 | Pi | https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/skills.md |
 | Mistral Vibe | https://docs.mistral.ai/vibe/code/cli/skills |
 | Antigravity | https://antigravity.google/docs/skills |
+| oh-my-pi | https://github.com/can1357/oh-my-pi/blob/main/docs/skills.md |
 
 ## Spec Compliance
 
@@ -33,22 +34,22 @@ Provider-specific extensions beyond the spec: `user-invocable`, `argument-hint`,
 
 Fields marked with * are spec-standard. Others are provider extensions.
 
-| Field | Claude Code | Gemini | Codex | Copilot | Kiro | OpenCode | Pi | Mistral Vibe | Antigravity |
-|-------|:-----------:|:------:|:-----:|:-------:|:----:|:--------:|:--:|:------------:|:-----------:|
-| `name`* | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| `description`* | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| `license`* | Yes | Ignored | No | Yes | Yes | Yes | Yes | Yes | Yes |
-| `compatibility`* | Yes | Ignored | No | Yes | Yes | Yes | Yes | Yes | Yes |
-| `metadata`* | Yes | Ignored | No | Yes | Yes | Yes | Yes | Yes | Yes |
-| `allowed-tools`* | Yes | Ignored | No | No | No | Yes | Yes | Yes | Yes |
-| `user-invocable` | Yes | No | No | Yes | No | Yes | No | Yes | No |
-| `argument-hint` | Yes | No | No | Yes | No | Yes | No | No | No |
-| `disable-model-invocation` | Yes | No | No | Yes | No | Yes | Yes | No | No |
-| `model` | Yes | No | No | No | No | Yes | No | No | No |
-| `effort` | Yes | No | No | No | No | No | No | No | No |
-| `context` | Yes | No | No | No | No | No | No | No | No |
-| `agent` | Yes | No | No | No | No | Yes | No | No | No |
-| `hooks` | Yes | No | Yes | No | No | No | No | No | No |
+| Field | Claude Code | Gemini | Codex | Copilot | Kiro | OpenCode | Pi | Mistral Vibe | Antigravity | oh-my-pi |
+|-------|:-----------:|:------:|:-----:|:-------:|:----:|:--------:|:--:|:------------:|:-----------:|:--------:|
+| `name`* | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `description`* | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| `license`* | Yes | Ignored | No | Yes | Yes | Yes | Yes | Yes | Yes | Ignored |
+| `compatibility`* | Yes | Ignored | No | Yes | Yes | Yes | Yes | Yes | Yes | Ignored |
+| `metadata`* | Yes | Ignored | No | Yes | Yes | Yes | Yes | Yes | Yes | Ignored |
+| `allowed-tools`* | Yes | Ignored | No | No | No | Yes | Yes | Yes | Yes | Ignored |
+| `user-invocable` | Yes | No | No | Yes | No | Yes | No | Yes | No | No |
+| `argument-hint` | Yes | No | No | Yes | No | Yes | No | No | No | No |
+| `disable-model-invocation` | Yes | No | No | Yes | No | Yes | Yes | No | No | Yes |
+| `model` | Yes | No | No | No | No | Yes | No | No | No | No |
+| `effort` | Yes | No | No | No | No | No | No | No | No | No |
+| `context` | Yes | No | No | No | No | No | No | No | No | No |
+| `agent` | Yes | No | No | No | No | Yes | No | No | No | No |
+| `hooks` | Yes | No | Yes | No | No | No | No | No | No | No |
 
 Notes:
 - Gemini CLI validates only `name` and `description`; other spec fields are parsed but ignored.
@@ -56,6 +57,7 @@ Notes:
 - Codex CLI hooks ship under `[features].hooks = true` (still flagged), require `/hooks` trust ceremony per-update, and are disabled on Windows.
 - Kiro recognizes `user-invocable` and `disable-model-invocation` per community reports but does not formally document them.
 - Antigravity supports standard Agent Skills spec frontmatter fields (`name`, `description`, `license`, `compatibility`, `metadata`, `allowed-tools`).
+- oh-my-pi's own supported frontmatter set is `name`, `description`, `globs`, `alwaysApply`, `hide`, `disableModelInvocation` (kebab-case `disable-model-invocation` is normalized to this); everything else is parsed and preserved as unknown metadata but not interpreted, same as Gemini's spec fields.
 - Unknown fields are silently ignored by all harnesses.
 
 ## Hook surface used by Impeccable
@@ -79,6 +81,7 @@ Notes:
 | Pi | `.pi/skills/` (project), `~/.pi/agent/skills/` (global) | `.agents/skills/` |
 | Mistral Vibe | `.vibe/skills/` (project), `~/.vibe/skills/` (global) | `.agents/skills/` (project), `~/.agents/skills/` (global) |
 | Antigravity | `.agent/skills/` (project), `~/.gemini/config/skills/` (global) | `.agents/skills/` (project), `~/.agents/skills/` (global) |
+| oh-my-pi | `.omp/skills/` (project, highest discovery priority) | `.claude/skills/`, `.agent/skills/`, `.agents/skills/`, `.codex/skills/`, `.opencode/skills/`, `.github/skills/` (all lower priority; already picked up before this row existed) |
 
 All harnesses support the `{skill-name}/SKILL.md` directory structure with optional `reference/`, `scripts/`, and `assets/` subdirectories.
 

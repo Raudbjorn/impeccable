@@ -101,5 +101,12 @@ export const PROVIDERS = {
     configDir: '.agent',
     displayName: 'Antigravity',
     frontmatterFields: ['license', 'compatibility', 'metadata', 'allowed-tools'],
+  },
+  omp: {
+    provider: 'omp',
+    providerTags: ['omp'],
+    configDir: '.omp',
+    displayName: 'oh-my-pi',
+    frontmatterFields: ['license', 'compatibility', 'metadata', 'allowed-tools'],
   }
 };

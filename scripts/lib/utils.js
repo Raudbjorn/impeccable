@@ -514,6 +514,15 @@ export const PROVIDER_PLACEHOLDERS = {
     ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
     command_prefix: '/'
   },
+  // oh-my-pi invokes skills as `/skill:<name> [args]`; the args form is a
+  // documented embedded pattern (trailing prose after the token is passed
+  // through), so the router's `/impeccable <subcommand>` shape still works.
+  'omp': {
+    model: 'the model',
+    config_file: 'AGENTS.md',
+    ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
+    command_prefix: '/skill:'
+  },
   // Fallback for any provider id not in this map (backwards compat for
   // forks that add a provider config without a matching placeholder entry).
   'default': {
@@ -533,6 +542,7 @@ export const PROVIDER_BLOCK_TAGS = new Set([
   'gemini',
   'github',
   'kiro',
+  'omp',
   'opencode',
   'pi',
   'vibe',

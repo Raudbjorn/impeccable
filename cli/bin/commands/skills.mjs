@@ -24,7 +24,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const API_BASE = 'https://impeccable.style';
 
 // Provider folder names in project roots
-const PROVIDER_DIRS = ['.claude', '.gemini', '.codex', '.agents', '.agent', '.github', '.pi', '.opencode', '.kiro', '.vibe'];
+const PROVIDER_DIRS = ['.claude', '.gemini', '.codex', '.agents', '.agent', '.github', '.pi', '.opencode', '.kiro', '.vibe', '.omp'];
 const PROVIDER_ALIASES = {
   agent: '.agent',
   agents: '.agents',
@@ -36,6 +36,7 @@ const PROVIDER_ALIASES = {
   gemini: '.gemini',
   github: '.github',
   kiro: '.kiro',
+  omp: '.omp',
   opencode: '.opencode',
   pi: '.pi',
   vibe: '.vibe',
@@ -48,11 +49,12 @@ const PROVIDER_DISPLAY = {
   '.gemini': { name: 'Gemini CLI', input: 'gemini' },
   '.github': { name: 'GitHub Copilot', input: 'github' },
   '.kiro': { name: 'Kiro', input: 'kiro' },
+  '.omp': { name: 'oh-my-pi', input: 'omp' },
   '.opencode': { name: 'OpenCode', input: 'opencode' },
   '.pi': { name: 'Pi Coding Agent', input: 'pi' },
   '.vibe': { name: 'Mistral Vibe', input: 'vibe' },
 };
-const PROVIDER_INPUT_ORDER = ['antigravity', 'claude', 'codex', 'gemini', 'github','kiro', 'opencode', 'pi', 'vibe'];
+const PROVIDER_INPUT_ORDER = ['antigravity', 'claude', 'codex', 'gemini', 'github','kiro', 'omp', 'opencode', 'pi', 'vibe'];
 
 // OpenCode reads global skills from its config directory, not ~/.opencode:
 // $OPENCODE_CONFIG_DIR, else $XDG_CONFIG_HOME/opencode, else
@@ -95,6 +97,7 @@ const GLOBAL_HARNESS_HINTS = [
   { resolve: opencodeGlobalConfigDir, provider: '.opencode' },
   { home: '.pi', provider: '.pi' },
   { home: '.vibe', provider: '.vibe' },
+  { home: '.omp', provider: '.omp' },
 ];
 
 // Last-resort default when nothing is detected: Claude Code + the universal
@@ -588,7 +591,7 @@ async function copyOrExtractLocalBundle(sourceValue) {
  */
 function normalizeForHash(content) {
   return content
-    .replace(/\.(claude|agents|agent|github|gemini|codex|kiro|opencode|pi|vibe)\/skills\//g, '.PROVIDER/skills/');
+    .replace(/\.(claude|agents|agent|github|gemini|codex|kiro|omp|opencode|pi|vibe)\/skills\//g, '.PROVIDER/skills/');
 }
 
 function hashSkillFile(filePath) {

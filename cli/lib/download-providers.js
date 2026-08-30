@@ -11,6 +11,7 @@ export const FILE_DOWNLOAD_PROVIDER_CONFIG_DIRS = Object.freeze({
   antigravity: '.agent',
   github: '.github',
   kiro: '.kiro',
+  omp: '.omp',
   opencode: '.opencode',
   pi: '.pi',
   vibe: '.vibe',

@@ -543,6 +543,7 @@ This folder contains skills for all supported tools:
   .opencode/  -> OpenCode
   .pi/        -> Pi
   .vibe/      -> Mistral Vibe
+  .omp/       -> oh-my-pi
 
 To install, copy the relevant folder(s) into your project root.
 For Codex, repo and user skill installs come from .agents/skills.

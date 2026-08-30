@@ -126,7 +126,7 @@ git add .gitmodules .impeccable .claude .gemini
 git commit -m "Add Impeccable skills"
 ```
 
-Use the providers your project needs, for example `claude`, `gemini`, `codex`, `github`, `opencode`, `pi`, or `vibe`. The command links individual skill folders from `.impeccable/dist/universal/` and leaves existing real skill directories untouched unless you pass `--force`.
+Use the providers your project needs, for example `claude`, `gemini`, `codex`, `github`, `opencode`, `pi`, `vibe`, or `omp`. The command links individual skill folders from `.impeccable/dist/universal/` and leaves existing real skill directories untouched unless you pass `--force`.
 
 To update later:
 
@@ -218,6 +218,11 @@ cp -r dist/antigravity/.agent your-project/
 # Or global (applies to all projects)
 mkdir -p ~/.gemini/config/skills
 cp -r dist/antigravity/.agent/skills/* ~/.gemini/config/skills/
+```
+
+**oh-my-pi:**
+```bash
+cp -r dist/omp/.omp your-project/
 ```
 
 ## Usage
@@ -357,6 +362,7 @@ Full detector docs: [impeccable.style/docs/detector](https://impeccable.style/do
 - [Kiro](https://kiro.dev)
 - [Mistral Vibe](https://docs.mistral.ai/vibe/code/overview)
 - [Google Antigravity](https://antigravity.google)
+- [oh-my-pi](https://omp.sh)
 
 ## Community & Ecosystem
 
