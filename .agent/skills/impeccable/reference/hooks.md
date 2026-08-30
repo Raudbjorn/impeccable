@@ -30,7 +30,7 @@ The first argument is the action. Defaults to `status`.
 | `ignore-value <id> <value> [--shared] [--reason "..."]` | Append a rule/value suppression to shared `.impeccable/config.json`. |
 | `ignore-value <id> <value> --local [--reason "..."]` | Append a private rule/value suppression to `.impeccable/config.local.json`. |
 | `ignore-value <id> "*" --file <glob> [--file <glob>...]` | Turn one rule off in matching files only, leaving it active everywhere else. Repeat `--file`, or use `--file=<glob>` / `--files=<glob>`. A bare `"*"` with no `--file` is refused: use `ignore-rule <id>` if you really mean project-wide. |
-| `reset` | Delete the project config, dedup cache, and pending queue. |
+| `reset` | Unwire the hook's entries from every provider manifest `on` installs, the committed Copilot file included, then delete the project config, dedup cache, and pending queue. Manifests come first because a deleted config falls back to enabled: if one cannot be rewritten or does not parse, `reset` reports it, exits non-zero, and leaves the config alone so a kill switch written by `off` survives. A team-shared `settings.json` is still never written; when it carries an entry, `reset` says so and leaves the config in place instead of claiming a clean reset. |
 
 ## Flow
 

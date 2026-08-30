@@ -246,6 +246,51 @@ if (plateId) {
   const chromaLine = wantsChroma ? ` Render the artwork on a perfectly flat, uniform bright green background (${chromaColor}) that fills every pixel not covered by the artwork; no paper texture, no vignette, no shadow on the green; the green will be removed and the artwork composited onto the page's own surface.` : '';
   const prompt = [platePrompt(spec, region), extra, chromaLine].filter(Boolean).join(' ');
   plateCtx = { spec, specPath, region, ref, refPath, out, size, prompt, comp, encodePng, resize, chroma: wantsChroma ? chromaColor : null };
+  // Score a plate that already exists, without generating one. The harness's
+  // own image tool produces the plate on the native branch, and every step
+  // after that (read the score line, regenerate on a miss) needs the same
+  // verdict the parent's plates gate will reach. Placed above the API-key
+  // check on purpose: the native branch is exactly the case with no key.
+  //
+  // This runs build-phase's own per-plate gate rather than the score subset,
+  // so the producer's line and `build-phase.mjs advance` cannot disagree. The
+  // score alone misses the size floor and the comp-crop refusal, which is how
+  // an undersized native-tool plate could report a clean number here and then
+  // be refused by the parent. Failures exit non-zero: a run that printed no
+  // usable verdict must not read as success.
+  if (process.argv.includes('--score-only')) {
+    if (!fs.existsSync(out)) {
+      console.error(`generate-image: no plate at ${out} to score; produce it first, then run --score-only`);
+      process.exit(1);
+    }
+    const { gateOnePlate } = await import('./build-phase.mjs');
+    let gate;
+    try {
+      gate = gateOnePlate(spec, comp, region, { file: out });
+    } catch (e) {
+      console.error(`generate-image: could not score ${out}: ${e.message}`);
+      process.exit(1);
+    }
+    if (gate.score) {
+      const sc = gate.score;
+      console.log(`PLATE-SCORE ${region.id} ${(sc.overall * 100).toFixed(0)}% against the comp region (structure ${(sc.structure * 100).toFixed(0)}%, color ${(sc.color * 100).toFixed(0)}%, detail ${(sc.detail * 100).toFixed(0)}%)`);
+    }
+    for (const reason of gate.reasons) console.log(`PLATE-WARN ${reason}`);
+    if (!gate.score) {
+      console.error(`generate-image: no score for ${out}; the plates gate refuses it as it stands.`);
+      process.exit(1);
+    }
+    const scoreMin = arg('min') ? parseFloat(arg('min')) : null;
+    if (scoreMin != null && gate.score.overall < scoreMin) {
+      console.log(`PLATE-REJECTED below --min ${(scoreMin * 100).toFixed(0)}%`);
+      process.exit(3);
+    }
+    if (gate.reasons.length) {
+      console.error(`generate-image: ${out} does not pass the plates gate; open it beside ${refPath} and regenerate before building on it.`);
+      process.exit(2);
+    }
+    process.exit(0);
+  }
   if (process.env.IMPECCABLE_IMAGE_GEN_FAKE) {
     const up = resize(ref, ref.width * 2, ref.height * 2);
     fs.writeFileSync(out, encodePng(up, { text: { 'impeccable:prompt': prompt, 'impeccable:fake': '1' } }));

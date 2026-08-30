@@ -30,7 +30,7 @@ The first argument is the action. Defaults to `status`.
 | `ignore-value <id> <value> [--shared] [--reason "..."]` | Append a rule/value suppression to shared `.impeccable/config.json`. |
 | `ignore-value <id> <value> --local [--reason "..."]` | Append a private rule/value suppression to `.impeccable/config.local.json`. |
 | `ignore-value <id> "*" --file <glob> [--file <glob>...]` | Turn one rule off in matching files only, leaving it active everywhere else. Repeat `--file`, or use `--file=<glob>` / `--files=<glob>`. A bare `"*"` with no `--file` is refused: use `ignore-rule <id>` if you really mean project-wide. |
-| `reset` | Delete the project config, dedup cache, and pending queue. |
+| `reset` | Unwire the hook's entries from every provider manifest `on` installs, the committed Copilot file included, then delete the project config, dedup cache, and pending queue. Manifests come first because a deleted config falls back to enabled: if one cannot be rewritten or does not parse, `reset` reports it, exits non-zero, and leaves the config alone so a kill switch written by `off` survives. A team-shared `settings.json` is still never written; when it carries an entry, `reset` says so and leaves the config in place instead of claiming a clean reset. |
 
 ## Flow
 
@@ -38,7 +38,7 @@ The first argument is the action. Defaults to `status`.
 2. Invoke the admin script and pass the user's output through verbatim:
 
    ```bash
-   node .claude/skills/impeccable/scripts/hook-admin.mjs <action> [args...]
+   node "<skill-base-dir>/scripts/hook-admin.mjs" <action> [args...]
    ```
 
 3. If `<action>` is `off`, follow up with a one-line note: "Done. New edits will not trigger the design hook in this project until you run `/impeccable hooks on`."
@@ -68,32 +68,32 @@ Prefer the narrowest exception:
 Example value-specific exception:
 
 ```bash
-node .claude/skills/impeccable/scripts/hook-admin.mjs ignore-value overused-font Inter --shared --reason "User confirmed Inter is intentional"
+node "<skill-base-dir>/scripts/hook-admin.mjs" ignore-value overused-font Inter --shared --reason "User confirmed Inter is intentional"
 ```
 
 Example self-served exception, with the evidence named:
 
 ```bash
-node .claude/skills/impeccable/scripts/hook-admin.mjs ignore-value bounce-easing bounce-ball --shared --reason "Agent: literal ball-bounce animation, bounce easing is the subject"
+node "<skill-base-dir>/scripts/hook-admin.mjs" ignore-value bounce-easing bounce-ball --shared --reason "Agent: literal ball-bounce animation, bounce easing is the subject"
 ```
 
 Example whole-rule font exception:
 
 ```bash
-node .claude/skills/impeccable/scripts/hook-admin.mjs ignore-rule overused-font --all-values --reason "User asked to ignore overused fonts generally"
+node "<skill-base-dir>/scripts/hook-admin.mjs" ignore-rule overused-font --all-values --reason "User asked to ignore overused fonts generally"
 ```
 
 Example one-rule-in-one-file exception, for a file that is still worth reviewing
 for everything else:
 
 ```bash
-node .claude/skills/impeccable/scripts/hook-admin.mjs ignore-value design-system-font-size "*" --file "src/overlay/widget.js" --reason "Injected widget builds its own type scale; DESIGN.md's ramp describes the site"
+node "<skill-base-dir>/scripts/hook-admin.mjs" ignore-value design-system-font-size "*" --file "src/overlay/widget.js" --reason "Injected widget builds its own type scale; DESIGN.md's ramp describes the site"
 ```
 
 Example whole-file exception, for a file that is out of scope entirely:
 
 ```bash
-node .claude/skills/impeccable/scripts/hook-admin.mjs ignore-file "src/legacy/Card.tsx"
+node "<skill-base-dir>/scripts/hook-admin.mjs" ignore-file "src/legacy/Card.tsx"
 ```
 
 ## Constraints

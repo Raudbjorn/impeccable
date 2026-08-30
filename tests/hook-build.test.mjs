@@ -185,6 +185,16 @@ describe('hook manifest builders', () => {
     // back out on its own side.
     assert.match(source, /spawnSync\(process\.execPath, \[HOOK_SCRIPT\]/);
     assert.match(source, /hookSpecificOutput\?\.additionalContext/);
+    // ToolResultEventResult.content is a replacement content-block array
+    // (packages/coding-agent/src/extensibility/shared-events.ts): the runner
+    // takes `result.content ?? tool.content`, so returning a bare string both
+    // discarded the edit's own output and handed back an unrenderable shape.
+    assert.match(source, /content: \[\.\.\.blocks, \{ type: "text", text \}\]/);
+    assert.doesNotMatch(source, /return \{ content: text \}/);
+    // SessionStopEventResult only reaches a continuation when `continue: true`
+    // or a blocking decision accompanies the context; additionalContext on its
+    // own is dropped as the session settles.
+    assert.match(source, /return \{ continue: true, additionalContext: text \}/);
   });
 
   it('probes the node runtime everywhere, and notices only where a channel exists', () => {

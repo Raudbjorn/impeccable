@@ -4,6 +4,7 @@ export function browserOpenCommand(url, {
   platform = process.platform,
   comspec = process.env.ComSpec || process.env.COMSPEC || 'cmd.exe',
 } = {}) {
+
   return { command: 'xdg-open', args: [url] };
 }
 

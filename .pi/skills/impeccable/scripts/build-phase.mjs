@@ -255,6 +255,69 @@ export function plateVerdict(region, score) {
   return { ok: reasons.length === 0, reasons, effective: score.overall };
 }
 
+/**
+ * The whole per-plate gate for one raster region: existence, decodability, the
+ * size floor, the plate verdict, and the comp-crop refusal. Shared by
+ * gatePlates() and by generate-image.mjs --score-only, so an asset producer's
+ * reported line and the parent's gate line cannot disagree. `file` overrides
+ * the region's plate path for a run that scored a plate written elsewhere.
+ */
+export function gateOnePlate(spec, comp, r, { file = r.plate } = {}) {
+  const reasons = [];
+  if (!file || !fs.existsSync(file)) {
+    reasons.push(`plate missing for ${r.id}: expected ${file || '(no path)'}; produce it from comp-spec.mjs --crop ${r.id} with generate-image.mjs --plate`);
+    return { reasons, score: null, plate: { id: r.id, file, status: 'missing' } };
+  }
+  let img;
+  try { img = decodePng(fs.readFileSync(file)); } catch (e) {
+    reasons.push(`plate ${file} is not a decodable PNG: ${e.message}`);
+    return { reasons, score: null, plate: { id: r.id, file, status: 'unreadable' } };
+  }
+  // A texture tiles, so it owes no size floor and no structural match:
+  // it is judged on palette and grain only. Every other plate must be at
+  // least 1.5x the region (capped at 1536px, the largest size the
+  // generators emit; past that the region is a full-bleed field the page
+  // scales) and read as the region under object-fit: cover.
+  const isTexture = r.kind === 'texture';
+  const minW = Math.min(1536, r.px.w * 1.5);
+  if (!isTexture && img.width < minW) reasons.push(`plate ${file} is ${img.width}px wide; the comp region is ${r.px.w}px and a shipping plate needs at least ${Math.round(minW)}px. Regenerate at asset size, do not crop the comp.`);
+  let score = null;
+  if (comp) {
+    const ref = plateReference(comp, spec, r);
+    // a keyed (alpha) plate ships over the page ground: score it composited
+    // over the region's sampled ground, the way it will show
+    let build = img;
+    let transparent = 0; for (let i = 3; i < img.data.length; i += 4) if (img.data[i] < 128) transparent++;
+    if (transparent > (img.data.length / 4) * 0.05) {
+      const g = (r.palette && r.palette[0] && r.palette[0].hex) || '#ffffff';
+      const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(g);
+      const ground = m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16), 255] : [255, 255, 255, 255];
+      const over = createImage(img.width, img.height, ground);
+      blit(over, img, 0, 0);
+      build = over;
+    }
+    const res = compare({ comp: ref, build, align: 'cover', spec: null, kind: r.kind });
+    score = res.whole;
+    const v = plateVerdict(r, score);
+    for (const reason of v.reasons) reasons.push(`plate ${file}: ${reason}`);
+    // A plate that matches the comp crop almost exactly is the comp crop,
+    // upscaled past the size floor: the comp's grain, its neighbours'
+    // edges, and its resolution ship as the artwork. Crops are never
+    // plates; the crop is the reference the plate is generated from.
+    // A fake-mode plate (offline pipelines, eval fixtures) IS the crop by
+    // design and says so in its tEXt; the identity refusal is for models
+    // shipping the comp's pixels as artwork, not for the deterministic
+    // stand-in.
+    const isFake = img.text && img.text['impeccable:fake'] === '1';
+    if (!isTexture && !isFake) {
+      const raw = crop(comp, r.px.x, r.px.y, r.px.w, r.px.h);
+      const same = structureScore(raw, resize(img, raw.width, raw.height));
+      if (same >= 0.95) reasons.push(`plate ${file} is the comp crop of region ${r.id} (structure ${(same * 100).toFixed(0)}% against the raw region, a resample of the same pixels): a crop of the comp is never a plate; generate the plate from the crop as reference (generate-image.mjs --plate ${r.id})`);
+    }
+  }
+  return { reasons, score, plate: { id: r.id, file, status: 'ok', size: `${img.width}x${img.height}`, score: score ? score.overall : null } };
+}
+
 export function gatePlates(state, { specPath = SPEC_PATH } = {}) {
   const spec = loadSpec(specPath);
   if (!spec) return { ok: false, reasons: ['no spec'] };
@@ -264,53 +327,9 @@ export function gatePlates(state, { specPath = SPEC_PATH } = {}) {
   try { comp = loadRaster(spec.comp).image; } catch { /* scored without the comp crop below */ }
   const reasons = [], plates = [];
   for (const r of rasterRegions) {
-    const file = r.plate;
-    if (!file || !fs.existsSync(file)) { reasons.push(`plate missing for ${r.id}: expected ${file || '(no path)'}; produce it from comp-spec.mjs --crop ${r.id} with generate-image.mjs --plate`); plates.push({ id: r.id, file, status: 'missing' }); continue; }
-    let img;
-    try { img = decodePng(fs.readFileSync(file)); } catch (e) { reasons.push(`plate ${file} is not a decodable PNG: ${e.message}`); plates.push({ id: r.id, file, status: 'unreadable' }); continue; }
-    // A texture tiles, so it owes no size floor and no structural match:
-    // it is judged on palette and grain only. Every other plate must be at
-    // least 1.5x the region (capped at 1536px, the largest size the
-    // generators emit; past that the region is a full-bleed field the page
-    // scales) and read as the region under object-fit: cover.
-    const isTexture = r.kind === 'texture';
-    const minW = Math.min(1536, r.px.w * 1.5);
-    if (!isTexture && img.width < minW) reasons.push(`plate ${file} is ${img.width}px wide; the comp region is ${r.px.w}px and a shipping plate needs at least ${Math.round(minW)}px. Regenerate at asset size, do not crop the comp.`);
-    let score = null;
-    if (comp) {
-      const ref = plateReference(comp, spec, r);
-      // a keyed (alpha) plate ships over the page ground: score it composited
-      // over the region's sampled ground, the way it will show
-      let build = img;
-      let transparent = 0; for (let i = 3; i < img.data.length; i += 4) if (img.data[i] < 128) transparent++;
-      if (transparent > (img.data.length / 4) * 0.05) {
-        const g = (r.palette && r.palette[0] && r.palette[0].hex) || '#ffffff';
-        const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(g);
-        const ground = m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16), 255] : [255, 255, 255, 255];
-        const over = createImage(img.width, img.height, ground);
-        blit(over, img, 0, 0);
-        build = over;
-      }
-      const res = compare({ comp: ref, build, align: 'cover', spec: null, kind: r.kind });
-      score = res.whole;
-      const v = plateVerdict(r, score);
-      for (const reason of v.reasons) reasons.push(`plate ${file}: ${reason}`);
-      // A plate that matches the comp crop almost exactly is the comp crop,
-      // upscaled past the size floor: the comp's grain, its neighbours'
-      // edges, and its resolution ship as the artwork. Crops are never
-      // plates; the crop is the reference the plate is generated from.
-      // A fake-mode plate (offline pipelines, eval fixtures) IS the crop by
-      // design and says so in its tEXt; the identity refusal is for models
-      // shipping the comp's pixels as artwork, not for the deterministic
-      // stand-in.
-      const isFake = img.text && img.text['impeccable:fake'] === '1';
-      if (!isTexture && !isFake) {
-        const raw = crop(comp, r.px.x, r.px.y, r.px.w, r.px.h);
-        const same = structureScore(raw, resize(img, raw.width, raw.height));
-        if (same >= 0.95) reasons.push(`plate ${file} is the comp crop of region ${r.id} (structure ${(same * 100).toFixed(0)}% against the raw region, a resample of the same pixels): a crop of the comp is never a plate; generate the plate from the crop as reference (generate-image.mjs --plate ${r.id})`);
-      }
-    }
-    plates.push({ id: r.id, file, status: 'ok', size: `${img.width}x${img.height}`, score: score ? score.overall : null });
+    const one = gateOnePlate(spec, comp, r);
+    reasons.push(...one.reasons);
+    plates.push(one.plate);
   }
   return { ok: reasons.length === 0, reasons, summary: `${plates.filter((p) => p.status === 'ok').length}/${rasterRegions.length} plates`, plates };
 }
