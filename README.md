@@ -378,6 +378,17 @@ Full detector docs: [impeccable.style/docs/detector](https://impeccable.style/do
 - [Mistral Vibe](https://docs.mistral.ai/vibe/code/overview)
 - [Google Antigravity](https://antigravity.google)
 
+## Community & Ecosystem
+
+Join the community and ecosystem conversations:
+
+- GitHub Discussions: file bugs, request features, and help newcomers.
+- [Impeccable on npm](https://www.npmjs.com/package/impeccable): grab the CLI, follow releases, and star the package.
+- Follow @pbakaus on Twitter for release notes, sample lint reports, and video highlights of new rules.
+
+## Contributing
+
+See [DEVELOP.md](docs/DEVELOP.md) for contributor guidelines and build instructions.
 
 ## License
 
@@ -386,5 +397,3 @@ Apache 2.0. See [LICENSE](LICENSE).
 ---
 
 Created by [Paul Bakaus](https://www.paulbakaus.com)
-
-Improved by me.
