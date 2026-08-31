@@ -15,6 +15,7 @@ import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import {
   rewritePluginMarkdown,
   rewritePluginAgentMarkdown,
@@ -207,6 +208,37 @@ describe('verifyPluginAgentRewrite', () => {
       + AGENT_EMBED_FALLBACK,
     );
     expect(() => verifyPluginAgentRewrite(file)).toThrow(/truncated script path/);
+  });
+
+  test('asset producer keeps cwd at the project root (no cd into scripts path)', () => {
+    // The asset producer (and any future agent) must use the resolved
+    // scripts path only as the prefix of every `node ...` script argument.
+    // A `cd` (or any other cwd change) into the plugin cache would make
+    // `.impeccable/...` paths and comp/plate file locations resolve under
+    // the plugin directory instead of the consuming project root, which
+    // would silently break every script the agent runs. Read the real
+    // source agent file (after the rewrite pipeline runs, the committed
+    // plugin copy carries the same contract): the input-contract paragraph
+    // must say so verbatim, and the step list must not say to cd.
+    const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+    const srcPath = path.join(ROOT, 'skill/agents/impeccable-asset-producer.md');
+    const committedPath = path.join(ROOT, 'plugin/agents/impeccable-asset-producer.md');
+    expect(fs.existsSync(srcPath)).toBe(true);
+    const src = fs.readFileSync(srcPath, 'utf-8');
+    expect(src).toContain('only as the prefix of every `node ...` script argument');
+    expect(src).toContain('do not `cd` into it');
+    expect(src).toContain('stays at the consuming project root');
+    expect(src).not.toMatch(/Run every `node ...` command below from that scripts path/);
+    // The committed plugin copy carries the same cwd contract after the
+    // rewrite pipeline runs; the source agent file is the input and the
+    // committed copy is the artifact, and they must agree.
+    if (fs.existsSync(committedPath)) {
+      const committed = fs.readFileSync(committedPath, 'utf-8');
+      expect(committed).toContain('only as the prefix of every `node ...` script argument');
+      expect(committed).toContain('do not `cd` into it');
+      expect(committed).toContain('stays at the consuming project root');
+      expect(committed).not.toMatch(/Run every `node ...` command below from that scripts path/);
+    }
   });
 });
 
