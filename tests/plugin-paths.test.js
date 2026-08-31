@@ -231,14 +231,16 @@ describe('verifyPluginAgentRewrite', () => {
     expect(src).not.toMatch(/Run every `node ...` command below from that scripts path/);
     // The committed plugin copy carries the same cwd contract after the
     // rewrite pipeline runs; the source agent file is the input and the
-    // committed copy is the artifact, and they must agree.
-    if (fs.existsSync(committedPath)) {
-      const committed = fs.readFileSync(committedPath, 'utf-8');
-      expect(committed).toContain('only as the prefix of every `node ...` script argument');
-      expect(committed).toContain('do not `cd` into it');
-      expect(committed).toContain('stays at the consuming project root');
-      expect(committed).not.toMatch(/Run every `node ...` command below from that scripts path/);
-    }
+    // committed copy is the artifact, and they MUST agree. If the
+    // committed copy is ever missing, that is itself a contract failure
+    // (a generated-output drift must not be silently absorbed) — assert
+    // its existence up front, then assert the same wording against both.
+    expect(fs.existsSync(committedPath)).toBe(true);
+    const committed = fs.readFileSync(committedPath, 'utf-8');
+    expect(committed).toContain('only as the prefix of every `node ...` script argument');
+    expect(committed).toContain('do not `cd` into it');
+    expect(committed).toContain('stays at the consuming project root');
+    expect(committed).not.toMatch(/Run every `node ...` command below from that scripts path/);
   });
 });
 
