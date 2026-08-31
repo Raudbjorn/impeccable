@@ -240,3 +240,31 @@ it('loadRaster reads a WebP comp through a sibling .png cache instead of rewriti
   assert.ok(fs.readFileSync(src).equals(before), 'source webp bytes untouched');
   assert.ok(fs.existsSync(`${src}.png`), 'sibling cache written');
 });
+
+it('loadRaster reconverts when the source is newer than its cached .png', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'raster-stale-'));
+  const src = path.join(dir, 'comp.webp');
+  const cache = `${src}.png`;
+  const stalePng = encodePng((() => { const i = createImage(4, 4); fillRect(i, 0, 0, 4, 4, [10, 10, 10, 255]); return i; })());
+  fs.writeFileSync(cache, stalePng);
+  const old = new Date(Date.now() - 60_000);
+  fs.utimesSync(cache, old, old);
+  fs.writeFileSync(src, Buffer.from('not actually webp bytes'));
+  // Source mtime defaults to now, after the backdated cache, so the cache
+  // must be rejected as stale; with no real converter for these fake bytes
+  // on this machine, that surfaces as a conversion error, never a silent
+  // return of the stale cache's image.
+  assert.throws(() => loadRaster(src), /is not a PNG and no converter/);
+});
+
+it('loadRaster still trusts a cache no older than its source', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'raster-fresh-'));
+  const src = path.join(dir, 'comp.webp');
+  const cache = `${src}.png`;
+  fs.writeFileSync(src, Buffer.from('not actually webp bytes'));
+  const freshPng = encodePng((() => { const i = createImage(6, 6); fillRect(i, 0, 0, 6, 6, [20, 20, 20, 255]); return i; })());
+  fs.writeFileSync(cache, freshPng);
+  const { image, path: decoded } = loadRaster(src);
+  assert.equal(image.width, 6);
+  assert.equal(decoded, cache);
+});

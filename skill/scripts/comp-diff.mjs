@@ -183,7 +183,11 @@ export function resolveRegions(comp, spec) {
     for (const r of spec.regions) {
       const box = r.box || r;
       if ([box.x, box.y, box.w, box.h].some((v) => typeof v !== 'number')) continue;
-      regions.push({ id: r.id || `region-${regions.length + 1}`, x: box.x, y: box.y, w: box.w, h: box.h, kind: r.kind || null });
+      // id becomes a region-crop filename below; a spec from outside
+      // comp-spec.mjs's own validation could carry one that isn't safe as
+      // one ("/" or ".." would write outside the regions output dir).
+      const safeId = typeof r.id === 'string' && /^[A-Za-z0-9_-]+$/.test(r.id) ? r.id : `region-${regions.length + 1}`;
+      regions.push({ id: safeId, x: box.x, y: box.y, w: box.w, h: box.h, kind: r.kind || null });
     }
     if (regions.length) return regions;
   }

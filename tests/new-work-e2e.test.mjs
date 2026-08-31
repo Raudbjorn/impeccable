@@ -167,6 +167,36 @@ describe('new-work-e2e: serve-question decision page', () => {
     }
   });
 
+  it('a rejected /answer POST (stale key) shows the page is out of date, never "recorded"', async () => {
+    const cwd = makeWorkspace();
+    const key = 'stale-key';
+    const payload = {
+      title: 'Choose the visual world',
+      options: [
+        { id: 'assigned', label: 'First Hand', kicker: 'THE ROLL' },
+        { id: 'challenger-a', label: 'Alt One' },
+      ],
+    };
+    const { url } = await startDaemon(cwd, payload, key);
+    try {
+      const page = await browser.newPage();
+      // fetch() only rejects on a transport failure, never on an HTTP error
+      // status, so the only way to reproduce a stale-key rejection
+      // deterministically is to intercept the POST and answer with the same
+      // 401 the server itself would return for a mismatched key.
+      await page.route('**/answer*', (route) => route.fulfill({ status: 401, body: '' }));
+      await page.goto(url);
+      await page.click('button.choose');
+      const doneText = await page.locator('.done').textContent();
+      assert.match(doneText, /out of date/i, `expected the out-of-date notice, got: ${doneText}`);
+      assert.doesNotMatch(doneText, /Choice recorded/i, 'a rejected POST must never render as accepted');
+      await page.close();
+    } finally {
+      await stopDaemon(cwd, key);
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('(b) re-roll with steer keeps the server alive; --update re-deals; the next pick is terminal', async () => {
     const cwd = makeWorkspace();
     const key = 'reroll';

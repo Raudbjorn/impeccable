@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -526,6 +526,14 @@ describe('init gate', () => {
     assert.match(result.stdout, /NO_PRODUCT_MD/);
     assert.match(result.stdout, /init/);
     assert.doesNotMatch(result.stdout, /ASSIGNED INDEX/);
+  });
+
+  it('leaves no pending marker behind when the init gate blocks the deal', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'concept-seed-noproduct-marker-'));
+    const result = gateRun(dir);
+    assert.equal(result.status, 1);
+    assert.equal(existsSync(path.join(dir, '.impeccable', 'build', 'pending.json')), false,
+      'a blocked deal must not leave a marker the next context.mjs run reads as a phantom COMP_ROUND_OPEN');
   });
 
   it('deals normally once PRODUCT.md exists', () => {
