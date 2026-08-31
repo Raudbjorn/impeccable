@@ -10,7 +10,7 @@
  * gracefully when impeccable.style is unreachable.
  */
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
-import { execSync, execFileSync } from 'child_process';
+import { execSync, execFileSync, spawnSync } from 'child_process';
 import { mkdtempSync, existsSync, readdirSync, readFileSync, mkdirSync, writeFileSync, rmSync, lstatSync, realpathSync, readlinkSync, symlinkSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { buildOmpHookModule } from '../scripts/lib/transformers/hooks.js';
@@ -2191,6 +2191,41 @@ describe('copyProviderHooks: the oh-my-pi hook module', () => {
     copyProviderHooks(bundleDir, tmp, ['.omp'], { skillRoot: tmp, force: true });
     expect(readFileSync(`${dest}.bak`, 'utf8')).toBe(foreign);
     expect(readFileSync(dest, 'utf8')).toContain('impeccableHook');
+
+    rmSync(tmp, { recursive: true, force: true });
+  });
+});
+
+describe('install diagnostics: a bundle without the requested provider', () => {
+  // The bare "the bundle had no variants for X" never said WHICH bundle was
+  // consulted. Installing from a checkout still reads the published bundle
+  // unless IMPECCABLE_BUNDLE_PATH says otherwise, so a provider that exists on
+  // the branch but is not released yet reads as a broken install rather than a
+  // stale bundle. Observed live: the walkthrough's first command failed this
+  // way and the message gave the reader nothing to act on.
+  test('names the bundle, lists what it carries, and does not suggest itself', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'imp-nobundle-'));
+    const bundle = join(tmp, 'bundle');
+    mkdirSync(join(bundle, '.claude', 'skills'), { recursive: true });
+    mkdirSync(join(bundle, '.gemini', 'skills'), { recursive: true });
+    const project = join(tmp, 'project');
+    mkdirSync(project, { recursive: true });
+
+    const res = spawnSync(process.execPath, [CLI, 'skills', 'install', '--providers', 'omp', '-y'], {
+      cwd: project,
+      env: { ...process.env, IMPECCABLE_BUNDLE_PATH: bundle },
+      encoding: 'utf8',
+    });
+
+    expect(res.status).toBe(1);
+    const output = `${res.stdout}${res.stderr}`;
+    expect(output).toContain(bundle);
+    expect(output).toContain('has no variants for .omp');
+    expect(output).toContain('It carries: .claude, .gemini.');
+    // The local-bundle hint would be circular advice here.
+    expect(output).not.toContain('IMPECCABLE_BUNDLE_PATH=<repo>');
+    // And it must not claim a download it did not make.
+    expect(output).not.toContain('Downloading impeccable skills');
 
     rmSync(tmp, { recursive: true, force: true });
   });

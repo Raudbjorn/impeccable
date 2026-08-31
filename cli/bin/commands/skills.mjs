@@ -575,6 +575,42 @@ async function extractZip(zipPath, targetDir) {
  * Download the universal bundle to a temp dir and return its path.
  * Caller is responsible for cleanup.
  */
+/**
+ * Explain a bundle that does not carry the providers asked for.
+ *
+ * The bare "no variants for X" told the user nothing about WHICH bundle was
+ * consulted. Installing from a checkout still downloads the published bundle
+ * unless IMPECCABLE_BUNDLE_PATH says otherwise, so a provider supported on the
+ * branch but not yet released reads as a broken install rather than a stale
+ * bundle. Name the source and list what it did contain.
+ */
+function describeMissingVariants(bundleDir, missing) {
+  const local = process.env.IMPECCABLE_BUNDLE_PATH;
+  const origin = local
+    ? `the local bundle at ${local}`
+    : `the published bundle from ${API_BASE}`;
+
+  let available = [];
+  try {
+    available = readdirSync(bundleDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && existsSync(join(bundleDir, entry.name, 'skills')))
+      .map((entry) => entry.name)
+      .sort();
+  } catch { /* fall through to the shorter message */ }
+
+  const lines = [`Nothing was installed: ${origin} has no variants for ${missing.join(', ')}.`];
+  if (available.length > 0) {
+    lines.push(`It carries: ${available.join(', ')}.`);
+  }
+  if (!local) {
+    lines.push('If you are testing a provider that has not been released yet, build it and point the installer at it:');
+    lines.push('  bun run build:release');
+    const spelled = missing.map((name) => name.replace(/^\./, '')).join(',');
+    lines.push(`  IMPECCABLE_BUNDLE_PATH=<repo>/dist/universal npx impeccable skills install --providers ${spelled}`);
+  }
+  return lines.join('\n');
+}
+
 async function downloadAndExtractBundle() {
   const localBundle = process.env.IMPECCABLE_BUNDLE_PATH;
   if (localBundle) return copyOrExtractLocalBundle(localBundle);
@@ -1927,7 +1963,7 @@ async function install(flags) {
       if (!updateCheckSkipped && missingSelectedTargets.length > 0) {
         freshWritten = copyProviderSkills(bundleDir, installRoot, missingSelectedTargets, { scope });
         if (freshWritten === 0) {
-          console.error(`Nothing was installed: the bundle had no variants for ${missingSelectedTargets.join(', ')}.`);
+          console.error(describeMissingVariants(bundleDir, missingSelectedTargets));
           process.exit(1);
         }
         console.log(`Installed impeccable into: ${missingSelectedTargets.join(', ')} (${scope === 'user' ? 'global' : 'project'})`);
@@ -1971,7 +2007,9 @@ async function install(flags) {
 
   const wantHooks = installHooks && await decideHookInstall(hookRoot, targets, { yes });
 
-  console.log('\nDownloading impeccable skills...');
+  console.log(process.env.IMPECCABLE_BUNDLE_PATH
+    ? `\nUsing local bundle at ${process.env.IMPECCABLE_BUNDLE_PATH}...`
+    : '\nDownloading impeccable skills...');
   let bundleDir;
   try {
     bundleDir = await downloadAndExtractBundle();
@@ -1996,10 +2034,13 @@ async function install(flags) {
     console.error(`Install failed: ${e.message}`);
     process.exit(1);
   }
+  // Describe the bundle before deleting it: the diagnostic lists what it did
+  // carry, which is the whole point of the message.
+  const missingVariantsMessage = written === 0 ? describeMissingVariants(bundleDir, targets) : null;
   rmSync(bundleDir, { recursive: true, force: true });
 
   if (written === 0) {
-    console.error(`Nothing was installed: the bundle had no variants for ${targets.join(', ')}.`);
+    console.error(missingVariantsMessage);
     process.exit(1);
   }
   console.log(`Installed impeccable into: ${targets.join(', ')} (${scope === 'user' ? 'global' : 'project'})`);

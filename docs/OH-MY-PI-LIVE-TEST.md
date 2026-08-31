@@ -35,10 +35,13 @@ git log --oneline -1          # expect the oh-my-pi integration branch
 
 **Install from the local build, not the published bundle.** `skills install`
 downloads from impeccable.style by default, and the published bundle has no
-`.omp` variant yet, so a plain install fails with *"the bundle had no variants
-for .omp"*. Every install command below sets `IMPECCABLE_BUNDLE_PATH` to point
-at the freshly built bundle instead. That stops being necessary once a release
-ships with oh-my-pi support.
+`.omp` variant yet, so a plain install fails. Every install command below sets
+`IMPECCABLE_BUNDLE_PATH` at the freshly built bundle instead. That stops being
+necessary once a release ships with oh-my-pi support.
+
+If you forget, the installer now says so rather than leaving you to guess: it
+names the bundle it consulted, lists the variants that bundle does carry, and
+prints the `IMPECCABLE_BUNDLE_PATH` command to use instead.
 
 **The hook runs degraded, by design.** Skill scripts ship dependency-free, so
 `hook.mjs` has no `htmlparser2` and falls back to regex matching. It says so on
