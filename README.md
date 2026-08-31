@@ -104,7 +104,7 @@ From the root of your project, run:
 npx impeccable install
 ```
 
-This shows the harness folders it detected (for example `~/.claude`, `~/.codex`, or project-local `.gemini`), lets you keep the detected set or customize providers, then asks whether to install into the current project or globally. Use `--providers=claude,codex,gemini` and `--scope=project|global` to skip those choices in scripts. On Claude Code, Codex, and GitHub Copilot, it also installs the provider-native hook manifest for the current project. Works with Claude Code, Gemini CLI, Codex CLI, and every other supported tool. Reload your harness afterward.
+This shows the harness folders it detected (for example `~/.claude`, `~/.codex`, `~/.veto`, or project-local `.gemini`), lets you keep the detected set or customize providers, then asks whether to install into the current project or globally. Use `--providers=claude,codex,gemini,veto` and `--scope=project|global` to skip those choices in scripts. On Claude Code, Codex, and GitHub Copilot, it also installs the provider-native hook manifest for the current project. Veto receives the packaged skill under `~/.veto/skills/` and does not run native Impeccable edit hooks. Works with Claude Code, Gemini CLI, Codex CLI, Veto, and every other supported tool. Reload your harness afterward.
 
 To refresh an existing install, run:
 
@@ -127,7 +127,7 @@ git add .gitmodules .impeccable .claude .gemini
 git commit -m "Add Impeccable skills"
 ```
 
-Use the providers your project needs, for example `claude`, `gemini`, `codex`, `github`, `opencode`, `pi`, `vibe`, or `omp`. The command links individual skill folders from `.impeccable/dist/universal/` and leaves existing real skill directories untouched unless you pass `--force`.
+Use the providers your project needs, for example `claude`, `gemini`, `codex`, `github`, `opencode`, `pi`, `vibe`, `omp`, or `veto`. The command links individual skill folders from `.impeccable/dist/universal/` and leaves existing real skill directories untouched unless you pass `--force`.
 
 To update later:
 
@@ -365,6 +365,7 @@ Full detector docs: [impeccable.style/docs/detector](https://impeccable.style/do
 - [Pi](https://pi.dev)
 - [Kiro](https://kiro.dev)
 - [Mistral Vibe](https://docs.mistral.ai/vibe/code/overview)
+- [Veto](https://github.com/oleg-koval/veto)
 - [Google Antigravity](https://antigravity.google)
 - [oh-my-pi](https://omp.sh)
 

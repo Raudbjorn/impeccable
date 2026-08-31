@@ -9,8 +9,8 @@
  */
 
 import { execSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, statSync, lstatSync, unlinkSync, mkdirSync, mkdtempSync, writeFileSync, rmSync, rmdirSync, renameSync, createWriteStream, realpathSync, symlinkSync, readlinkSync, cpSync } from 'node:fs';
-import { join, resolve, dirname, relative, isAbsolute, sep } from 'node:path';
+import { existsSync, readFileSync, readdirSync, statSync, accessSync, constants, lstatSync, unlinkSync, mkdirSync, mkdtempSync, writeFileSync, rmSync, rmdirSync, renameSync, createWriteStream, realpathSync, symlinkSync, readlinkSync, cpSync } from 'node:fs';
+import { join, resolve, dirname, relative, isAbsolute, sep, delimiter } from 'node:path';
 import { createInterface, emitKeypressEvents } from 'node:readline';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -24,7 +24,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const API_BASE = 'https://impeccable.style';
 
 // Provider folder names in project roots
-const PROVIDER_DIRS = ['.claude', '.gemini', '.codex', '.agents', '.agent', '.github', '.pi', '.opencode', '.kiro', '.vibe', '.omp'];
+const PROVIDER_DIRS = ['.claude', '.gemini', '.codex', '.agents', '.agent', '.github', '.pi', '.opencode', '.kiro', '.vibe', '.omp', '.veto'];
 const PROVIDER_ALIASES = {
   agent: '.agent',
   agents: '.agents',
@@ -40,6 +40,7 @@ const PROVIDER_ALIASES = {
   opencode: '.opencode',
   pi: '.pi',
   vibe: '.vibe',
+  veto: '.veto',
 };
 
 const PROVIDER_DISPLAY = {
@@ -53,8 +54,9 @@ const PROVIDER_DISPLAY = {
   '.opencode': { name: 'OpenCode', input: 'opencode' },
   '.pi': { name: 'Pi Coding Agent', input: 'pi' },
   '.vibe': { name: 'Mistral Vibe', input: 'vibe' },
+  '.veto': { name: 'Veto', input: 'veto' },
 };
-const PROVIDER_INPUT_ORDER = ['antigravity', 'claude', 'codex', 'gemini', 'github','kiro', 'omp', 'opencode', 'pi', 'vibe'];
+const PROVIDER_INPUT_ORDER = ['antigravity', 'claude', 'codex', 'gemini', 'github','kiro', 'omp', 'opencode', 'pi', 'vibe', 'veto'];
 
 // OpenCode reads global skills from its config directory, not ~/.opencode:
 // $OPENCODE_CONFIG_DIR, else $XDG_CONFIG_HOME/opencode, else
@@ -98,6 +100,10 @@ const GLOBAL_HARNESS_HINTS = [
   { home: '.pi', provider: '.pi' },
   { home: '.vibe', provider: '.vibe' },
   { home: '.omp', provider: '.omp' },
+  // Veto is a CLI harness whose managed skill directory is ~/.veto/skills.
+  // Require its managed state directory as well as the executable so an
+  // unrelated `veto` binary on PATH does not change project install defaults.
+  { command: 'veto', provider: '.veto' },
 ];
 
 // Last-resort default when nothing is detected: Claude Code + the universal
@@ -591,7 +597,7 @@ async function copyOrExtractLocalBundle(sourceValue) {
  */
 function normalizeForHash(content) {
   return content
-    .replace(/\.(claude|agents|agent|github|gemini|codex|kiro|omp|opencode|pi|vibe)\/skills\//g, '.PROVIDER/skills/');
+    .replace(/\.(claude|agents|agent|github|gemini|codex|kiro|omp|opencode|pi|vibe|veto)\/skills\//g, '.PROVIDER/skills/');
 }
 
 function hashSkillFile(filePath) {
@@ -857,6 +863,25 @@ function userSkillProbePaths(home, harnessDir, provider) {
   ]);
 }
 
+function commandOnPath(command) {
+  const candidates = process.platform === 'win32'
+    ? [`${command}.exe`, `${command}.cmd`, `${command}.bat`]
+    : [command];
+  for (const directory of String(process.env.PATH || '').split(delimiter)) {
+    if (!directory) continue;
+    for (const candidate of candidates) {
+      const path = resolve(directory, candidate);
+      try {
+        if (statSync(path).isFile()) {
+          accessSync(path, constants.X_OK);
+          return path;
+        }
+      } catch {}
+    }
+  }
+  return null;
+}
+
 function collectInstallDetections(root, home = homedir()) {
   const detections = [];
   for (const provider of PROVIDER_DIRS) {
@@ -877,9 +902,14 @@ function collectInstallDetections(root, home = homedir()) {
     const { provider } = hint;
     // A hint is either a fixed dir under home or a resolver for harnesses
     // whose location depends on the environment (OpenCode's config dir).
-    const foundPath = hint.resolve ? hint.resolve(home) : join(home, hint.home);
-    if (!existsSync(foundPath)) continue;
-    const skillProbePaths = hint.resolve
+    const foundPath = hint.command
+      ? commandOnPath(hint.command)
+      : hint.resolve ? hint.resolve(home) : join(home, hint.home);
+    if (!foundPath || (!hint.command && !existsSync(foundPath))) continue;
+    if (hint.command && !existsSync(join(home, '.veto'))) continue;
+    const skillProbePaths = hint.command
+      ? [userProviderSkillsDir(home, provider)]
+      : hint.resolve
       ? uniquePaths([userProviderSkillsDir(home, provider), join(foundPath, 'skills')])
       : userSkillProbePaths(home, hint.home, provider);
     detections.push({
@@ -890,7 +920,7 @@ function collectInstallDetections(root, home = homedir()) {
       installPath: userProviderSkillsDir(home, provider),
       skillProbePaths,
       hasRealSkills: skillProbePaths.some(hasRealSkillEntries),
-      reason: 'user harness folder',
+      reason: hint.command ? 'CLI on PATH' : 'user harness folder',
     });
   }
   return detections;
