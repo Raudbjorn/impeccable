@@ -868,20 +868,21 @@ describe('skills install/update: local universal bundle e2e', () => {
     const bin = join(tmp, 'bin');
     mkdirSync(bin, { recursive: true });
     mkdirSync(join(home, '.veto'), { recursive: true });
-    writeFileSync(join(bin, 'veto'), '#!/bin/sh\n');
+    const vetoCommand = join(bin, process.platform === 'win32' ? 'veto.cmd' : 'veto');
+    writeFileSync(vetoCommand, process.platform === 'win32' ? '@echo off\r\n' : '#!/bin/sh\n');
 
     const previousPath = process.env.PATH;
     process.env.PATH = bin;
     try {
       expect(collectInstallDetections(tmp, home).some((detection) => detection.provider === '.veto')).toBe(false);
 
-      chmodSync(join(bin, 'veto'), 0o755);
+      chmodSync(vetoCommand, 0o755);
       const detections = collectInstallDetections(tmp, home);
       const veto = detections.find((detection) => detection.provider === '.veto');
       expect(veto).toEqual(expect.objectContaining({
         provider: '.veto',
         scope: 'user',
-        foundPath: join(bin, 'veto'),
+        foundPath: vetoCommand,
         installPath: join(home, '.veto', 'skills'),
         reason: 'CLI on PATH',
       }));
