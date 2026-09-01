@@ -52,6 +52,7 @@ export const SUITES = {
         files: [
           'tests/cli-args.test.mjs',
           'tests/concept-seed.test.mjs',
+          'tests/generate-image-embed.test.mjs',
           'tests/comp-diff.test.mjs',
           'tests/build-phase.test.mjs',
           'tests/font-match.test.mjs',
