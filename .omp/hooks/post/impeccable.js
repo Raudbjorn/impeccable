@@ -8,6 +8,7 @@ function runHook(payload) {
   const result = spawnSync(process.execPath, [HOOK_SCRIPT], {
     input: JSON.stringify(payload),
     encoding: "utf8",
+    cwd: payload.cwd,
   });
   if (!result.stdout) return null;
   try {
