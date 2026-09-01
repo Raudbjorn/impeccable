@@ -97,9 +97,14 @@ function directoryHash(directory) {
     for (const entry of readdirSync(current, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
       const entryPath = path.join(current, entry.name);
       const relative = path.relative(directory, entryPath).split(path.sep).join('/');
-      hash.update(relative);
-      if (entry.isDirectory()) addDirectory(entryPath);
-      else if (entry.isFile()) hash.update(readFileSync(entryPath));
+      if (entry.isDirectory()) {
+        hash.update(`D\0${relative}\0`);
+        addDirectory(entryPath);
+      } else if (entry.isFile()) {
+        hash.update(`F\0${relative}\0`);
+        hash.update(readFileSync(entryPath));
+        hash.update('\0');
+      }
     }
   }
 
