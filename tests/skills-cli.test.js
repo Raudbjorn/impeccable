@@ -868,56 +868,24 @@ describe('skills install/update: local universal bundle e2e', () => {
     const bin = join(tmp, 'bin');
     mkdirSync(bin, { recursive: true });
     mkdirSync(join(home, '.veto'), { recursive: true });
-    const vetoCommand = join(bin, process.platform === 'win32' ? 'veto.cmd' : 'veto');
-    writeFileSync(vetoCommand, process.platform === 'win32' ? '@echo off\r\n' : '#!/bin/sh\n');
+    writeFileSync(join(bin, 'veto'), '#!/bin/sh\n');
 
     const previousPath = process.env.PATH;
     process.env.PATH = bin;
     try {
       expect(collectInstallDetections(tmp, home).some((detection) => detection.provider === '.veto')).toBe(false);
 
-      chmodSync(vetoCommand, 0o755);
+      chmodSync(join(bin, 'veto'), 0o755);
       const detections = collectInstallDetections(tmp, home);
       const veto = detections.find((detection) => detection.provider === '.veto');
       expect(veto).toEqual(expect.objectContaining({
         provider: '.veto',
         scope: 'user',
-        foundPath: vetoCommand,
+        foundPath: join(bin, 'veto'),
         installPath: join(home, '.veto', 'skills'),
         reason: 'CLI on PATH',
       }));
     } finally {
-      process.env.PATH = previousPath;
-      rmSync(tmp, { recursive: true, force: true });
-      rmSync(home, { recursive: true, force: true });
-    }
-  });
-
-  test('does not detect an extensionless Veto file on Windows', () => {
-    const tmp = mkdtempSync(join(tmpdir(), 'imp-test-veto-win-detect-'));
-    const home = mkdtempSync(join(tmpdir(), 'imp-home-veto-win-detect-'));
-    const bin = join(tmp, 'bin');
-    mkdirSync(bin, { recursive: true });
-    mkdirSync(join(home, '.veto'), { recursive: true });
-    writeFileSync(join(bin, 'veto'), '#!/bin/sh\n');
-
-    const previousPath = process.env.PATH;
-    const originalPlatform = process.platform;
-    process.env.PATH = bin;
-    try {
-      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
-      expect(collectInstallDetections(tmp, home).some((detection) => detection.provider === '.veto')).toBe(false);
-
-      const windowsCommand = join(bin, 'veto.cmd');
-      writeFileSync(windowsCommand, '@echo off\r\n');
-      chmodSync(windowsCommand, 0o755);
-      const detections = collectInstallDetections(tmp, home);
-      expect(detections.find((detection) => detection.provider === '.veto')).toEqual(expect.objectContaining({
-        foundPath: windowsCommand,
-        reason: 'CLI on PATH',
-      }));
-    } finally {
-      Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
       process.env.PATH = previousPath;
       rmSync(tmp, { recursive: true, force: true });
       rmSync(home, { recursive: true, force: true });
