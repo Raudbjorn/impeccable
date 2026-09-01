@@ -864,20 +864,15 @@ function userSkillProbePaths(home, harnessDir, provider) {
 }
 
 function commandOnPath(command) {
-  const candidates = process.platform === 'win32'
-    ? [`${command}.exe`, `${command}.cmd`, `${command}.bat`]
-    : [command];
   for (const directory of String(process.env.PATH || '').split(delimiter)) {
     if (!directory) continue;
-    for (const candidate of candidates) {
-      const path = resolve(directory, candidate);
-      try {
-        if (statSync(path).isFile()) {
-          accessSync(path, constants.X_OK);
-          return path;
-        }
-      } catch {}
-    }
+    const path = resolve(directory, command);
+    try {
+      if (statSync(path).isFile()) {
+        accessSync(path, constants.X_OK);
+        return path;
+      }
+    } catch {}
   }
   return null;
 }
@@ -1363,20 +1358,12 @@ function hookScriptPathForProvider(skillRoot, provider) {
 // double quotes /bin/sh still expands $(...), backticks, and ${}, and this
 // string is baked into a hook manifest the harness re-executes on every edit,
 // so an install path embedding $(...) would run it repeatedly (issue #476).
-// Windows command forms keep double quotes: cmd.exe treats ' as a literal
-// character and performs no command substitution.
 function shSingleQuote(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`;
 }
 
-function windowsHookCommand(quotedPath) {
-  return `if exist ${quotedPath} (node ${quotedPath} & exit /b)`;
-}
-
-// `quotedPath` carries one pre-quoted form per target shell: { posix, win32 }.
-function guardHookCommand(quotedPath, provider) {
-
-  return `[ ! -f ${quotedPath.posix} ] || node ${quotedPath.posix}`;
+function guardHookCommand(quotedPath) {
+  return `[ ! -f ${quotedPath} ] || node ${quotedPath}`;
 }
 
 // Transform bundled hook commands for the actual install target:
@@ -1387,9 +1374,7 @@ function guardHookCommand(quotedPath, provider) {
 //     when a project hook points at a skill installed elsewhere (--scope=global).
 //   * otherwise — keep the bundle's own ${CLAUDE_PROJECT_DIR}-relative path,
 //     which correctly resolves for a project-scoped install.
-// Either way the command goes through guardHookCommand (POSIX shell guard, or
-// the shell-agnostic node -e guard when installing on Windows), and Codex hook
-// entries additionally get a `commandWindows` sibling for cmd.exe.
+// Either way the command goes through guardHookCommand (POSIX shell guard).
 function rewriteHookCommandsForSkillRoot(value, provider, { skillRoot, absolute }) {
   const hookScript = hookScriptPathForProvider(skillRoot, provider);
   // Providers we don't own a `node "PATH"` command hook for (.github) carry
@@ -1404,13 +1389,11 @@ function rewriteHookCommandsForSkillRoot(value, provider, { skillRoot, absolute 
   // form is a per-provider constant and stays double-quoted, because Claude's
   // ${CLAUDE_PROJECT_DIR} token must keep expanding at hook time.
   const relPath = hookScriptRelPathForProvider(provider);
-  const quotedPath = absolute
-    ? { posix: shSingleQuote(hookScript), win32: JSON.stringify(hookScript) }
-    : { posix: JSON.stringify(relPath), win32: JSON.stringify(relPath) };
+  const quotedPath = absolute ? shSingleQuote(hookScript) : JSON.stringify(relPath);
 
   if (typeof value === 'string') {
     if (!valueHasImpeccableHookMarker(value)) return value;
-    return guardHookCommand(quotedPath, provider);
+    return guardHookCommand(quotedPath);
   }
   if (Array.isArray(value)) {
     return value.map(item => rewriteHookCommandsForSkillRoot(item, provider, { skillRoot, absolute }));
@@ -1419,9 +1402,6 @@ function rewriteHookCommandsForSkillRoot(value, provider, { skillRoot, absolute 
     const next = {};
     for (const [key, child] of Object.entries(value)) {
       next[key] = rewriteHookCommandsForSkillRoot(child, provider, { skillRoot, absolute });
-    }
-    if (provider === '.agents' && typeof value.command === 'string' && valueHasImpeccableHookMarker(value.command)) {
-      next.commandWindows = windowsHookCommand(quotedPath.win32);
     }
     return next;
   }

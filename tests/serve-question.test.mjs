@@ -68,7 +68,6 @@ describe('serve-question', () => {
     const child = new EventEmitter();
     child.unref = () => {};
     assert.equal(openSystemBrowser('http://127.0.0.1:1234/', {
-      platform: 'linux',
       spawnImpl: () => child,
     }), true);
     assert.equal(child.listenerCount('error'), 1);

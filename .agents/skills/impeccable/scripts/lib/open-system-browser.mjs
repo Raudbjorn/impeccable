@@ -1,19 +1,11 @@
 import { spawn } from 'node:child_process';
 
-export function browserOpenCommand(url, {
-  platform = process.platform,
-  comspec = process.env.ComSpec || process.env.COMSPEC || 'cmd.exe',
-} = {}) {
-
+export function browserOpenCommand(url) {
   return { command: 'xdg-open', args: [url] };
 }
 
-export function openSystemBrowser(url, {
-  platform = process.platform,
-  comspec = process.env.ComSpec || process.env.COMSPEC || 'cmd.exe',
-  spawnImpl = spawn,
-} = {}) {
-  const { command, args } = browserOpenCommand(url, { platform, comspec });
+export function openSystemBrowser(url, { spawnImpl = spawn } = {}) {
+  const { command, args } = browserOpenCommand(url);
   try {
     const child = spawnImpl(command, args, { stdio: 'ignore', detached: true });
     child.on('error', () => {});

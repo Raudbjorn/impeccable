@@ -12,7 +12,7 @@ import {
   validateConceptEntry,
 } from '../skill/scripts/lib/concept-catalog.mjs';
 import { readCompositionCatalog } from '../skill/scripts/lib/composition-catalog.mjs';
-import { dealCompositions, pingChosen, renderChallenger, sameMainModulePath, selectApprovedChallengers, selectApprovedComposition, selectApprovedCompositions } from '../skill/scripts/concept-seed.mjs';
+import { dealCompositions, pingChosen, renderChallenger, selectApprovedChallengers, selectApprovedComposition, selectApprovedCompositions } from '../skill/scripts/concept-seed.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCRIPT = path.join(ROOT, 'skill', 'scripts', 'concept-seed.mjs');
@@ -50,22 +50,11 @@ function run(scope, extraArgs = [], env = {}) {
 }
 
 describe('concept seed scopes', () => {
-  it('normalizes Windows drive-letter casing for linked entry paths', () => {
-    assert.equal(
-      sameMainModulePath('C:\\repo\\skill\\scripts\\concept-seed.mjs', 'c:\\repo\\skill\\scripts\\concept-seed.mjs', 'win32'),
-      true
-    );
-    assert.equal(
-      sameMainModulePath('/repo/Skill/scripts/concept-seed.mjs', '/repo/skill/scripts/concept-seed.mjs', 'linux'),
-      false
-    );
-  });
-
   it('runs through a symlinked skill directory', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'concept-seed-symlink-'));
     const linkedSkill = path.join(dir, 'skill');
     try {
-      symlinkSync(path.join(ROOT, 'skill'), linkedSkill, process.platform === 'win32' ? 'junction' : 'dir');
+      symlinkSync(path.join(ROOT, 'skill'), linkedSkill, 'dir');
       const result = spawnSync(process.execPath, [
         path.join(linkedSkill, 'scripts', 'concept-seed.mjs'),
         '--scope', 'surface', '--mode', 'persuade', '--from', 'symlink-test',
