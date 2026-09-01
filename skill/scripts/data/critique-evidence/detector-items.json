@@ -1,7 +1,7 @@
 {
   "meta": {
     "description": "Detector items: each rule from the anti-pattern registry becomes a negative evidence item that participates in the same scoring pool as LLM-collected items.",
-    "source_of_truth": "cli/engine/registry/antipatterns.mjs (ANTIPATTERNS array). When a rule is added or removed there, add or remove the matching row here. No build step enforces this; keep it manual.",
+    "source_of_truth": "cli/engine/registry/antipatterns.mjs (ANTIPATTERNS array). tests/score-evidence.test.mjs asserts every id here still exists in the registry and every registry id has a row here, so drift fails CI. What that test cannot do is add the row for you: when a rule is added, removed, or renamed there, add or remove the matching row here by hand.",
     "impact_scale": {
       "-1": "cosmetic / typography micro-issues (single rule, low-trust signal alone)",
       "-2": "classic AI-slop tells / structural problems (multiple co-occur in slop)",

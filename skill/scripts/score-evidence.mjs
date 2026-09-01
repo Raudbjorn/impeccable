@@ -30,6 +30,17 @@ import * as fs from 'node:fs';
  * here, and tests pin it.
  */
 export function score(items, { center = 50, scale = 8, densityDenom = 20 } = {}) {
+  if (
+    !Number.isFinite(center) || center < 0 || center > 100 ||
+    !Number.isFinite(scale) || scale < 0 ||
+    !Number.isFinite(densityDenom) || densityDenom <= 0
+  ) {
+    throw new Error(
+      `score-evidence: invalid options (center=${center}, scale=${scale}, densityDenom=${densityDenom}). ` +
+        'center must be 0-100, scale must be non-negative, densityDenom must be a positive finite number.',
+    );
+  }
+
   const totalItems = items.length;
 
   if (totalItems === 0) {
@@ -45,15 +56,15 @@ export function score(items, { center = 50, scale = 8, densityDenom = 20 } = {})
   }
 
   for (const item of items) {
-    if (!Number.isFinite(Number(item.impact))) {
+    if (typeof item.impact !== 'number' || !Number.isFinite(item.impact)) {
       throw new Error(
-        `score-evidence: item ${JSON.stringify(item.item_id ?? item)} has a non-numeric impact (${item.impact}). ` +
+        `score-evidence: item ${JSON.stringify(item.item_id ?? item)} has a non-numeric impact (${JSON.stringify(item.impact)}). ` +
           'Every item must carry the impact looked up from its catalog entry before scoring; Stage 1 LLM output does not include one.',
       );
     }
   }
 
-  const netImpact = items.reduce((sum, item) => sum + Number(item.impact), 0);
+  const netImpact = items.reduce((sum, item) => sum + item.impact, 0);
   const normalized = netImpact / Math.sqrt(totalItems);
   const raw = clamp(center + normalized * scale, 0, 100);
   const density = Math.min(1, totalItems / densityDenom);
@@ -77,7 +88,7 @@ function breakdownBy(items, keyOf) {
     const key = keyOf(item);
     if (!buckets[key]) buckets[key] = { items: 0, net_impact: 0 };
     buckets[key].items += 1;
-    buckets[key].net_impact += Number(item.impact);
+    buckets[key].net_impact += item.impact;
   }
   return buckets;
 }
@@ -124,24 +135,32 @@ async function main(argv) {
     return 2;
   }
 
-  const raw = args.input === '-' ? await readStdin() : readFileSync(args.input, 'utf8');
-  const data = JSON.parse(raw);
+  try {
+    const raw = args.input === '-' ? await readStdin() : readFileSync(args.input, 'utf8');
+    const data = JSON.parse(raw);
 
-  let items;
-  if (Array.isArray(data)) items = data;
-  else if (data && Array.isArray(data.items)) items = data.items;
-  else {
-    process.stderr.write('Input must be a list of items or {items: [...]}\n');
+    let items;
+    if (Array.isArray(data)) items = data;
+    else if (data && Array.isArray(data.items)) items = data.items;
+    else {
+      process.stderr.write('score-evidence: input must be a list of items or {items: [...]}\n');
+      return 2;
+    }
+
+    const result = score(items, {
+      center: args.center,
+      scale: args.scale,
+      densityDenom: args.densityDenom,
+    });
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return 0;
+  } catch (err) {
+    // A bad file path, malformed JSON, or an invalid item/option all land here.
+    // A user-invoked CLI should report a short reason and a clean exit code,
+    // not an uncaught-exception stack trace.
+    process.stderr.write(`score-evidence: ${err.message}\n`);
     return 2;
   }
-
-  const result = score(items, {
-    center: args.center,
-    scale: args.scale,
-    densityDenom: args.densityDenom,
-  });
-  process.stdout.write(JSON.stringify(result, null, 2) + '\n');
-  return 0;
 }
 
 function isMainModule() {

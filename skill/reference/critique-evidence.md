@@ -47,7 +47,7 @@ Build `<merged-items.json>` from Stage 1's LLM items plus Stage 2's capped detec
 - The LLM never emits a score. If a Stage 1 prompt asks for an integer, stop.
 - Item IDs must be drawn from the catalog verbatim. Unknown IDs are dropped with a warning, never coerced into the catalog.
 - The detector contributes via items in the same pool, not via a side channel.
-- The three stages run independently. No stage may see another's output.
+- Stages 1 and 2 run independently and never see each other's output. Stage 3 then consumes their merged item pool; this is one-way, nothing Stage 3 computes is fed back into Stage 1 or 2.
 
 ### Output
 
@@ -63,10 +63,10 @@ Build `<merged-items.json>` from Stage 1's LLM items plus Stage 2's capped detec
      "citation": "gradient-text rule, 3 occurrences (capped)"}
   ],
   "score": {
-    "final": 58, "raw": 59.8, "multiplier": 0.825,
-    "total_items": 6, "net_impact": 3,
-    "by_heuristic": { "vss": { "items": 6, "net_impact": 3 } },
-    "by_source": { "llm": { "items": 6, "net_impact": 3 } }
+    "final": 54, "raw": 55.66, "multiplier": 0.775,
+    "total_items": 2, "net_impact": 1,
+    "by_heuristic": { "vss": { "items": 1, "net_impact": 3 }, "amd": { "items": 1, "net_impact": -2 } },
+    "by_source": { "llm": { "items": 1, "net_impact": 3 }, "detector": { "items": 1, "net_impact": -2 } }
   }
 }
 ```

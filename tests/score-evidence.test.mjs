@@ -82,6 +82,25 @@ describe('score()', () => {
     assert.throws(() => score([{ impact: 'high' }]), /non-numeric impact/);
     assert.throws(() => score([{ impact: NaN }]), /non-numeric impact/);
   });
+
+  it('rejects impact values that coerce to a number instead of being genuinely numeric', () => {
+    // Number(null) === 0 and Number('') === 0; a malformed item must not
+    // silently score as a legitimate zero-impact item.
+    assert.throws(() => score([{ impact: null }]), /non-numeric impact/);
+    assert.throws(() => score([{ impact: '' }]), /non-numeric impact/);
+    assert.throws(() => score([{ impact: false }]), /non-numeric impact/);
+    assert.throws(() => score([{ impact: [] }]), /non-numeric impact/);
+  });
+
+  it('rejects invalid center/scale/densityDenom options instead of producing an out-of-range score', () => {
+    const items = [{ impact: -100 }];
+    assert.throws(() => score(items, { densityDenom: -0.1 }), /invalid options/);
+    assert.throws(() => score(items, { densityDenom: 0 }), /invalid options/);
+    assert.throws(() => score(items, { center: -1 }), /invalid options/);
+    assert.throws(() => score(items, { center: 101 }), /invalid options/);
+    assert.throws(() => score(items, { scale: -1 }), /invalid options/);
+    assert.throws(() => score(items, { center: NaN }), /invalid options/);
+  });
 });
 
 describe('score-evidence.mjs CLI', () => {
@@ -136,6 +155,38 @@ describe('score-evidence.mjs CLI', () => {
     const r = spawnSync(process.execPath, [SCRIPT], { encoding: 'utf-8' });
     assert.equal(r.status, 2);
     assert.match(r.stderr, /usage/);
+  });
+
+  it('exits 2 with a clean message (no stack trace) on malformed JSON input', () => {
+    const r = spawnSync(process.execPath, [SCRIPT, '-'], { input: '{not json', encoding: 'utf-8' });
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /^score-evidence: /);
+    assert.doesNotMatch(r.stderr, /at Object|at Module|node:internal/);
+  });
+
+  it('exits 2 with a clean message (no stack trace) on an unreadable file path', () => {
+    const r = spawnSync(process.execPath, [SCRIPT, '/no/such/file.json'], { encoding: 'utf-8' });
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /^score-evidence: /);
+    assert.doesNotMatch(r.stderr, /at Object|at Module|node:internal/);
+  });
+
+  it('exits 2 with a clean message (no stack trace) on a non-finite --center override', () => {
+    const r = spawnSync(process.execPath, [SCRIPT, '-', '--center', 'not-a-number'], {
+      input: JSON.stringify([{ impact: 1 }]),
+      encoding: 'utf-8',
+    });
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /invalid options/);
+  });
+
+  it('exits 2 with a clean message on an item with a non-numeric impact', () => {
+    const r = spawnSync(process.execPath, [SCRIPT, '-'], {
+      input: JSON.stringify([{ impact: null }]),
+      encoding: 'utf-8',
+    });
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /non-numeric impact/);
   });
 });
 
