@@ -180,13 +180,19 @@ const r4 = (v) => Math.round(v * 10000) / 10000;
 export function resolveRegions(comp, spec) {
   const regions = [];
   if (spec && Array.isArray(spec.regions) && spec.regions.length) {
+    const used = new Set();
     for (const r of spec.regions) {
       const box = r.box || r;
       if ([box.x, box.y, box.w, box.h].some((v) => typeof v !== 'number')) continue;
       // id becomes a region-crop filename below; a spec from outside
       // comp-spec.mjs's own validation could carry one that isn't safe as
-      // one ("/" or ".." would write outside the regions output dir).
-      const safeId = typeof r.id === 'string' && /^[A-Za-z0-9_-]+$/.test(r.id) ? r.id : `region-${regions.length + 1}`;
+      // one ("/" or ".." would write outside the regions output dir), or one
+      // that collides with another region's id or fallback -- either writes
+      // over the earlier region's file, so every id assigned here is unique.
+      const candidate = typeof r.id === 'string' && /^[A-Za-z0-9_-]+$/.test(r.id) ? r.id : `region-${regions.length + 1}`;
+      let safeId = candidate, n = 2;
+      while (used.has(safeId)) safeId = `${candidate}-${n++}`;
+      used.add(safeId);
       regions.push({ id: safeId, x: box.x, y: box.y, w: box.w, h: box.h, kind: r.kind || null });
     }
     if (regions.length) return regions;

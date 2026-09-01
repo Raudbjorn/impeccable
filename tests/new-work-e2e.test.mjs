@@ -178,8 +178,9 @@ describe('new-work-e2e: serve-question decision page', () => {
       ],
     };
     const { url } = await startDaemon(cwd, payload, key);
+    let page;
     try {
-      const page = await browser.newPage();
+      page = await browser.newPage();
       // fetch() only rejects on a transport failure, never on an HTTP error
       // status, so the only way to reproduce a stale-key rejection
       // deterministically is to intercept the POST and answer with the same
@@ -190,8 +191,8 @@ describe('new-work-e2e: serve-question decision page', () => {
       const doneText = await page.locator('.done').textContent();
       assert.match(doneText, /out of date/i, `expected the out-of-date notice, got: ${doneText}`);
       assert.doesNotMatch(doneText, /Choice recorded/i, 'a rejected POST must never render as accepted');
-      await page.close();
     } finally {
+      await page?.close();
       await stopDaemon(cwd, key);
       rmSync(cwd, { recursive: true, force: true });
     }

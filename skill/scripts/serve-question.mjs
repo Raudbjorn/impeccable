@@ -1312,24 +1312,32 @@ ${buildPath?.toggle ? `<div id="bp-confirm" role="dialog" aria-modal="true" aria
         else if (!front.querySelector('.media')) front.classList.add('text-only');
       });
     };
-    const apply = async (value) => {
-      set(value);
-      if (value === 'comp') enterComp(); else exitComp();
-      // Fire-and-forget used to mean a rejected request (a page kept open
-      // across a server restart, which regenerates the key) left the visual
-      // flip in place with the server never told: the build never saw the
-      // request, and nothing on screen said so. This can't safely unwind
-      // enterComp()'s generation kickoff, so it surfaces the failure instead
-      // of pretending the flip landed.
+    // Fire-and-forget used to mean a rejected request (a page kept open
+    // across a server restart, which regenerates the key) left the visual
+    // flip in place with the server never told: the build never saw the
+    // request, and nothing on screen said so. This can't safely unwind
+    // enterComp()'s generation kickoff, so it surfaces the failure instead
+    // of pretending the flip landed. Kept as its own async helper, called
+    // without awaiting: apply() itself stays synchronous so a throw from
+    // set()/enterComp()/exitComp() still reaches the click handler directly
+    // instead of becoming an unhandled rejection nothing is listening for.
+    const postBuildPath = async (value) => {
       let res;
       try { res = await fetch('/build-path' + keyQ, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ value }) }); }
       catch { res = null; }
-      if (!res || !res.ok) {
+      if ((!res || !res.ok) && !document.getElementById('bp-stale-warn')) {
         const warn = document.createElement('div');
+        warn.id = 'bp-stale-warn';
+        warn.setAttribute('role', 'alert');
         warn.textContent = 'This page is out of date and the build path change was not recorded. Reload this tab.';
         warn.style.cssText = 'position:fixed;left:0;right:0;bottom:0;padding:10px 16px;background:#3a1414;color:#f5b8b8;font:14px system-ui;text-align:center;z-index:999';
         document.body.appendChild(warn);
       }
+    };
+    const apply = (value) => {
+      set(value);
+      if (value === 'comp') enterComp(); else exitComp();
+      postBuildPath(value);
     };
     // Flipping to comp starts real generation, so it confirms first; the
     // flip back is free and applies immediately.
