@@ -188,41 +188,6 @@ import { dcxAsset } from './assets.js';
     return section;
   };
 
-  const BRAND_PLACEHOLDER_ASSETS = [
-    {
-      src: "/assets/brand/placeholders/hanazono-primary-mark.png",
-      kind: "logo",
-      title: "Primary mark",
-      alt: "Abstract botanical primary mark in textured gold leaf and patina",
-      width: 768,
-      height: 768,
-    },
-    {
-      src: "/assets/brand/placeholders/hanazono-atelier-seal.png",
-      kind: "logo",
-      title: "Atelier seal",
-      alt: "Circular floral atelier seal in textured gold leaf and patina",
-      width: 768,
-      height: 768,
-    },
-    {
-      src: "/assets/brand/placeholders/hanazono-seasonal-moodboard.webp",
-      kind: "moodboard",
-      title: "Seasonal composition",
-      alt: "Editorial moodboard of flowers, handmade paper, gold leaf, and vermilion thread",
-      width: 960,
-      height: 720,
-    },
-    {
-      src: "/assets/brand/placeholders/hanazono-material-reference.webp",
-      kind: "reference",
-      title: "Material direction",
-      alt: "Material study of lacquer, washi paper, gold leaf, and verdigris patina",
-      width: 960,
-      height: 720,
-    },
-  ];
-
   const humanizeAssetName = (value, fallback) => {
     const name = String(value || "")
       .split(/[\\/]/)
@@ -264,10 +229,12 @@ import { dcxAsset } from './assets.js';
   };
 
   const composeBrandAssetsArticle = (article) => {
-    const uploaded = renderedBrandAssets(article);
-    const assets = uploaded.length ? uploaded : BRAND_PLACEHOLDER_ASSETS;
+    const assets = renderedBrandAssets(article);
+    const lede = article.querySelector(":scope > header > .dcx-lede");
+    if (lede) lede.textContent = "Identity, voice, references, taste boundaries, and available assets.";
+    if (!assets.length) return;
+
     const section = createDocumentSection("Brand assets", "");
-    section.dataset.dcxBrandAssets = uploaded.length ? "uploaded" : "placeholder";
 
     const grid = document.createElement("ul");
     grid.className = "dcx-brand-assets-grid";
@@ -311,11 +278,7 @@ import { dcxAsset } from './assets.js';
 
     section.appendChild(grid);
     article.appendChild(section);
-    const lede = article.querySelector(":scope > header > .dcx-lede");
-    if (lede) lede.textContent = "Identity, voice, references, taste boundaries, and available assets.";
   };
-
-  const FALLBACK_CARD_IMAGE = "/assets/components/hanazono-ikebana-card.jpg";
 
   const escapeSpecimen = (value) => String(value).replace(/[&<>"]/g, (character) => (
     { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[character]
@@ -337,14 +300,13 @@ import { dcxAsset } from './assets.js';
   };
 
   /* Cue-first card media: the data layer publishes the run's chosen cue on
-     window.dcxCueImageSrc, and the vendored photo is the fallback, swapped in
-     by the delegated error listener when the cue cannot load. A run whose
-     palette named no cue gets the vendored photo directly. */
-  const componentCardImage = (fallbackAlt, cueAlt) => {
+     window.dcxCueImageSrc. No <img> renders at all when there is no cue, and
+     the delegated error listener's data-dcx-hide-on-error rule collapses the
+     card to text if a real cue URL fails to load. */
+  const componentCardImageTag = (cueAlt) => {
     const cue = typeof window.dcxCueImageSrc === "string" ? window.dcxCueImageSrc : "";
-    const fallbackSrc = dcxAsset(FALLBACK_CARD_IMAGE);
-    if (!cue) return `src="${fallbackSrc}" alt="${fallbackAlt}"`;
-    return `src="${cue}" alt="${cueAlt}" data-dcx-swap-src="${fallbackSrc}" data-dcx-swap-alt="${fallbackAlt}"`;
+    if (!cue) return "";
+    return `<img src="${cue}" alt="${cueAlt}" width="800" height="1200" loading="lazy" decoding="async" data-dcx-hide-on-error>`;
   };
 
   const composeComponentsArticle = (article) => {
@@ -551,7 +513,7 @@ import { dcxAsset } from './assets.js';
           <div class="dcx-component-canvas dcx-component-canvas--cards">
             <div class="dcx-component-demo-grid dcx-component-demo-grid--two">
               <article class="dcx-showcase-card dcx-showcase-card--media">
-                <img ${componentCardImage("Purple flowers arranged in a black ceramic vase", "The visual cue this palette was picked from")} width="800" height="1200" loading="lazy" decoding="async">
+                ${componentCardImageTag("The visual cue this palette was picked from")}
                 <div class="dcx-showcase-card-body">
                   <span class="dcx-component-kind">Case study</span>
                   <h5>Line, pause, and negative space</h5>
@@ -559,7 +521,7 @@ import { dcxAsset } from './assets.js';
                 </div>
               </article>
               <article class="dcx-showcase-card dcx-showcase-card--media dcx-showcase-card--media-close">
-                <img ${componentCardImage("Close crop of purple ikebana flowers", "The chosen visual cue, cropped close")} width="800" height="1200" loading="lazy" decoding="async">
+                ${componentCardImageTag("The chosen visual cue, cropped close")}
                 <div class="dcx-showcase-card-body">
                   <span class="dcx-component-kind">Material note</span>
                   <h5>Detail, closely cropped</h5>
@@ -574,7 +536,7 @@ import { dcxAsset } from './assets.js';
           <figcaption><h4>Horizontal</h4></figcaption>
           <div class="dcx-component-canvas dcx-component-canvas--cards dcx-component-canvas--single-card">
             <article class="dcx-showcase-card dcx-showcase-card--horizontal">
-              <img ${componentCardImage("Purple ikebana in a dark ceramic vase", "The chosen visual cue as a wide feature image")} width="800" height="1200" loading="lazy" decoding="async">
+              ${componentCardImageTag("The chosen visual cue as a wide feature image")}
               <div class="dcx-showcase-card-body">
                 <span class="dcx-component-kind">Featured story</span>
                 <h5>A study in asymmetry</h5>

@@ -17,9 +17,9 @@ const assetsSource = path.join(root, 'picker/assets');
 const assetsOutput = path.join(outputDir, 'assets');
 const runtimeAssets = ['hero-dark.jpg', 'kinpaku-gold-leaf.jpg'];
 // The design context document's images, vendored from the standalone demo:
-// per-section foil icons, the rail textures, the brand-asset placeholders, and
-// the components photo. Whole directories, so a demo re-sync stays a plain copy.
-const runtimeAssetDirs = ['audience', 'product', 'brand', 'color', 'typography', 'material', 'components'];
+// per-section foil icons and the rail textures. Whole directories, so a demo
+// re-sync stays a plain copy.
+const runtimeAssetDirs = ['audience', 'product', 'brand', 'color', 'typography', 'material'];
 // The page links ./favicon.svg, so it is also served from the output root.
 const faviconSource = path.join(assetsSource, 'favicon.svg');
 const faviconOutput = path.join(outputDir, 'favicon.svg');

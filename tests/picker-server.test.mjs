@@ -34,47 +34,47 @@ const cueManifestFixture = {
 const fontManifestFixture = {
   version: 1,
   specimen: {
-    headline: 'Flowers shaped by hand',
-    body: 'Seasonal stems become arrangements made for one room and one moment.',
+    headline: 'A calmer way to run the week',
+    body: 'Plan the brief, share it with the team, and ship on time without extra meetings.',
   },
   preview: {
-    brand: 'Ha',
-    nav: ['Bouquets', 'Workshops', 'Seasonal', 'About'],
-    navAction: 'Order',
+    brand: 'Co',
+    nav: ['Product', 'Pricing', 'Docs', 'About'],
+    navAction: 'Sign in',
     menuAction: 'Menu',
-    ctaPrimary: 'Shop stems',
-    ctaSecondary: 'See the studio',
-    proof: ['Same-day pickup', 'Local growers', 'Hand tied', 'Studio open'],
-    sectionTitle: 'Stems in season',
+    ctaPrimary: 'Start free',
+    ctaSecondary: 'See a demo',
+    proof: ['No setup fee', 'Cancel anytime', 'Works offline', '24/7 support'],
+    sectionTitle: 'Built for small teams',
     sectionBody: [
-      'Each arrangement starts with stems',
-      'chosen the morning it ships.',
+      'Everything stays in one place',
+      'so nothing falls through the cracks.',
     ],
-    sectionLink: 'Our growers',
+    sectionLink: 'How it works',
     // Three, the count the artboard draws and the manifest validator requires:
     // a fourth card makes the whole file fall back to the default pairs.
     gallery: [
-      { title: 'Market bunch', meta: 'From $38' },
-      { title: 'Table vase', meta: 'From $52' },
-      { title: 'Ceremony', meta: 'From $120' },
+      { title: 'Basic', meta: 'From $8' },
+      { title: 'Team', meta: 'From $24' },
+      { title: 'Pro', meta: 'From $60' },
     ],
-    footerLinks: ['Care guide', 'Delivery', 'Contact', 'Instagram'],
-    footerMark: '© Hanazono',
+    footerLinks: ['Support', 'Status', 'Contact', 'Twitter'],
+    footerMark: '© Example Co.',
   },
   pairs: [
     {
       id: 'marcellus-karla',
-      name: 'Atelier Classic',
+      name: 'Editorial Classic',
       heading: { family: 'Marcellus', weight: 400 },
       body: { family: 'Karla', weight: 400 },
-      why: 'Marcellus echoes the high-contrast lettering observed in the atelier mark.',
+      why: 'Marcellus pairs a high-contrast display face with Karla, a plain and readable body text.',
     },
     {
       id: 'bitter-cabin',
-      name: 'Garden Ledger',
+      name: 'Practical Serif',
       heading: { family: 'Bitter', weight: 600 },
       body: { family: 'Cabin', weight: 400 },
-      why: 'Bitter gives the seasonal catalog the practical character named in Positioning.',
+      why: 'Bitter gives the product pages a practical, no-nonsense character.',
     },
   ],
 };
@@ -339,7 +339,7 @@ test('serves the stored context and the chosen cue, both cacheable', async (t) =
   const contextFixture = {
     schemaVersion: 1,
     modes: ['persuade', 'read'],
-    context: { product: { name: 'Hanazono' } },
+    context: { product: { name: 'Example Co.' } },
   };
   const fixture = await createFixture({ context: contextFixture });
   const server = await startPicker(fixture.cwd, ['--port', String(portBase + 50)]);
@@ -615,9 +615,18 @@ test('doc session serves picker assets, token-gated and contained', async (t) =>
       assert.equal(ok.headers.get('content-type'), 'image/png');
       assert.ok((await ok.arrayBuffer()).byteLength > 0, 'served an empty body');
 
-      // Subdirectories deeper than one level resolve too.
-      const nested = await fetch(`${base}/assets/brand/placeholders/hanazono-primary-mark.png?token=t-assets`);
-      assert.equal(nested.status, 200);
+      // Subdirectories deeper than one level resolve too. No shipped asset
+      // sits two levels deep, so this proves it with a throwaway probe file
+      // written into the (gitignored) build output and cleaned up after.
+      const nestedDir = path.join(root, 'skill/scripts/picker/assets/audience/nested-probe');
+      await mkdir(nestedDir, { recursive: true });
+      await writeFile(path.join(nestedDir, 'probe.png'), Buffer.from('fake-png'));
+      try {
+        const nested = await fetch(`${base}/assets/audience/nested-probe/probe.png?token=t-assets`);
+        assert.equal(nested.status, 200);
+      } finally {
+        await rm(nestedDir, { recursive: true, force: true });
+      }
     } else {
       t.diagnostic('skipping the served-file assertions: run `bun run build:picker` to cover them');
     }
