@@ -9,35 +9,30 @@ import { dcxAsset } from './assets.js';
       slug: "who-they-are",
       variant: "people",
       lede: "The core people this experience must speak to.",
-      icon: "audience-groups-foil.png",
     },
     {
       labels: ["Emotional journey", "Emotional state"],
       slug: "emotional-journey",
       variant: "journey",
       lede: "The change in confidence the experience should create.",
-      icon: "emotional-journey-foil.png",
     },
     {
       labels: ["Needs"],
       slug: "needs",
       variant: "list",
       lede: "What the experience must make clear and easy.",
-      icon: "needs-foil.png",
     },
     {
       labels: ["Trust triggers"],
       slug: "trust-triggers",
       variant: "list",
       lede: "The signals that turn interest into confidence.",
-      icon: "trust-triggers-foil.png",
     },
     {
       labels: ["Who must not be excluded"],
       slug: "inclusion",
       variant: "list",
       lede: "Access requirements that belong in the core experience.",
-      icon: "inclusion-foil.png",
     },
   ];
 
@@ -86,23 +81,27 @@ import { dcxAsset } from './assets.js';
       lede.textContent = meta.lede;
       heading.append(title, lede);
 
-      const figure = document.createElement("figure");
-      figure.className = "dcx-audience-section-icon";
-      figure.setAttribute("data-dcx-hide-on-error", "");
-      figure.setAttribute("aria-hidden", "true");
-
-      const image = document.createElement("img");
-      image.src = dcxAsset(`/assets/audience/${meta.icon}`);
-      image.alt = "";
-      image.width = 256;
-      image.height = 256;
-      image.decoding = "async";
-      if (index > 0) image.loading = "lazy";
-      figure.appendChild(image);
-
       const header = document.createElement("header");
       header.className = "dcx-audience-section-head";
-      header.append(heading, figure);
+      header.appendChild(heading);
+
+      if (meta.icon) {
+        header.classList.add("dcx-audience-section-head--with-icon");
+        const figure = document.createElement("figure");
+        figure.className = "dcx-audience-section-icon";
+        figure.setAttribute("data-dcx-hide-on-error", "");
+        figure.setAttribute("aria-hidden", "true");
+
+        const image = document.createElement("img");
+        image.src = dcxAsset(`/assets/audience/${meta.icon}`);
+        image.alt = "";
+        image.width = 256;
+        image.height = 256;
+        image.decoding = "async";
+        if (index > 0) image.loading = "lazy";
+        figure.appendChild(image);
+        header.appendChild(figure);
+      }
 
       section.classList.add("dcx-audience-section", `dcx-audience-section--${meta.variant}`);
       section.id = `dcx-audience-${meta.slug}`;

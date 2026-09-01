@@ -1,5 +1,3 @@
-import { dcxAsset } from './assets.js';
-
 (() => {
   "use strict";
 
@@ -150,26 +148,12 @@ import { dcxAsset } from './assets.js';
           width: "72",
           height: "48",
         }),
-        makeSvgElement("image", {
-          class: "dcx-material-rail__patina-image",
-          href: dcxAsset("/assets/audience/verdigris-patina.png"),
-          width: "72",
-          height: "48",
-          preserveAspectRatio: "xMidYMid slice",
-        }),
       );
       goldPattern.append(
         makeSvgElement("rect", {
           class: "dcx-material-rail__gold-base",
           width: "72",
           height: "48",
-        }),
-        makeSvgElement("image", {
-          class: "dcx-material-rail__gold-image",
-          href: dcxAsset("/assets/audience/kinpaku-gold-leaf.png"),
-          width: "72",
-          height: "48",
-          preserveAspectRatio: "xMidYMid slice",
         }),
       );
 

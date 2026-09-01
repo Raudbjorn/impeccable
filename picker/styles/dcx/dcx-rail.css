@@ -120,16 +120,6 @@
   fill: var(--ks-kinpaku);
 }
 
-.dcx-material-rail__patina-image {
-  opacity: 0.68;
-  filter: saturate(1.18) contrast(1.06);
-}
-
-.dcx-material-rail__gold-image {
-  opacity: 0.7;
-  filter: saturate(1.15) contrast(1.08);
-}
-
 .dcx-material-rail__track,
 .dcx-material-rail__active,
 .dcx-material-rail__transition-track,

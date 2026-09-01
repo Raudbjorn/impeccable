@@ -115,3 +115,110 @@ To give the design-context document a real fallback brand again:
    attributes into a literal `<img ...>` in the template: it keeps the
    literal `<img ${` pattern out of source entirely, which avoided the false
    positive here without needing an `.impeccable/config.json` waiver.
+
+## The picker's own section icons
+
+Separate from end-user branding above: this branch also added a set of
+per-section icons for the design-context document's own UI chrome, not tied
+to any particular brand. All 26 were pruned in the same cleanup pass. They
+are recorded here for the same reason the placeholder brand is: so
+reintroducing them (or something like them) starts from a known shape
+instead of guesswork.
+
+### What they were
+
+Small square PNGs, one per detail-article subsection, grouped by category
+under `picker/assets/`:
+
+| File | Category dir | Detail label it illustrated |
+| --- | --- | --- |
+| `audience-groups-foil.png` | `audience/` | "Who they are" |
+| `emotional-journey-foil.png` | `audience/` | "Emotional journey" / "Emotional state" |
+| `needs-foil.png` | `audience/` | "Needs" |
+| `trust-triggers-foil.png` | `audience/` | "Trust triggers" |
+| `inclusion-foil.png` | `audience/` | "Who must not be excluded" |
+| `brand-personality-foil.png` | `brand/` | "Personality" |
+| `brand-voice-foil.png` | `brand/` | "Voice" |
+| `brand-principles-foil.png` | `brand/` | "Principles" |
+| `brand-commitments-foil.png` | `brand/` | "Commitments" |
+| `color-palette-foil.png` | `color/` | "The cue" and "Palette" (shared by both) |
+| `color-strategy-per-surface-foil.png` | `color/` | "Strategy per surface" |
+| `material-layout-structure-foil.png` | `material/` | "Layout structure" |
+| `material-boundaries-per-surface-foil.png` | `material/` | "Boundaries per surface" |
+| `material-corners-per-surface-foil.png` | `material/` | "Corners per surface" |
+| `material-depth-per-surface-foil.png` | `material/` | "Depth per surface" |
+| `product-purpose-foil.png` | `product/` | "Purpose" |
+| `product-positioning-foil.png` | `product/` | "Positioning" |
+| `product-primary-conversion-foil.png` | `product/` | "Primary conversion" |
+| `product-clear-first-foil.png` | `product/` | "What must be clear first" |
+| `product-principles-foil.png` | `product/` | "Product principles" |
+| `product-operating-context-foil.png` | `product/` | "Operating context" |
+| `product-surfaces-foil.png` | `product/` | "Surfaces" |
+| `typography-pair-foil.png` | `typography/` | "The pair" |
+| `typography-type-scale-foil.png` | `typography/` | "Type scale" |
+
+Two more, also under `audience/` but a different mechanism entirely:
+`kinpaku-gold-leaf.png` and `verdigris-patina.png` were texture photos, not
+per-section icons. They named the site's own two brand accents (`--ks-kinpaku`
+and `--ks-patina` in `picker/styles/vendor/kinpaku-tokens.css`), not a
+placeholder brand.
+
+### How they were wired
+
+1. **`dcx-audience.js`**: `SECTION_META`, an array of five entries (one per
+   audience subsection), each carrying an optional `icon: "<filename>.png"`
+   field resolved against `/assets/audience/`. `enhanceAudienceArticle` built
+   an `<figure><img></figure>` and appended it to the section header only
+   `if (meta.icon)`, adding a `dcx-audience-section-head--with-icon` modifier
+   class in that case. `picker/styles/dcx/dcx-audience.css`'s
+   `.dcx-audience-section-head` had to be changed from an unconditional
+   two-column grid (which would otherwise leave a permanent empty gap where
+   the icon used to sit) to a one-column default, with the modifier class
+   restoring the second, icon-sized column only when an icon is present.
+2. **`dcx-detail.js`**: `DETAIL_META[category][label]` held a
+   `[ledeText, iconPath?]` tuple; `enhanceSection` destructured
+   `const [ledeText, icon] = DETAIL_META[category]?.[label] || [...]` and
+   built the icon `<figure>` only `if (icon)`. Unlike the audience CSS, the
+   base `.dcx-detail-section-head` grid in `dcx-detail.css` already reserved
+   its second column unconditionally by design, filling it with a decorative
+   `::after` accent rule (`:not(.dcx-detail-section-head--with-icon)::after`)
+   when no icon was present. That no-icon state was already a first-class,
+   already-designed fallback, so nothing in `dcx-detail.css` needed to change.
+3. **`dcx-rail.js`**: two SVG `<pattern>` fills (`patinaPattern`,
+   `goldPattern`) used as the `stroke` for the "material rail" progress
+   indicator, one for the inactive track and one for the active/completed
+   segment. Each layered a texture `<image>` (`verdigris-patina.png` /
+   `kinpaku-gold-leaf.png`) at partial opacity over a solid base `<rect>`
+   (`fill: var(--ks-patina)` / `var(--ks-kinpaku)`, in
+   `picker/styles/dcx/dcx-rail.css`). Dropping the two `<image>` elements left
+   the solid-color base rects as the pattern fill: a clean flat-color result
+   using the same site tokens, not a visual regression, so no fallback logic
+   was needed here at all, just deleting the `<image>` elements and the two
+   now-dead `.dcx-material-rail__patina-image` / `-gold-image` opacity/filter
+   rules in `dcx-rail.css`.
+
+### Reintroducing them
+
+The `if (meta.icon)` / `if (icon)` guards and the `--with-icon` CSS modifiers
+were deliberately left in place rather than stripped out, even though nothing
+in the static metadata can ever set them again on their own. To bring section
+icons back:
+
+1. Drop icon files under the matching `picker/assets/<category>/` directory.
+2. Add an `icon:` field to the relevant `SECTION_META` entry in
+   `dcx-audience.js`, or an icon path as the second array element in the
+   relevant `DETAIL_META[category][label]` entry in `dcx-detail.js`. Both
+   already render correctly once the field is present, no other code change
+   needed.
+3. For the rail's two texture fills, re-add the `<image>` elements to
+   `patinaPattern`/`goldPattern` in `dcx-rail.js` and restore the opacity and
+   filter rules in `dcx-rail.css` (removed alongside the images since nothing
+   else used them).
+4. `scripts/build-picker.mjs` no longer has a `runtimeAssetDirs` loop at all:
+   it was removed once every entry in it (`audience`, `product`, `brand`,
+   `color`, `typography`, `material`) pointed at a now-empty directory. If any
+   category directory holds files again, that whole-directory-copy loop needs
+   to come back too, the same way `components` had to be re-added for the
+   placeholder brand's card photo before it, too, was pruned (see above).
+5. Run `bun run build:release` and `node cli/bin/cli.js detect skill/scripts/picker/`
+   the same way as step 4 and 5 above.

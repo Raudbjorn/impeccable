@@ -587,11 +587,11 @@ test('timeout exits 2 with one stderr line', async (t) => {
 test('doc session serves picker assets, token-gated and contained', async (t) => {
   const fixture = await createFixture();
   const sessionScript = path.join(root, 'skill/scripts/picker-doc-session.mjs');
-  const builtAsset = path.join(root, 'skill/scripts/picker/assets/audience/needs-foil.png');
+  const assetsOutputDir = path.join(root, 'skill/scripts/picker/assets');
   /* skill/scripts/picker/ is gitignored build output, so a fresh clone has no
      assets to serve. The gate for this work always builds first; here the
      happy-path reads skip rather than fail on a tree that never built. */
-  const built = existsSync(builtAsset);
+  const built = existsSync(assetsOutputDir);
 
   const child = spawn(process.execPath, [sessionScript, '--port', String(portBase + 60)], {
     cwd: fixture.cwd,
@@ -610,30 +610,42 @@ test('doc session serves picker assets, token-gated and contained', async (t) =>
     const base = `http://127.0.0.1:${session.port}`;
 
     if (built) {
-      const ok = await fetch(`${base}/assets/audience/needs-foil.png?token=t-assets`);
-      assert.equal(ok.status, 200);
-      assert.equal(ok.headers.get('content-type'), 'image/png');
-      assert.ok((await ok.arrayBuffer()).byteLength > 0, 'served an empty body');
+      // No shipped asset lives in the built tree any more (the picker's own
+      // per-section icons were pruned; see docs/add-branding.md), so this
+      // proves the token-gated /assets/ route serves real files with a
+      // throwaway probe written into the (gitignored) build output and
+      // cleaned up after.
+      const probeDir = path.join(assetsOutputDir, 'probe');
+      await mkdir(probeDir, { recursive: true });
+      await writeFile(path.join(probeDir, 'probe.png'), Buffer.from('fake-png'));
+      try {
+        const ok = await fetch(`${base}/assets/probe/probe.png?token=t-assets`);
+        assert.equal(ok.status, 200);
+        assert.equal(ok.headers.get('content-type'), 'image/png');
+        assert.ok((await ok.arrayBuffer()).byteLength > 0, 'served an empty body');
+      } finally {
+        await rm(probeDir, { recursive: true, force: true });
+      }
 
-      // Subdirectories deeper than one level resolve too. No shipped asset
-      // sits two levels deep, so this proves it with a throwaway probe file
-      // written into the (gitignored) build output and cleaned up after.
-      const nestedDir = path.join(root, 'skill/scripts/picker/assets/audience/nested-probe');
+      // Subdirectories deeper than one level resolve too. Same throwaway
+      // approach, one level deeper.
+      const nestedDir = path.join(assetsOutputDir, 'probe/nested-probe');
       await mkdir(nestedDir, { recursive: true });
       await writeFile(path.join(nestedDir, 'probe.png'), Buffer.from('fake-png'));
       try {
-        const nested = await fetch(`${base}/assets/audience/nested-probe/probe.png?token=t-assets`);
+        const nested = await fetch(`${base}/assets/probe/nested-probe/probe.png?token=t-assets`);
         assert.equal(nested.status, 200);
       } finally {
-        await rm(nestedDir, { recursive: true, force: true });
+        await rm(path.join(assetsOutputDir, 'probe'), { recursive: true, force: true });
       }
     } else {
       t.diagnostic('skipping the served-file assertions: run `bun run build:picker` to cover them');
     }
 
     // The gate and the containment hold whether or not the tree has been built.
-    assert.equal((await fetch(`${base}/assets/audience/needs-foil.png?token=wrong`)).status, 403);
-    assert.equal((await fetch(`${base}/assets/audience/needs-foil.png`)).status, 403);
+    // (the token check rejects before any file lookup, so the path need not exist)
+    assert.equal((await fetch(`${base}/assets/audience/anything.png?token=wrong`)).status, 403);
+    assert.equal((await fetch(`${base}/assets/audience/anything.png`)).status, 403);
     assert.equal((await fetch(`${base}/assets/..%2Fpicker-server.mjs?token=t-assets`)).status, 404);
     assert.equal((await fetch(`${base}/assets/../picker-server.mjs?token=t-assets`)).status, 404);
     /* An extension the route DOES allow, on a real file outside the assets

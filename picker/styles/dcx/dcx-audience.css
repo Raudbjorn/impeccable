@@ -20,10 +20,14 @@
 
 .dcx-audience .dcx-audience-section-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--dcx-audience-icon-size);
+  grid-template-columns: minmax(0, 1fr);
   gap: clamp(24px, 4vw, 44px);
   align-items: center;
   margin-bottom: 18px;
+}
+
+.dcx-audience .dcx-audience-section-head--with-icon {
+  grid-template-columns: minmax(0, 1fr) var(--dcx-audience-icon-size);
 }
 
 .dcx-audience .dcx-audience-section-heading {
