@@ -740,16 +740,6 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         scope: scopeIdx !== -1 ? args[scopeIdx + 1] : undefined,
       }));
     } else {
-      // A dealt roll leaves a marker the build phase clears: context.mjs and
-      // detect.mjs read it and refuse to treat page work as done while a
-      // direction is chosen but the build never started (COMP_ROUND_OPEN).
-      try {
-        const { mkdirSync, writeFileSync: wf } = await import('node:fs');
-        if (scopeIdx !== -1 && args[scopeIdx + 1] === 'direction') {
-          mkdirSync(resolve(process.cwd(), '.impeccable', 'build'), { recursive: true });
-          wf(resolve(process.cwd(), '.impeccable', 'build', 'pending.json'), JSON.stringify({ scope: 'direction', at: new Date().toISOString() }, null, 2));
-        }
-      } catch { /* marker is best-effort */ }
       // Mechanical init gate: prose alone does not keep a model from dealing
       // before init, and fresh repos produced exactly that skip (the model
       // rolled directions with no PRODUCT.md, so nothing grounded the fusion).
@@ -763,6 +753,19 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         ].join(' ') + '\n');
         process.exit(1);
       }
+      // A dealt roll leaves a marker the build phase clears: context.mjs and
+      // detect.mjs read it and refuse to treat page work as done while a
+      // direction is chosen but the build never started (COMP_ROUND_OPEN).
+      // Written only after the gate above passes: a blocked NO_PRODUCT_MD
+      // exit used to leave this marker on disk anyway, so the next context.mjs
+      // run reported a phantom COMP_ROUND_OPEN for a deal that never happened.
+      try {
+        const { mkdirSync, writeFileSync: wf } = await import('node:fs');
+        if (scopeIdx !== -1 && args[scopeIdx + 1] === 'direction') {
+          mkdirSync(resolve(process.cwd(), '.impeccable', 'build'), { recursive: true });
+          wf(resolve(process.cwd(), '.impeccable', 'build', 'pending.json'), JSON.stringify({ scope: 'direction', at: new Date().toISOString() }, null, 2));
+        }
+      } catch { /* marker is best-effort */ }
       process.stdout.write(await renderConceptSeed({
         scope: scopeIdx !== -1 ? args[scopeIdx + 1] : 'surface',
         key: fromIdx !== -1
