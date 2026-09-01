@@ -534,6 +534,14 @@ describe('init gate', () => {
     assert.equal(existsSync(path.join(dir, '.impeccable', 'build', 'pending.json')), false);
   });
 
+  it('leaves no pending marker behind when the init gate blocks the deal', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'concept-seed-noproduct-marker-'));
+    const result = gateRun(dir);
+    assert.equal(result.status, 1);
+    assert.equal(existsSync(path.join(dir, '.impeccable', 'build', 'pending.json')), false,
+      'a blocked deal must not leave a marker the next context.mjs run reads as a phantom COMP_ROUND_OPEN');
+  });
+
   it('deals normally once PRODUCT.md exists', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'concept-seed-product-'));
     writeFileSync(path.join(dir, 'PRODUCT.md'), '# Test Product\n\n## Register\n\nbrand\n');
