@@ -497,9 +497,8 @@ function hueWord(H) {
 
 // ---------------------------------------------------------------
 
-// The picker server imports SEEDS to serve /palettes.json; the CLI tail
-// below only runs when this file is the entry point, so importing it has
-// no side effects.
+// Exported for callers that want the raw seed list; the CLI tail below only
+// runs when this file is the entry point, so importing it has no side effects.
 export { SEEDS };
 
 function main() {

@@ -92,7 +92,7 @@
     "argumentHint": "[target]"
   },
   "design-context": {
-    "description": "Reopen, revise, export, or import the design interview and its design context document",
-    "argumentHint": "[open|edit|export|import] [bundle-file]"
+    "description": "Export or import the design interview and its design context document",
+    "argumentHint": "[export|import] [bundle-file]"
   }
 }

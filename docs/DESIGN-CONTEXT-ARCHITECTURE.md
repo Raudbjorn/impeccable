@@ -3,6 +3,16 @@
 How the design interview, the design context document, and everything the user
 gives us during the seed process are organized, and why.
 
+**The picker, the browser UI this document describes, has since been removed**
+(`picker/`, `picker-server.mjs`, `picker-doc-session.mjs`, `picker-doc-poll.mjs`,
+`design-context/session-routes.mjs`, `design-context/bindings.mjs`; see
+`docs/add-branding.md` for what it was and how a replacement UI, or any new
+component, could be built the same way). The store itself, `store.mjs`,
+`portability.mjs`, and `design-context-export.mjs`/`import.mjs` are unaffected
+and still work exactly as described below; only the sections that name the
+picker's own files or its live-editing session describe a mechanism that no
+longer exists.
+
 ## The problem this layout solves
 
 The design context is one product concept. Before this layout it was scattered
@@ -75,22 +85,20 @@ The shape mirrors `skill/scripts/live/`, which solves the same class of problem.
 ```
 skill/scripts/design-context/
   store.mjs            the only code that knows store paths or writes store files
-  bindings.mjs         the editable-field registry for the document
-  session-routes.mjs   HTTP handlers for the document edit session
   portability.mjs      the export bundle format and its import validation
 
 skill/scripts/
-  picker-server.mjs      static serving, boot contract, submit, autosave, spawn
-  picker-doc-session.mjs the session shell: http server, timers, token
-  picker-doc-poll.mjs    the agent's poll CLI
   design-context-export.mjs / design-context-import.mjs
-
-picker/scripts/
-  boot.js              one memoized fetch of the boot contract
-  hydrate.js           restoring a previous run into the questionnaire
-  palette-picker.js    the questionnaire; owns running hydration
-  design-context.js    the document; document mode, pending ledger, save bar
 ```
+
+Removed along with the picker: `design-context/bindings.mjs` (the
+editable-field registry for the document) and `design-context/session-routes.mjs`
+(HTTP handlers for the document edit session) under `skill/scripts/design-context/`;
+`picker-server.mjs` (static serving, boot contract, submit, autosave, spawn),
+`picker-doc-session.mjs` (the session shell: http server, timers, token), and
+`picker-doc-poll.mjs` (the agent's poll CLI) under `skill/scripts/`; and the
+whole `picker/scripts/` tree (`boot.js`, `hydrate.js`, `palette-picker.js`,
+`design-context.js`).
 
 Three ownership rules keep this correct as it grows.
 
@@ -99,8 +107,9 @@ Three ownership rules keep this correct as it grows.
 and the journal all go through its `writeJsonAtomic`: write a temporary file
 beside the target, then rename over it, so a reader never sees a torn file.
 Binary and prose payloads -- font files, `cue.png`, imported assets,
-`DESIGN.md` -- are written directly by the picker server, the doc session, and
-`portability.mjs` with plain `writeFile`/`copyFile`, not through store.mjs and
+`DESIGN.md` -- are written directly (by `portability.mjs` today; by the picker
+server and the doc session too, before they were removed) with plain
+`writeFile`/`copyFile`, not through store.mjs and
 not atomically. That's deliberate, not an oversight: these are write-once
 blobs a later step overwrites wholesale rather than patches, and a torn write
 just fails to parse or decode on the next read rather than corrupting shared

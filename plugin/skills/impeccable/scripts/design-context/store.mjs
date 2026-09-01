@@ -15,7 +15,7 @@
  * reader never sees a torn file. Every read comes off disk, so no process ever
  * answers from a copy the file has moved past.
  *
- * Zero dependencies beyond node: builtins, like every other picker script.
+ * Zero dependencies beyond node: builtins.
  */
 
 import fs from 'node:fs';

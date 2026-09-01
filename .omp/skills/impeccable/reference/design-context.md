@@ -1,6 +1,13 @@
 # Design Context
 
-Loaded by `/skill:impeccable design-context`. Owns the design interview record, the document built from it, and its portable form. The interview itself is created by `/skill:impeccable document` seed mode; this command is everything afterwards.
+Loaded by `/skill:impeccable design-context`. Owns the design interview record and its portable form (export/import). The interview itself is created by `/skill:impeccable document` seed mode; this command is everything afterwards.
+
+There is currently no interactive way to reopen or re-run the interview: that
+used to be the picker, a browser UI removed from this project along with its
+server. `export` and `import` still work; they read and write the store
+directly and never launched a UI. See `docs/add-branding.md` for what the
+picker was and how a replacement UI (or a new component generally) could be
+built the same way.
 
 ## Where it lives
 
@@ -26,31 +33,7 @@ Report status in two lines, then act:
 - Whether `answers.json` exists, and when it was last written.
 - Whether a draft is waiting (`runtime/draft.json`), whether DESIGN.md is seeded, and whether a session is live (`runtime/session.json` naming a running process).
 
-With answers on disk, do `open`. Without them, say the design context is created by the questionnaire and offer `/skill:impeccable document`. Never start the questionnaire unasked.
-
-## open
-
-Reopen the document, live for edits.
-
-Run `node .omp/skills/impeccable/scripts/picker-server.mjs --doc` from the project root as a foreground command and parse its `PICKER_URL` line. Open it and wait exactly as [visual-cues.md](visual-cues.md)'s launch paragraph does: its harness-browser ladder (in-IDE browser first, then another browser tool, then the system opener, then telling the user the URL) and its wait-on-the-foreground-process rule. Skip everything earlier in its Step 7: the cue announcement and the `modes` and `context` writes belong to a run that is generating cues, and this one is not.
-
-Then enter the document edit loop below. The process exiting is the signal:
-
-- `DOC_SESSION_ENDED` and exit 0: the document was closed. Say so in one line; the loop is over.
-- Exit 2: it timed out or was never opened. Say it can be reopened with the same command, and never relaunch unprompted.
-- Exit 1: no interview exists. Route to `/skill:impeccable document`.
-
-## edit
-
-Re-run the questionnaire over the previous answers.
-
-Say in one line what it will do before launching, and settle DESIGN.md in the same breath, because a new run replaces the seed the last one produced: *"This re-runs the questionnaire with your previous answers filled in. When you finish, I will refresh DESIGN.md from the new answers. Refresh it, overwrite it, or merge by hand?"* That is the whole consent for this run; do not ask again afterwards.
-
-Then run `node .omp/skills/impeccable/scripts/picker-server.mjs`, using the same launch ladder and wait rule as `open`. Prefill happens on its own: an unfinished run resumes from its draft, a finished one loads its answers, and `--fresh` starts blank. Cues and `context.json` already exist from the previous run, so do not regenerate cues and do not repeat Step 7's pre-launch writes.
-
-On exit 0, go to [document.md](document.md) Steps 5-6 and write the seed from the new `answers.json`, honoring the choice made before launch. On exit 2, nothing was answered and nothing changed.
-
-If `.impeccable/visual-cues/cues.json` is missing, the questionnaire cannot run: its palette screen loads the dealt cues and the built-in seeds together and neither arrives without that file. Say so and offer a full `/skill:impeccable document --seed` run instead.
+With answers on disk, report the status above and stop; offer `export` if the user wants a portable copy. Without them, say the design context is created by the questionnaire and offer `/skill:impeccable document`. Never start the questionnaire unasked, and never claim the interview can be reopened or re-run in place; it can't right now.
 
 ## export
 
@@ -71,23 +54,13 @@ Do not read the export back into the conversation; the user asked for a file, no
 node .omp/skills/impeccable/scripts/design-context-import.mjs <bundle.json> [--design skip|write] [--force]
 ```
 
-It refuses a project that already has a design context unless `--force`, and refuses while a document is open either way. Report what it prints:
+It refuses a project that already has a design context unless `--force`. Report what it prints:
 
 - `DESIGN_MD carried` with a DESIGN.md already here: ask whether to refresh it from the imported context, overwrite it, or merge by hand, then act.
 - `DESIGN_MD carried` with none here: if this is what the user wants, `--design write` has to be on *this* import command, not a follow-up (re-running import afterward hits the existing-context refusal and needs `--force`, which also wipes and re-lands assets and fonts). If the import already ran without it, re-seed DESIGN.md from the now-imported answers through [document.md](document.md) Steps 5-6 instead; that path does not require re-importing.
 - `DESIGN_MD absent`: say the bundle carried decisions but no design document, and offer to seed one through document.md's Steps 5-6.
 
-Then offer `open`.
-
-## The document edit loop
-
-The document is a working surface. Follow [visual-cues.md](visual-cues.md)'s "The document edit loop" section; it is the canonical contract for polling, the event kinds, and the reply commands. Two things to hold on to while you are in it:
-
-- **The session is the only writer of the store.** Never edit `answers.json` or `context.json` yourself while a session runs. Values you settle travel on your reply, through `--answers` or `--context`. DESIGN.md and PRODUCT.md are yours to write directly.
-- **A `save_batch` is already applied.** The user's values are in the store before you hear about them. Your work is the prose those values leave stale, in whichever document the event's `downstream` names.
-
 ## Pitfalls
 
-- Never poll `answers.json` while a server runs. The process exiting is the signal.
 - Never drive the questionnaire yourself. The answers are the user's, and a run you filled in is a run they did not make.
-- Editing in the document changes values that are already there. A field the interview never captured is added by asking in chat, not by this command.
+- Never claim `open`, `edit`, or any live review of the document is available. It isn't, until a replacement UI exists.

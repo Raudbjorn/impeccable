@@ -126,7 +126,7 @@ Name every color in plain language only, as a rich material description ("deep w
 
 Light the scene to reveal color, not to set a mood. In a dim, dusky, or nocturnal rendering every color sinks into one warm-brown murk the user cannot sample from, so bright, generous light is a hard rule even when the concept's moment is dark: an "after hours" or "dawn" concept keeps its props and story but is lit like a studio still, not like the hour. Dark palettes are welcome; dark renderings are not; a near-black primary should read as a rich, clearly-lit surface, not as underexposure.
 
-The neutral's ground pays the highest price for shading. The compile step snaps each role to the pixels the hero actually rendered, and the picker shows the snapped value, so a nominally off-white linen that renders in mid-gray shadow ships a mid-gray surface color to the user. Describe the neutral's material as pale in the prompt ("pale unbleached linen, near-white in even light") and keep its field lit edge to edge, so the rendered ground stays as pale as the composed hex. Fill every `[bracketed]` slot; never leave template language in the prompt.
+The neutral's ground pays the highest price for shading. The compile step snaps each role to the pixels the hero actually rendered and shows the snapped value, so a nominally off-white linen that renders in mid-gray shadow ships a mid-gray surface color to the user. Describe the neutral's material as pale in the prompt ("pale unbleached linen, near-white in even light") and keep its field lit edge to edge, so the rendered ground stays as pale as the composed hex. Fill every `[bracketed]` slot; never leave template language in the prompt.
 
 ```text
 One full-bleed photograph, square format, framed close: [one scene from
@@ -361,7 +361,7 @@ Done when: `cues.json` lists one entry per completed palette and every listed sl
 
 ## Step 6: Compose the font pairs
 
-Run this pass yourself after compiling the cues and before launching the picker. Do not spawn specialists; six pairs need one editor holding the same brand facts and ranking them together.
+Run this pass yourself after compiling the cues. Do not spawn specialists; six pairs need one editor holding the same brand facts and ranking them together.
 
 Build the composition context from exactly these inputs:
 
@@ -370,13 +370,13 @@ Build the composition context from exactly these inputs:
 - From PRODUCT.md, only `## Users`, `## Product Purpose`, `## Positioning`, and `## Brand Commitments`.
 - The seed Step 2 asset observations when they exist, with the logo's letterforms as the strongest evidence.
 
-Do **not** read PRODUCT.md wholesale into this task or add any other section to the composition context. The chosen palette does not exist yet; the picker joins it to the pairs later.
+Do **not** read PRODUCT.md wholesale into this task or add any other section to the composition context. The chosen palette does not exist yet and is joined to the pairs later.
 
 ### Name the surfaces before composing
 
 A pair that carries a landing page can fail a dashboard outright. The landing page asks the heading face for a six-word line at 40px and up; the dashboard asks the body face for a 12px column label sitting next to a number. Suggest fonts without knowing which of those is on the table and you are guessing at the only question that separates the shortlists.
 
-So decide first what this product is made of, from PRODUCT.md and the codebase, using the four surface kinds the picker's first question offers: `persuade` (landing, marketing, pricing), `operate` (app UI, dashboards, admin, settings), `read` (docs, articles, guides, changelogs), `experience` (portfolios, galleries, showcases). Name every kind the product already implies, not the one it leads with: a tool with a marketing site and a documentation site is `operate, read, persuade`. This is the same set Step 7 writes into `context.json` as `modes`, so make the judgment once, here, and carry it. No clear signal anywhere leaves the set at `persuade` alone.
+So decide first what this product is made of, from PRODUCT.md and the codebase, using the four surface kinds: `persuade` (landing, marketing, pricing), `operate` (app UI, dashboards, admin, settings), `read` (docs, articles, guides, changelogs), `experience` (portfolios, galleries, showcases). Name every kind the product already implies, not the one it leads with: a tool with a marketing site and a documentation site is `operate, read, persuade`. No clear signal anywhere leaves the set at `persuade` alone.
 
 What each surface asks of a pair:
 
@@ -393,16 +393,16 @@ Compose six distinct territories, then resolve each into one heading and body pa
 - Apply [new-work.md](new-work.md)'s `rule:skill-typo-reflex-faces` as the canonical denylist and subject-world test. A family the user named in the interview or supplied assets is the only exception.
 - Follow [typeset.md](typeset.md)'s workhorse discipline. Give the heading a point of view; give the body a real text face that stays legible at 15px and provides regular and bold weights. A display face in the body slot fails the pair. Where the surface set names `operate` or `read`, that 15px floor is not the test the body face has to pass: the sizes in those two entries above are.
 - Verify every family exists on Google Fonts under the exact current name. Spelling is part of correctness; use `Source Sans 3`, never a retired family name.
-- Every pair uses Latin-script faces, and the specimen headline and preview copy are written in English, even when the product's own language is not. Multilingual and CJK support is not built yet: a non-Latin face renders the picker's previews and scale sheets wrong, so English stands in for now. TODO: language-aware pairs that match PRODUCT.md's language and load the right Google Fonts subsets, once the picker's previews support them.
-- Write `why` as three to five words naming the pair's voice, not a sentence about the brand. The picker sets it in tracked caps under the two family names, so anything longer wraps and stops scanning. `Considered and editorial`, not `Source Serif 4 gives the questionnaire an editorial voice while Source Sans 3 keeps guidance easy to scan`.
-- Order the pairs best-first, judged on the strictest surface in the set. `pairs[0]` is the recommendation and reaches the picker pre-selected.
+- Every pair uses Latin-script faces, and the specimen headline and preview copy are written in English, even when the product's own language is not. Multilingual and CJK support is not built yet, so English stands in for now. TODO: language-aware pairs that match PRODUCT.md's language and load the right Google Fonts subsets, once a renderer supports them.
+- Write `why` as three to five words naming the pair's voice, not a sentence about the brand. Anything longer wraps and stops scanning wherever it is displayed. `Considered and editorial`, not `Source Serif 4 gives the questionnaire an editorial voice while Source Sans 3 keeps guidance easy to scan`.
+- Order the pairs best-first, judged on the strictest surface in the set. `pairs[0]` is the recommendation.
 
 Choose the headline and every wireframe label from the product's own world. Do not invent claims or use placeholder prose that could describe any brand.
 
 - **Hero**: a headline of at most six words (`specimen.headline`).
 - **Wireframe**: every other label the type-preview artboard shows (`preview`): a short brand mark, four nav labels, nav and menu actions, two CTA labels, four proof chips, a section title, one section link, three gallery cards (`title` + `meta`), four footer links, and a footer mark. Pull each string from PRODUCT.md, the interview, or supplied assets. Keep labels short enough to fit the artboard.
 
-**Running text is not yours to write.** The picker sets every paragraph in lorem, because a body face is judged on texture and real prose pulls the eye into reading it instead. Leave `specimen.body` and `preview.sectionBody` out of the file.
+**Running text is not yours to write.** A body face is judged on texture, and real prose pulls the eye into reading it instead of judging it, so paragraphs are set in lorem wherever this is displayed. Leave `specimen.body` and `preview.sectionBody` out of the file.
 
 Write `.impeccable/visual-cues/fonts.json` with this shape:
 
@@ -442,7 +442,7 @@ Write `.impeccable/visual-cues/fonts.json` with this shape:
 }
 ```
 
-Write exactly six pair entries. Each role carries the single weight it needs; the picker also loads weight 700 for each body family. A per-pair `specimen` or `preview` override may replace the shared strings when the brand evidence warrants it.
+Write exactly six pair entries. Each role carries the single weight it needs, plus weight 700 for each body family. A per-pair `specimen` or `preview` override may replace the shared strings when the brand evidence warrants it.
 
 If the references are missing because the interview was skipped, say in one line that the typography set is composed from product truth alone, then compose all six from the four allowed PRODUCT.md sections. Still write the file.
 
@@ -450,111 +450,3 @@ Parse the finished file as JSON and verify its version, specimen, preview (every
 
 Done when: `fonts.json` is parseable, contains exactly six ranked pairs, every family name has been checked against Google Fonts, and the preview copy reads as this product, not generic SaaS filler.
 
-## Step 7: Launch the picker
-
-Before launching, write the surface set from Step 6 into `.impeccable/design-context/context.json` as a top-level `modes` array: any of `persuade`, `operate`, `read`, `experience`. Do not re-derive it; the font pairs were composed against that reading, and a second judgment here would hand the user tiles the shortlist never answered to. The picker's first question pre-checks those tiles as its starting point; the user corrects the set by hand, and the final selection returns in the answers as `surface-modes`. Omit the field when the product gave no clear signal; the picker then starts from `persuade` alone.
-
-In the same write, add a top-level `context` object carrying the chat half of the run. The whole file is `{ "schemaVersion": 1, "modes": [...], "context": {...} }`, and it is the store's copy of what chat learned, because after the last question the picker shows the user a design context document assembled from everything the interview learned, and the browser only knows what it asked itself. Every field is optional and the document renders whatever arrives, so fill what the run actually established and leave out the rest:
-
-```json
-"context": {
-  "product": {
-    "name": "[product name]",
-    "purpose": "[one-sentence purpose from PRODUCT.md]",
-    "success": "[the success definition from PRODUCT.md Product Purpose, one line]",
-    "platform": "[bare value from PRODUCT.md Platform: web, ios, android, or adaptive]",
-    "positioning": { "not": "[what it is not, from PRODUCT.md Positioning]", "this": "[what it is instead]" },
-    "clarities": ["[one line per item of PRODUCT.md's what-must-be-clear-first list]"],
-    "conversion": "[primary conversion from PRODUCT.md Product Purpose, one sentence-case action phrase: Book a consultation]",
-    "principles": [{ "title": "[principle name from PRODUCT.md Design Principles]", "detail": "[one clause: what it means for design]" }],
-    "surfaces": { "persuade": "[what this surface is for this product, one line]", "operate": "[...]", "read": "[...]", "experience": "[...]" },
-    "operatingContext": "[one line from PRODUCT.md Operating Context]"
-  },
-  "audience": {
-    "primary": "[who]", "secondary": "[who]",
-    "emotion": "[emotional goal on landing]",
-    "leaving": "[what they should leave with, from the purpose and success definition]",
-    "needs": ["[need]"],
-    "trust": ["[trust trigger, from PRODUCT.md Evidence on Hand and Users]"],
-    "inclusion": ["[who must not be excluded, from PRODUCT.md Accessibility and Inclusion]"]
-  },
-  "brand": {
-    "words": ["[word]"],
-    "personality": "[one sentence from PRODUCT.md Brand Personality]",
-    "principles": ["[one line per principle from PRODUCT.md Product Principles, or the legacy Design Principles heading]"],
-    "voice": [{ "say": "[a concrete line the product would write; 2 to 4 pairs, wording examples, never adjectives]", "not": "[the same message written the way the product refuses to sound]" }],
-    "commitments": ["[one line per commitment from PRODUCT.md Brand Commitments]"]
-  },
-  "assets": [
-    "[asset name: what Step 2 read off it; a plain string when no file was provided]",
-    { "file": "[filename staged in .impeccable/design-context/assets/]", "kind": "[logo, moodboard, or reference]", "note": "[the one-line Step 2 observation for this file]" }
-  ],
-  "color": { "assetLocks": ["[one short color fact an asset fixes, e.g. Primary locked from the logo mark; only when an asset names one]"] },
-  "interview": {
-    "references": [{ "name": "[interview reference, one entry per name]", "takeaway": "[one clause: what this reference lends the design]" }],
-    "antiReference": { "name": "[the interview's anti-reference]", "why": "[one clause: why this is the wrong direction]" }
-  }
-}
-```
-
-Quote the user's answers, not paraphrases of them; the document labels interview fields as the questions they answered. A missing block renders as a pointer to where that truth lives (PRODUCT.md), so a run with no `context.json` at all still produces a complete document. The document reads each field from `context.json` first and falls back to a legacy `cues.json` that still carries it.
-
-The optionality is field by field, and the document omits the block of any field that does not arrive, so fill a field only when its PRODUCT.md section or interview answer exists. A legacy PRODUCT.md without Positioning, Platform, Operating Context, or Brand Commitments yields a context without those fields, never an invented value. `product.clarities` carries PRODUCT.md's "What must be clear first" list under a shorter key. `product.conversion` names the single action the product most wants. `product.principles` carries PRODUCT.md's Design Principles, one `{ title, detail }` entry per line. `product.surfaces` maps each mode the run might choose to what that surface is for this product, not the generic tile copy. Only include keys for surfaces that exist in the product; the document reads the map for whichever surfaces the questionnaire chose. `interview.references` and `interview.antiReference` also accept their older shapes, plain strings, which render as the bare pills and single-name callout they always did. Never write `interview.colorStrategy`, `interview.hueAnchor`, `interview.typeDirection`, or `interview.motionEnergy`: the chat interview does not ask those questions on this path, `answers.json` owns color, typography, and motion, and the document already renders its interview-direction blocks only when those keys arrive, so their absence reads as chat silence, not as a gap. `assets` mixes both shapes in one list: a file the user actually provided is staged under `.impeccable/design-context/assets/` (seed Step 2 owns the copy) and written as the object form, which the document renders as an image (a `logo` proofed on the committed primary and neutral grounds, a `moodboard` or `reference` in a wide frame, the note under it); a words-only observation stays the plain string it always was.
-
-Three of the additions are derived at write time rather than asked: `brand.principles` copies the PRODUCT.md principles list (the current Product Principles heading or the legacy Design Principles one), `brand.voice` distills Brand Personality and Brand Commitments into two to four say / not pairs, each half a concrete line of wording the product would or would not publish, never an adjective, and `color.assetLocks` records color facts the provided assets fix (one short line each, written only when Step 2 actually read such a fact off an asset). None of the three adds an interview question, and all three are omitted rather than invented when their source is missing.
-
-Five of the questions are then answered per surface rather than once for the whole run, because the answer that suits a marketing page rarely suits the tool it sells: `color-strategy`, `motion-energy` (how much movement there is), `boundary-style` (how sections are separated), `corner-style` (how round shapes are), and `depth-style` (how far off the page things sit). Each of the five comes back twice over. The bare key holds the leading surface's answer, which is the first chosen tile in tile order and the one every later screen previews. Alongside it is one `<key>-<mode>` key for every surface chosen, `<mode>` being `persuade`, `operate`, `read`, or `experience`. Surfaces the user never opened are included too, holding the default for their kind; a surface nobody chose returns nothing at all.
-
-`motion-energy` is the one exception to that shape, because the question is only put to two of the four surfaces. A landing page and a portfolio are watched, so how much they move is a house decision; a tool and a document are worked in, and their movement follows the interface. So the motion keys cover the chosen surfaces among `persuade` and `experience` only, and the bare key holds the first of those two in tile order rather than the run's leading surface: on an app UI plus portfolio run, `motion-energy` is the portfolio's answer. **When a run chooses neither of those surfaces the question is never asked, and no `motion-energy` key comes back at all.** Read it as absent rather than defaulted, and say nothing about movement in DESIGN.md; a default written as a decision is a decision the user never made.
-
-`layout-structure` (how strict the composition is) is put to the same two surfaces, for the neighbouring reason: on a landing page and a portfolio the composition of the page is the thing being judged, where a tool's regions and a document's single measure come from what they have to hold. It is not a per-surface key, though. One answer is kept for the whole run and every surface is previewed on it, so **it comes back as the bare `layout-structure` and nothing else, owned by the first of `persuade` and `experience` in tile order, and it is absent entirely on a run of neither.** Read that absence the same way: no grid rule in DESIGN.md, and nothing borrowed from the interview to cover the gap.
-
-The picker does not offer every option on every surface. A landing page can take any answer to all five questions, and the other three surfaces have options withheld from them: a page people work in or read at length is not offered the loudest color or the deepest shadow, a tool is not offered separation by spacing alone, and a portfolio is not offered four working colors or fully round controls. So a value that comes back is one that suits the surface it came from, and a difference between two surfaces is a decision rather than an inconsistency to reconcile.
-
-When more than one surface comes back, DESIGN.md says what each of them does with color, movement, section separation, corner radius, and depth, instead of stating one answer for the product.
-
-Tell the user in one line that the visual cues are ready at `.impeccable/visual-cues/` (name the count), then run `node "<skill-base-dir>/scripts/picker-server.mjs"` from the project root as a foreground command and parse its `PICKER_URL` line.
-
-- **Cursor**: `browser_navigate` to the `PICKER_URL`; that is the in-IDE browser, where the questionnaire belongs. Do not skip this, and do not use the system opener while the tool works. The tab is the user's viewport only; never drive the questionnaire yourself, because the answers are the user's.
-- **Another harness with a browser tool**: open the URL with that tool, on the same viewport-only rule.
-- **No browser tool, or the tool call failed**: open the URL with the system opener (macOS `open`, Linux `xdg-open`), then tell the user in one line to finish in the opened tab.
-- **Even the opener failed**: tell the user *"The design picker is running at [URL]; open it in your browser and finish there."*
-
-Whichever branch ran, wait on the foreground process.
-
-A relaunch on a project that has already been through this arrives with the previous answers filled in, and resumes an unfinished run from its own draft; `--fresh` starts blank. [design-context.md](design-context.md) owns that path.
-
-The server process exiting is the completion signal; never poll or watch the answers file while it runs.
-
-- **Exit 0**: read the `ANSWERS` path, tell the user the answers were received in one line, then return to [document.md](document.md) Steps 5-6 and write the seed DESIGN.md from that file (its questionnaire-seed mapping owns which key lands where). Do not show or describe the cues or ask for a pick in chat; the picker already settled the pick. The user's tab is meanwhile showing the design context document the picker built from the run, and that document is now a working surface: on submit the server forked a detached edit session (`picker-doc-session.mjs`) that keeps the tab connected. After the seed DESIGN.md is written, enter the edit loop below.
-- **Exit 2**: tell the user the picker closed unanswered and that they can relaunch it with the same command. Never restart it unprompted.
-
-## The document edit loop
-
-The revealed document is editable in place, on live mode's division of labor:
-
-- **Field edits are applied before you hear about them.** A palette color or a line of product truth is staged in the page, and pressing Apply sends the batch to the session, which writes every value into the store and journals it. What reaches you is the prose those values leave stale: a `save_batch` event naming each change and the document it is owed in.
-- **Asks in words queue for you from the start.** Font changes (including uploaded faces, saved under `.impeccable/design-context/fonts/`) and freeform requests arrive as `edit_request` events, because there is no value to apply until you decide what it should be.
-- **The session is the only writer of the store while it runs.** Never write `answers.json` or `context.json` yourself during the loop; attach the values to your reply instead (below) and let the session apply them. DESIGN.md and PRODUCT.md are yours.
-
-After writing the seed DESIGN.md, tell the user in one line that the document in their tab is live for edits, then poll:
-
-```
-node "<skill-base-dir>/scripts/picker-doc-poll.mjs"
-```
-
-One-shot, exactly like live mode's poll: it blocks until one event and prints it as JSON. Run it on live mode's harness policy: on Claude Code as a background task; on Cursor as a one-shot poll in a background terminal with notify on `"type":"(edit_request|exit)"`; on Codex as a yielded foreground exec; elsewhere one-shot foreground. Never `--timeout` it short.
-
-- `{"type":"edit_request", "id", "kind", "prompt", "category", "payload"}`: do the work. Apply the change to DESIGN.md, move any uploaded font files where the project keeps assets, then reply and poll again. Where a questionnaire key names the same fact, attach it rather than writing it, so the tab re-renders it and one process stays in charge of the store:
-
-  ```
-  node "<skill-base-dir>/scripts/picker-doc-poll.mjs" --reply <id> done "One line the user sees in the tab"
-  node "<skill-base-dir>/scripts/picker-doc-poll.mjs" --reply <id> done "Swapped the pair" --answers '{"font-heading":"Fraunces"}'
-  ```
-
-  Reply `error` with a reason when the ask cannot be applied; reply `retry` to put it back in the queue untouched.
-- `{"type":"save_batch", "id", "changes", "downstream", "replyCommand"}`: the values are already in the store, so do not apply them again. Read `downstream` and bring each named document in line: `design-md` items are values DESIGN.md states (swap the value, and rename a color whose description no longer fits it), `product-md` items are product truth PRODUCT.md owns. Then reply with the command the event carries. A document that does not exist yet, or a value the document already carries, is success: reply `done`. Reply `error` only when a document exists and cannot be edited.
-- `{"type":"timeout"}`: nothing arrived in the budget; poll again.
-- `{"type":"exit"}`: the session ended (tab closed or timed out). Before moving on, read `runtime/journal.jsonl` for `change` entries you never saw a `save_batch` for, which is what a session that died mid-save leaves behind, and reconcile the prose around them. Then stop polling; the loop is over.
-
-The user may keep working in chat while the document sits open; treat an `edit_request` like any other user instruction, just delivered through the tab.
