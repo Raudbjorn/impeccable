@@ -207,23 +207,11 @@ test('serves picker and cues, writes submission, prints answers, and exits 0', a
   assert.match(pageHtml, /data-copy-url-value aria-label="Picker URL"><\/code>/);
   assert.match(pageHtml, /aria-label="Copy link"/);
   assert.match(pageHtml, />Start<span class="ks-button-arrow"/);
-  assert.match(pageHtml, /rel="icon" type="image\/svg\+xml" href="\.\/favicon\.svg"/);
   assert.match(pageHtml, /data-type-headline/);
   assert.doesNotMatch(pageHtml, />Made to last</);
-  assert.match(pageHtml, /assets\/hero-dark\.jpg/);
   const stylesheet = pageHtml.match(/href="(\.\/assets\/[^"]+\.css)"/)?.[1];
   assert.ok(stylesheet);
   assert.equal((await fetch(new URL(stylesheet, `${server.url}/`))).status, 200);
-
-  const faviconResponse = await fetch(`${server.url}/favicon.svg`);
-  assert.equal(faviconResponse.status, 200);
-  assert.match(faviconResponse.headers.get('content-type'), /^image\/svg\+xml/);
-  assert.match(await faviconResponse.text(), /<svg/);
-
-  const heroResponse = await fetch(`${server.url}/assets/hero-dark.jpg`);
-  assert.equal(heroResponse.status, 200);
-  assert.equal(heroResponse.headers.get('content-type'), 'image/jpeg');
-  assert.ok((await heroResponse.arrayBuffer()).byteLength > 0);
 
   const cueResponse = await fetch(`${server.url}/cues/hero-01.png`);
   assert.equal(cueResponse.status, 200);
@@ -650,9 +638,20 @@ test('doc session serves picker assets, token-gated and contained', async (t) =>
     assert.equal((await fetch(`${base}/assets/../picker-server.mjs?token=t-assets`)).status, 404);
     /* An extension the route DOES allow, on a real file outside the assets
        directory: only the containment check can turn this one away, so it is
-       the case that actually tests it. */
-    assert.equal((await fetch(`${base}/assets/../favicon.svg?token=t-assets`)).status, 404);
-    assert.equal((await fetch(`${base}/assets/..%2F..%2F..%2F..%2Fpicker/assets/favicon.svg?token=t-assets`)).status, 404);
+       the case that actually tests it (a request for a path that merely
+       doesn't exist would 404 either way and silently stop proving anything
+       if containment ever broke). No shipped file with an allowed extension
+       sits one level up from assetsOutputDir any more, so this writes its own
+       throwaway probe there and cleans it up after. */
+    const outsideProbe = path.join(assetsOutputDir, '..', 'probe-outside.svg');
+    await mkdir(path.dirname(outsideProbe), { recursive: true });
+    await writeFile(outsideProbe, '<svg></svg>');
+    try {
+      assert.equal((await fetch(`${base}/assets/../probe-outside.svg?token=t-assets`)).status, 404);
+      assert.equal((await fetch(`${base}/assets/..%2Fprobe-outside.svg?token=t-assets`)).status, 404);
+    } finally {
+      await rm(outsideProbe, { force: true });
+    }
     assert.equal((await fetch(`${base}/assets/audience/needs-foil.txt?token=t-assets`)).status, 404);
     assert.equal((await fetch(`${base}/assets/?token=t-assets`)).status, 404);
   } finally {

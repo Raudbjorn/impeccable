@@ -49,9 +49,10 @@ picker/assets/components/<brand-name>-ikebana-card.jpg                 800x1200 
 nested two directories deep; every other category (`audience/`, `product/`,
 `color/`, `typography/`, `material/`) is a flat `<category>/<file>.png`. If
 you add your own placeholder set and want it grouped in a subdirectory the
-way <brand-name>'s was, that's the only precedent for it. You'll need to confirm
-`scripts/build-picker.mjs`'s `cp(..., { recursive: true })` step still picks
-it up, since it already copies whole directories.
+way <brand-name>'s was, that's the only precedent for it. Nesting isn't a
+problem either way: the `assetsDir` copy the final chapter below documents is
+a single recursive directory copy, so it preserves whatever subdirectory
+structure you give it.
 
 Two wiring points in `picker/scripts/dcx/dcx-document.js` pulled those files
 in:
@@ -89,18 +90,23 @@ theme was purely cosmetic and free to change without touching any assertion.
 
 ## Doing your own
 
-To give the design-context document a real fallback brand again:
+`picker/assets/` itself is gone too now (see "The picker's own section icons"
+and the final chapter below): the directory held nothing else once its last
+three files were pruned, so it was removed along with them. To give the
+design-context document a real fallback brand again:
 
-1. Drop your image files under `picker/assets/`, following the existing
-   per-category flat layout unless you specifically want nesting (see above).
+1. Create `picker/assets/` and drop your image files under it, following the
+   old per-category flat layout unless you specifically want nesting (see
+   above). Then wire it up as `assetsDir` in the `buildAstroComponent()` call
+   in `scripts/build-picker.mjs` (the mechanism the final chapter below
+   documents), so it gets copied into the build output.
 2. In `picker/scripts/dcx/dcx-document.js`, reintroduce a placeholder array
    shaped like `BRAND_PLACEHOLDER_ASSETS` above and use it as the fallback in
    `composeBrandAssetsArticle` when `renderedBrandAssets(article)` returns
    empty.
 3. If you want the "Cards" showcase to have a bundled fallback photo again
    instead of collapsing to text-only, give `componentCardImageTag` a second,
-   fallback branch the way `componentCardImage` used to have one, and add the
-   asset's directory to `runtimeAssetDirs` in `scripts/build-picker.mjs`.
+   fallback branch the way `componentCardImage` used to have one.
 4. Run `bun run build:release`. This rebuilds `skill/scripts/picker/` from
    source and resyncs every provider's committed copy
    (`.claude/`, `.gemini/`, `.codex/`, `.agents/`, `.github/`, `.kiro/`,
@@ -204,7 +210,9 @@ were deliberately left in place rather than stripped out, even though nothing
 in the static metadata can ever set them again on their own. To bring section
 icons back:
 
-1. Drop icon files under the matching `picker/assets/<category>/` directory.
+1. Re-create `picker/assets/<category>/` and drop icon files under it (the
+   whole `picker/assets/` directory is gone now too, per "Doing your own"
+   above).
 2. Add an `icon:` field to the relevant `SECTION_META` entry in
    `dcx-audience.js`, or an icon path as the second array element in the
    relevant `DETAIL_META[category][label]` entry in `dcx-detail.js`. Both
@@ -214,11 +222,164 @@ icons back:
    `patinaPattern`/`goldPattern` in `dcx-rail.js` and restore the opacity and
    filter rules in `dcx-rail.css` (removed alongside the images since nothing
    else used them).
-4. `scripts/build-picker.mjs` no longer has a `runtimeAssetDirs` loop at all:
-   it was removed once every entry in it (`audience`, `product`, `brand`,
-   `color`, `typography`, `material`) pointed at a now-empty directory. If any
-   category directory holds files again, that whole-directory-copy loop needs
-   to come back too, the same way `components` had to be re-added for the
-   placeholder brand's card photo before it, too, was pruned (see above).
+4. Wire `picker/assets/` back up as `assetsDir` in the `buildAstroComponent()`
+   call in `scripts/build-picker.mjs`, the same one `hero-dark.jpg` and
+   `kinpaku-gold-leaf.jpg` used before they too were pruned (see the final
+   chapter below for how that call is shaped).
 5. Run `bun run build:release` and `node cli/bin/cli.js detect skill/scripts/picker/`
    the same way as step 4 and 5 above.
+
+## The picker's own page chrome
+
+The last three files under `picker/assets/`, and the directory itself once
+they were gone: `favicon.svg`, `hero-dark.jpg`, and `kinpaku-gold-leaf.jpg`.
+Same bucket as the section icons above (the picker's own tool chrome, not
+end-user branding), but a different mechanism each, in `picker/layouts/Picker.astro`,
+`picker/pages/index.astro`, and `picker/styles/picker.css`.
+
+### What they were and how they were wired
+
+- **`favicon.svg`**: the browser-tab icon. One line in `Picker.astro`'s
+  `<head>`: `<link rel="icon" type="image/svg+xml" href="./favicon.svg" />`.
+  Just deleted; a page with no favicon link is a normal, unremarkable state.
+- **`hero-dark.jpg`**: a decorative, `aria-hidden` background image behind the
+  questionnaire's start screen. `index.astro` rendered it as
+  `<div class="picker-hero-art" style="background-image: url('assets/hero-dark.jpg')" aria-hidden="true">`,
+  positioned `absolute; inset: 0; z-index: 0` behind `#picker-form` (`z-index: 1`)
+  in `picker.css`, so removing the `<div>` outright left no gap: nothing else
+  in `.picker-shell` was laid out relative to it. Three CSS pieces went with
+  it: the base `.picker-hero-art` rule, a `:has(#picker-form[data-current="..."])`
+  selector list that faded it out on every screen except the start and finish
+  (an opinion about screens judged "against a plain ground", not something a
+  no-art state needs), and its entry in a shared `prefers-reduced-motion`
+  selector list (just that one selector removed, the rest of the list stayed).
+- **`kinpaku-gold-leaf.jpg`**: a texture overlay on the picker's own primary
+  button, named after the site's own `--ks-kinpaku` gold accent. Set as a CSS
+  custom property on `<body>` in `Picker.astro`
+  (`style="--pk-foil: url('/assets/kinpaku-gold-leaf.jpg')"`, the only style
+  on that element, so the whole attribute came out with it), consumed by a
+  `.picker-page .ks-button.ks-button-primary::before` pseudo-element at 0.38
+  opacity (0.26 on hover, 0 when disabled) layered over the button's solid
+  `background: var(--ks-kinpaku)` fill. Removing just the `::before` rule (and
+  its hover/disabled variants, and the now-pointless `position: relative;
+  isolation: isolate;` that existed only to anchor it) left the solid gold
+  fill as the button's whole look: a flat color, not a broken one, the same
+  graceful-degrade shape as the material rail's two textures above.
+
+### Reintroducing them
+
+`favicon.svg` and `kinpaku-gold-leaf.jpg` are self-contained: adding either
+back is a one-line change at its single call site, no other code depends on
+their absence. `hero-dark.jpg` needs a little more: the `<div>` back in
+`index.astro`, plus its three CSS pieces (a plain background-image rule needs
+none of the show/hide-per-screen behavior to look correct, but that behavior
+is what made the original feel deliberate rather than a stray image sitting
+behind the form). In every case, wire the file into `assetsDir` or
+`extraFiles` on the `buildAstroComponent()` call in `scripts/build-picker.mjs`,
+per the next chapter: a favicon fetched by the browser directly (like
+`icon-packs.json` today) is an `extraFiles` entry copied to the output root; a
+texture referenced by URL from CSS or markup (like the two rail textures)
+belongs in `assetsDir`.
+
+## Adding a new component with its own `assets/` and `index.html`
+
+Everything above lives inside the picker, the one component under
+`skill/scripts/` today that ships a real page. This chapter is the general
+mechanism behind that, for adding a second one: how a `<component>/` Astro
+project at the repo root ends up as `skill/scripts/<component>/index.html`
+(with an optional `assets/`), synced into every provider directory the same
+way the picker is.
+
+### The mechanism
+
+Three pieces, each already generic:
+
+1. **The build script.** `scripts/lib/build-astro-component.mjs` exports
+   `buildAstroComponent({ root, name, astroConfig, assetsDir, extraFiles })`.
+   It runs `bun x astro build --config <astroConfig>`, copies the result to
+   `skill/scripts/<name>/`, then (both optional) copies `assetsDir` wholesale
+   into `<output>/assets/` and copies each `{ from, to }` pair in `extraFiles`
+   to the output root. `scripts/build-picker.mjs` is a thin wrapper around it:
+   ```js
+   const outputDir = await buildAstroComponent({
+     root,
+     name: 'picker',
+     astroConfig: 'picker/astro.config.mjs',
+     extraFiles: [
+       { from: path.join(root, 'picker/data/icon-packs.json'), to: 'icon-packs.json' },
+     ],
+   });
+   ```
+   (Plus, ahead of that call, whatever picker-specific data generation the
+   component needs done fresh every build; picker's is the `hook-rules.json`
+   write, unrelated to the build-astro-component mechanism itself and not
+   something a new component needs to copy.)
+2. **`skill/scripts/<name>/` is gitignored build output**, the same as
+   `skill/scripts/picker/`. Nothing under it is ever hand-edited or committed
+   directly; it is entirely regenerated by the build script above.
+3. **The provider sync is already generic.** `scripts/build.js` (invoked by
+   `bun run build:skills` / `build:skills:release`, which `build` /
+   `build:release` chain after the component builds) has no picker-specific
+   code at all: it syncs whatever it finds under `skill/scripts/**` into
+   every provider's `skills/impeccable/scripts/` directory, `plugin/`, and the
+   `dist/`/`build/_data/dist/` outputs. A new component that lands correctly
+   at `skill/scripts/<name>/` needs no additional sync wiring anywhere.
+
+### Steps
+
+1. Create `<component>/` at the repo root: an Astro project (`astro.config.mjs`,
+   `pages/`, and whatever `layouts/`, `styles/`, `scripts/`, `data/` it needs).
+   `picker/` is the template to copy from for shape, not content.
+2. Create `scripts/build-<component>.mjs`:
+   ```js
+   #!/usr/bin/env node
+   import path from 'node:path';
+   import { fileURLToPath } from 'node:url';
+   import { buildAstroComponent } from './lib/build-astro-component.mjs';
+
+   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+   const outputDir = await buildAstroComponent({
+     root,
+     name: '<component>',
+     astroConfig: '<component>/astro.config.mjs',
+     // assetsDir: path.join(root, '<component>/assets'),   // only if you have one
+     // extraFiles: [{ from: ..., to: 'some-file.json' }],  // only if you have any
+   });
+
+   console.log(`Built ${path.relative(root, outputDir)}/`);
+   ```
+3. Add `"build:<component>": "node scripts/build-<component>.mjs"` to
+   `package.json`, and chain it into the top-level `build` / `build:release`
+   scripts alongside `build:picker`, before `build:skills` /
+   `build:skills:release` (the provider sync needs the component already
+   built to pick it up).
+4. Run `bun run build:<component>` to check it locally: output lands at
+   `skill/scripts/<component>/index.html`. Note `<output>/assets/` can exist
+   even without setting `assetsDir`: Vite writes its own compiled, content-
+   hashed JS/CSS bundles there regardless, unrelated to the `assetsDir` copy.
+5. Run `bun run build:release` to sync it everywhere. No component-specific
+   sync code to write, per the mechanism above.
+6. Wire something up to actually invoke the page (a server script the skill's
+   commands launch, the way `picker-server.mjs` and `picker-doc-session.mjs`
+   serve the picker) and mention the component in the relevant
+   `skill/reference/*.md` so the skill's routing knows it exists. The Astro
+   build only produces the static page; nothing here serves it.
+7. Run `node cli/bin/cli.js detect skill/scripts/<component>/` the same way
+   as the picker's own gate (CLAUDE.md's "Picker anti-pattern gate" section
+   has the scanning caveats: name the directory, not `index.html` alone, and
+   why a served URL or the unminified source are each worse than the built
+   directory for this).
+
+### `assetsDir` vs `extraFiles`
+
+- **`assetsDir`**: a directory copied wholesale into `<output>/assets/`, for
+  files referenced by a literal `/assets/...` URL in markup that Vite should
+  never see or process (a texture, a photo). Preserves whatever subdirectory
+  structure it has.
+- **`extraFiles`**: individual files copied to the output root, for a
+  standalone data file a page fetches at runtime rather than imports through
+  Vite. `icon-packs.json` (above) is the one live example today; picker used
+  to copy `favicon.svg` to the output root by a similar, then-separate step
+  before that file, too, was pruned along with the rest of its own page
+  chrome (see "The picker's own section icons").

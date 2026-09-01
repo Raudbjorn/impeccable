@@ -45,15 +45,11 @@ const {
     <meta name="viewport" content="width=device-width" />
     <meta name="description" content={description} />
     <title>{title}</title>
-    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Albert+Sans:wght@300;400;500;600;700&family=Alumni+Sans:wght@100;300;400;500;600;700&display=swap" rel="stylesheet" />
   </head>
-  <!-- Declared here, not in picker.css, so Vite leaves the path alone. It is
-       server-absolute because a url() inside var() resolves against the
-       stylesheet that consumes it, which lives one directory down. -->
-  <body class="picker-page" style="--pk-foil: url('/assets/kinpaku-gold-leaf.jpg')">
+  <body class="picker-page">
     <slot />
   </body>
 </html>

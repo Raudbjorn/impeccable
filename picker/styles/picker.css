@@ -45,23 +45,6 @@ body.picker-page {
   text-rendering: optimizeLegibility;
 }
 
-/* The gold-leaf face, as the site sets it: a flat kinpaku fill with the leaf
-   asset over it at 38%, not the leaf itself as the fill. The texture is a
-   pseudo-element because a background-image cannot carry its own opacity, and
-   the fixed 340px render keeps the crack structure readable at button size
-   where `cover` would average the asset into flat gold.
-
-   Kept here rather than in the vendored kit for one reason: the picker serves
-   its own compressed copy of the leaf from its own assets directory, so the
-   URL has to come from --pk-foil (set on <body> in layouts/Picker.astro). The
-   rest matches `.ks-button.ks-button-primary` in the site's kinpaku-kit.css,
-   including the hover that lifts to vivid gold rather than the pale beige the
-   vendored copy still carries. */
-.picker-page .ks-button.ks-button-primary {
-  position: relative;
-  isolation: isolate;
-}
-
 /* The paint is gated on :not([disabled]) so it never competes with the disabled
    state below. Without the gate this selector is (0,3,0) and the kit's
    `.ks-button[disabled]` is (0,2,0), so a disabled button kept the full gold
@@ -72,18 +55,6 @@ body.picker-page {
   border-color: var(--ks-kinpaku);
 }
 
-.picker-page .ks-button.ks-button-primary::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: inherit;
-  background: var(--pk-foil) 68% 44% / 340px auto no-repeat;
-  opacity: 0.38;
-  pointer-events: none;
-  transition: opacity 180ms var(--ks-ease);
-}
-
 .picker-page .ks-button.ks-button-primary:not([disabled]):hover {
   color: var(--ks-dark-ink);
   background: var(--ks-kinpaku-vivid);
@@ -91,21 +62,10 @@ body.picker-page {
   transform: translateY(-1px);
 }
 
-.picker-page .ks-button.ks-button-primary:not([disabled]):hover::before {
-  opacity: 0.26;
-}
-
 .picker-page .ks-button.ks-button-primary:not([disabled]):active {
   background: var(--ks-kinpaku-rich);
   border-color: var(--ks-kinpaku-rich);
   transform: translateY(0);
-}
-
-/* Select this palette waits for a committed color, and the kit's disabled state
-   drops the fill to transparent. The leaf has to go with it, or the texture
-   floats on the page with no gold under it. */
-.picker-page .ks-button.ks-button-primary[disabled]::before {
-  opacity: 0;
 }
 
 /* A disabled button answering the pointer is the other half of the same bug:
@@ -129,19 +89,6 @@ body.picker-page {
   min-height: 100vh;
   min-height: 100svh;
   overflow: hidden;
-}
-
-.picker-hero-art {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background-position: left center;
-  background-size: cover;
-  background-repeat: no-repeat;
-  /* Same grade the site gives .hero-rebuild-art over this asset. */
-  filter: saturate(1.2) contrast(1.08);
-  pointer-events: none;
-  transition: opacity 180ms var(--ks-ease);
 }
 
 #picker-form {
@@ -346,24 +293,6 @@ body[data-hydrated='submitted'] [data-restored-submitted] {
   color: var(--ks-text-muted);
   font-size: var(--ks-type-mono-size);
   line-height: 1.5;
-}
-
-/* The art belongs to the start screen and the finish. Every question in
-   between is judged against a plain ground, because a photograph behind a
-   palette or a wireframe is a second opinion nobody asked for. */
-.picker-shell:has(#picker-form[data-current="01b"]) .picker-hero-art,
-.picker-shell:has(#picker-form[data-current="02"]) .picker-hero-art,
-.picker-shell:has(#picker-form[data-current="03"]) .picker-hero-art,
-.picker-shell:has(#picker-form[data-current="04"]) .picker-hero-art,
-.picker-shell:has(#picker-form[data-current="04b"]) .picker-hero-art,
-.picker-shell:has(#picker-form[data-current="05"]) .picker-hero-art,
-.picker-shell:has(#picker-form[data-current="06"]) .picker-hero-art,
-.picker-shell:has(#picker-form[data-current="07"]) .picker-hero-art,
-.picker-shell:has(#picker-form[data-current="08"]) .picker-hero-art,
-.picker-shell:has(#picker-form[data-current="09"]) .picker-hero-art,
-.picker-shell:has(#picker-form[data-current="10"]) .picker-hero-art,
-.picker-shell:has(#picker-form[data-current="11"]) .picker-hero-art {
-  opacity: 0;
 }
 
 /* One hairline per step, gold once passed, plus the count and the name of the
@@ -7915,7 +7844,6 @@ body[data-hydrated='submitted'] [data-restored-submitted] {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .picker-hero-art,
   .picker-progress,
   .picker-progress span,
   .picker-card,
