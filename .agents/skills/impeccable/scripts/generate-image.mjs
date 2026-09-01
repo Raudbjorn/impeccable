@@ -27,6 +27,17 @@
  * does not read as the region is reported (and, with --min, refused) here,
  * before it lands on the page. In IMPECCABLE_IMAGE_GEN_FAKE mode the plate is
  * the crop itself at 2x, so offline pipelines can walk the plate gate.
+ *
+ *   node generate-image.mjs --plate <region-id> --score-only [--out plate.png]
+ *
+ * --score-only runs the plates gate (build-phase.mjs's gateOnePlate, the same
+ * check `build-phase.mjs advance` makes) against a plate a harness-native
+ * image tool already produced, without generating anything: the asset
+ * producer's crop -> prompt -> native tool -> embed path has no scored step
+ * of its own otherwise. Scores the region's own plate path unless --out
+ * points at a plate written elsewhere. Exits 1 when there is no plate or no
+ * usable score, 2 when the gate refuses the plate, 3 when --min is given and
+ * the score falls short.
  */
 import fs from 'node:fs';
 import path from 'node:path';

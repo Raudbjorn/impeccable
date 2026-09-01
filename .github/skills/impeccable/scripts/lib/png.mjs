@@ -263,8 +263,19 @@ export function loadRaster(file) {
   const buf = fs.readFileSync(file);
   if (isPng(buf)) return { image: decodePng(buf), path: file };
   const cache = `${file}.png`;
+  // Existence alone is not freshness: a cache from a prior run of the same
+  // filename outlives the source it was converted from, so a regenerated
+  // comp.webp read through a stale comp.webp.png silently ships yesterday's
+  // pixels. Only trust the cache when it is not older than its source.
   if (fs.existsSync(cache)) {
-    try { const b = fs.readFileSync(cache); if (isPng(b)) return { image: decodePng(b), path: cache }; } catch { /* reconvert */ }
+    try {
+      const sourceMtime = fs.statSync(file).mtimeMs;
+      const cacheMtime = fs.statSync(cache).mtimeMs;
+      if (cacheMtime >= sourceMtime) {
+        const b = fs.readFileSync(cache);
+        if (isPng(b)) return { image: decodePng(b), path: cache };
+      }
+    } catch { /* reconvert */ }
   }
   const attempts = [
     ['dwebp', [file, '-o', cache]],
