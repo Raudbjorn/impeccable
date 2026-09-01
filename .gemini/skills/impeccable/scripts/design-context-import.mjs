@@ -54,7 +54,16 @@ if (!['skip', 'write'].includes(design)) {
   process.exit(1);
 }
 
-await migrate(process.cwd());
+/* A live legacy-format session holds the OLD paths in its own constants, so
+   migrate() defers rather than moving files out from under it. Proceeding
+   here anyway would import into the new-layout store while that session
+   keeps writing the old one -- two stores, one project, neither aware of the
+   other. Refuse the same way the running-session check below does. */
+const { deferred } = await migrate(process.cwd());
+if (deferred) {
+  console.error('A design context document from an older release is open. Close it, then import.');
+  process.exit(1);
+}
 const target = paths(process.cwd());
 
 /* A running session holds the store: importing under it would swap the run out
@@ -78,6 +87,6 @@ try {
   process.exit(1);
 }
 
-const result = await importDesignContext(process.cwd(), bundle, { design });
+const result = await importDesignContext(process.cwd(), bundle, { design, force: args.includes('--force') });
 console.log(`IMPORTED ${result.written} files`);
 console.log(`DESIGN_MD ${result.designCarried ? 'carried' : 'absent'}${result.designWritten ? ' written' : ''}`);

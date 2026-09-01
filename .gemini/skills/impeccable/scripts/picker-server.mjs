@@ -490,7 +490,7 @@ async function probeSession(record) {
   if (!record?.port || !record?.token) return false;
   try {
     const response = await fetch(
-      `http://127.0.0.1:${record.port}/doc/state?token=${encodeURIComponent(record.token)}`,
+      `http://127.0.0.1:${record.port}/doc/state?token=${encodeURIComponent(record.token)}&probe=1`,
       { signal: AbortSignal.timeout(2000) },
     );
     return response.ok;
@@ -521,7 +521,21 @@ async function waitForSessionRecord(deadlineMs, expectPort = 0) {
  */
 async function adoptDocSession() {
   const recorded = await readJsonSoft(store.sessionJson);
-  if (recorded && pidAlive(recorded.pid)) {
+  // A session's Access-Control-Allow-Origin is pinned to the picker port it
+  // was forked from and never changes for its lifetime (picker-doc-session.mjs
+  // reads --origin-port once, at startup). Reopening on a different picker
+  // port (a prior picker process exited and this one landed on a new
+  // findOpenPort() result) would adopt a session that rejects every request
+  // from the tab this process is about to serve. Origin mismatch is treated
+  // the same as a dead session: stop it and fork a fresh one pinned to this
+  // picker's own port.
+  if (recorded && recorded.originPort !== port) {
+    if (pidAlive(recorded.pid)) {
+      try { process.kill(recorded.pid, 'SIGTERM'); } catch { /* already gone */ }
+      for (let waited = 0; waited < 5000 && pidAlive(recorded.pid); waited += 200) await sleep(200);
+    }
+    await rm(store.sessionJson, { force: true }).catch(() => {});
+  } else if (recorded && pidAlive(recorded.pid)) {
     if (await probeSession(recorded)) return recorded;
     try { process.kill(recorded.pid, 'SIGTERM'); } catch { /* already gone */ }
     for (let waited = 0; waited < 5000 && pidAlive(recorded.pid); waited += 200) await sleep(200);

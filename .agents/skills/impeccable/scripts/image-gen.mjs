@@ -98,7 +98,17 @@ async function curlJson(url, { method = "GET", headers = {}, body } = {}) {
   const { hostname } = new URL(url);
   const ip = await resolveIp(hostname);
   const args = ["-sS", "--max-time", "180", "--resolve", `${hostname}:443:${ip}`, "-X", method, "-w", "\n%{http_code}"];
-  for (const [k, v] of Object.entries(headers)) args.push("-H", `${k}: ${v}`);
+  // Auth headers (the provider API key) travel in a mode-0600 curl config
+  // file, never argv: an argv header is visible to any same-user process
+  // via /proc/<pid>/cmdline or ps while curl runs, and to command telemetry
+  // that logs argv. -K reads one "header = ..." line per header.
+  let headerFile;
+  if (Object.keys(headers).length) {
+    headerFile = path.join(os.tmpdir(), `image-gen-headers-${process.pid}-${Date.now()}.txt`);
+    const lines = Object.entries(headers).map(([k, v]) => `header = "${k}: ${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`);
+    fs.writeFileSync(headerFile, lines.join("\n") + "\n", { mode: 0o600 });
+    args.push("-K", headerFile);
+  }
   let bodyFile;
   if (body !== undefined) {
     bodyFile = path.join(os.tmpdir(), `image-gen-body-${process.pid}-${Date.now()}.json`);
@@ -119,23 +129,42 @@ async function curlJson(url, { method = "GET", headers = {}, body } = {}) {
     }
     return { status, json, text };
   } finally {
+    if (headerFile) fs.rmSync(headerFile, { force: true });
     if (bodyFile) fs.rmSync(bodyFile, { force: true });
   }
 }
 
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+// Downloads to a sibling temp path, checks the PNG signature (BFL is asked
+// for output_format: "png", but a 2xx response body is not proof of that --
+// a delivery-CDN edge error page or truncated body would otherwise land
+// directly on outPath and only surface as a mysterious decode failure two
+// pipeline stages later), then renames onto outPath so a reader never sees
+// a partial or invalid file at the final path.
 async function download(url, outPath) {
   const { hostname } = new URL(url);
+  const tmpPath = `${outPath}.download-${process.pid}-${Date.now()}.tmp`;
   let lastErr;
   // Re-resolve on every attempt: CDN delivery hosts are the flakiest to
   // resolve, and a fresh IP is usually what fixes a failure.
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const ip = await resolveIp(hostname);
-      execFileSync("curl", ["-sS", "-f", "--max-time", "60", "--resolve", `${hostname}:443:${ip}`, "-o", outPath, url]);
-      if (fs.existsSync(outPath) && fs.statSync(outPath).size > 0) return;
-      lastErr = new Error("download produced an empty file");
+      execFileSync("curl", ["-sS", "-f", "--max-time", "60", "--resolve", `${hostname}:443:${ip}`, "-o", tmpPath, url]);
+      const buf = fs.existsSync(tmpPath) ? fs.readFileSync(tmpPath) : null;
+      if (!buf || buf.length === 0) {
+        lastErr = new Error("download produced an empty file");
+      } else if (!buf.subarray(0, 8).equals(PNG_SIGNATURE)) {
+        lastErr = new Error("downloaded file is not a valid PNG (bad signature)");
+      } else {
+        fs.renameSync(tmpPath, outPath);
+        return;
+      }
     } catch (e) {
       lastErr = e;
+    } finally {
+      fs.rmSync(tmpPath, { force: true });
     }
     await sleep(2000 * (attempt + 1));
   }
@@ -236,12 +265,27 @@ async function generateBfl({ apiKey, prompt, ref, width, height, out }) {
 // --width/--height (Gemini picks its own pixel size per tier; the pipeline
 // only requires square). Moderation shows up as a response with no image
 // part plus a block reason, not as an HTTP error.
+// Reference files on disk are whatever a prior pipeline step produced, not
+// necessarily PNG. Gemini rejects a mismatched declared MIME by silently
+// misreading the bytes rather than erroring, so the type sent must match
+// the actual bytes, sniffed from the format signature rather than trusted
+// from the file extension.
+function sniffImageMime(buf) {
+  if (buf.subarray(0, 8).equals(PNG_SIGNATURE)) return "image/png";
+  if (buf.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) return "image/jpeg";
+  if (buf.subarray(0, 4).toString("ascii") === "RIFF" && buf.subarray(8, 12).toString("ascii") === "WEBP") return "image/webp";
+  fail("--ref file is not a recognized image format (expected PNG, JPEG, or WebP signature)");
+}
+
 async function generateGemini({ apiKey, prompt, ref, out }) {
   // IMAGE_GEN_MODEL overrides for users on a different tier; the default
   // is the high-volume Nano Banana model.
   let model = loadEnv("IMAGE_GEN_MODEL") || "gemini-3.1-flash-image";
   const parts = [{ text: prompt }];
-  if (ref) parts.push({ inlineData: { mimeType: "image/png", data: fs.readFileSync(ref).toString("base64") } });
+  if (ref) {
+    const refBuf = fs.readFileSync(ref);
+    parts.push({ inlineData: { mimeType: sniffImageMime(refBuf), data: refBuf.toString("base64") } });
+  }
   const body = JSON.stringify({
     contents: [{ parts }],
     generationConfig: { responseModalities: ["IMAGE"], imageConfig: { aspectRatio: "1:1" } },

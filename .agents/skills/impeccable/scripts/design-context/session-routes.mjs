@@ -79,8 +79,11 @@ export function createSaveRoutes({ cwd = process.cwd(), onChange = () => {} } = 
     });
   }
 
-  /** One read and one write per file, so a save lands whole or not at all. */
-  async function applyToStore(changes) {
+  /** Read each file the batch touches once, and record what each change
+      would replace, without mutating anything yet: the batch has to be
+      journaled as owed before the store changes, not after (see save()),
+      and journaling needs `previous` values this same read produces. */
+  async function loadAndDiff(changes) {
     const files = new Map();
     const load = async (file) => {
       if (!files.has(file)) {
@@ -99,6 +102,17 @@ export function createSaveRoutes({ cwd = process.cwd(), onChange = () => {} } = 
         ? (document.context ??= {})
         : document;
       change.previous = String(readPath(root, change.binding.path) ?? '');
+    }
+    return files;
+  }
+
+  /** One read and one write per file, so a save lands whole or not at all. */
+  async function commitToStore(changes, files) {
+    for (const change of changes) {
+      const document = files.get(change.binding.file);
+      const root = change.binding.file === 'context'
+        ? (document.context ??= {})
+        : document;
       writePath(root, change.binding.path, change.to);
     }
 
@@ -114,29 +128,66 @@ export function createSaveRoutes({ cwd = process.cwd(), onChange = () => {} } = 
     async save(body) {
       if (pending) throw httpError(409, 'A save is already applying');
       const changes = validate(body);
-      await applyToStore(changes);
+      // Reserve before the first await: two /doc/save requests interleave at
+      // await points, and the guard above means nothing to a second request
+      // that arrives while this one is still mid-flight and pending is still
+      // null. A placeholder object (not a full batch: there is no id or
+      // recorded list yet) closes that window the same tick the guard above
+      // runs, so a second save() sees pending truthy and is rejected instead
+      // of racing this one's store writes.
+      pending = { id: null, status: 'reserving', changes: [], leaseUntil: 0 };
+      let journaledId = null;
+      try {
+        const files = await loadAndDiff(changes);
 
-      for (const change of changes) {
-        appendJournal({
-          type: 'change',
-          bindingId: change.bindingId,
-          from: change.previous,
-          to: change.to,
-        }, cwd);
+        counter += 1;
+        const id = `batch-${String(counter).padStart(3, '0')}`;
+        const recorded = changes.map(({ bindingId, previous, to, binding }) => ({
+          bindingId,
+          from: previous,
+          to,
+          downstream: binding.downstream,
+        }));
+        // Journaled before the store write, not after: a crash between the
+        // two used to leave the store already changed with nothing in the
+        // journal ever having said a batch happened, so replay recovered no
+        // pending batch and the agent's reconciliation obligation for those
+        // values was silently lost. A crash before this line instead leaves
+        // no batch and no store change, which replay already handles as
+        // "nothing happened".
+        appendJournal({ type: 'batch', id, status: 'pending', changes: recorded }, cwd);
+        journaledId = id;
+        pending = { id, status: 'pending', changes: recorded, leaseUntil: 0 };
+
+        await commitToStore(changes, files);
+
+        for (const change of changes) {
+          appendJournal({
+            type: 'change',
+            bindingId: change.bindingId,
+            from: change.previous,
+            to: change.to,
+          }, cwd);
+        }
+
+        onChange();
+        return { id, count: recorded.length };
+      } catch (error) {
+        // The reservation above must not survive a failed save, or every
+        // later save 409s forever. If the batch was already journaled as
+        // pending before commitToStore threw, that journal entry outlives
+        // this in-memory reset (the journal is append-only) and would
+        // resurrect a phantom pending batch on the next replay -- one the
+        // store never actually took the values for. Close it the same way
+        // reply() closes an acknowledged one: a later 'batch' entry with any
+        // non-pending status clears it.
+        if (journaledId) {
+          try { appendJournal({ type: 'batch', id: journaledId, status: 'error', message: String(error?.message || error) }, cwd); }
+          catch { /* best-effort; pending is still cleared below either way */ }
+        }
+        pending = null;
+        throw error;
       }
-
-      counter += 1;
-      const id = `batch-${String(counter).padStart(3, '0')}`;
-      const recorded = changes.map(({ bindingId, previous, to, binding }) => ({
-        bindingId,
-        from: previous,
-        to,
-        downstream: binding.downstream,
-      }));
-      appendJournal({ type: 'batch', id, status: 'pending', changes: recorded }, cwd);
-      pending = { id, status: 'pending', changes: recorded, leaseUntil: 0 };
-      onChange();
-      return { id, count: recorded.length };
     },
 
     /** The event a polling agent is handed, or nothing when none is due. */

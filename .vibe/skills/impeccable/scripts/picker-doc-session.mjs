@@ -194,8 +194,28 @@ function nextPending() {
 async function handleDocPoll(response, query) {
   const budget = Math.min(Number(query.get('timeout')) || MAX_POLL_MS, MAX_POLL_MS);
   const deadline = Date.now() + budget;
+  // A poll can be parked for up to 5s at a time across a budget as long as
+  // MAX_POLL_MS (270s). If the requester goes away mid-wait (killed, timed
+  // out client-side), nothing previously noticed: the entry sat in
+  // parkedPolls doing nothing useful, and the loop eventually tried to
+  // sendJson onto the closed socket. Track abandonment via the response's
+  // own close event, dropping the parked entry immediately so it isn't
+  // resolved into a write on a dead connection.
+  let aborted = false;
+  let currentParked = null;
+  response.on('close', () => {
+    aborted = true;
+    if (currentParked) {
+      clearTimeout(currentParked.timer);
+      const idx = parkedPolls.indexOf(currentParked);
+      if (idx !== -1) parkedPolls.splice(idx, 1);
+      currentParked.resolve();
+      currentParked = null;
+    }
+  });
 
   for (;;) {
+    if (aborted) return;
     if (Date.now() - lastBrowserSeen > BROWSER_GONE_MS) {
       sendJson(response, 200, { type: 'exit', reason: 'browser-gone' });
       return;
@@ -222,8 +242,10 @@ async function handleDocPoll(response, query) {
     }
     await new Promise((resolve) => {
       const parked = { resolve, timer: setTimeout(resolve, Math.min(remaining, 5_000)) };
+      currentParked = parked;
       parkedPolls.push(parked);
     });
+    currentParked = null;
   }
 }
 
@@ -377,7 +399,13 @@ async function handleRequest(request, response) {
 
   if (request.method === 'GET' && requestPath === '/doc/state') {
     if (url.searchParams.get('token') !== token) throw httpError(403, 'Bad token');
-    lastBrowserSeen = Date.now();
+    // picker-server.mjs polls this same endpoint every 5s to check the
+    // session is still answering (watchDocSession/probeSession); it tags
+    // those calls ?probe=1 so they don't count as browser activity, or the
+    // picker server's own liveness watch would keep BROWSER_GONE_MS from
+    // ever elapsing for as long as the picker server process runs, even
+    // with no tab open.
+    if (url.searchParams.get('probe') !== '1') lastBrowserSeen = Date.now();
     adopted = true;
     sendJson(response, 200, {
       ok: true,
@@ -513,7 +541,11 @@ async function handleRequest(request, response) {
 
 server.listen(port, '127.0.0.1', async () => {
   await migrate(process.cwd());
-  await writeJsonAtomic(sessionPath, { pid: process.pid, port, token });
+  // originPort travels in the record so a later adoption can tell whether
+  // the picker that would reuse this session is the one this session's
+  // Access-Control-Allow-Origin was pinned to at spawn: that header is set
+  // once, here, and never changes for this process's lifetime.
+  await writeJsonAtomic(sessionPath, { pid: process.pid, port, token, originPort });
 });
 
 server.on('error', () => process.exit(1));

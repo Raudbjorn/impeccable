@@ -15,10 +15,16 @@
 //     (a size/aspect parameter, not just a prompt line), and a non-square
 //     input is a generation to redo, not an image to fix up here.
 //
+//   node visual-cues.mjs hash <path...>
+//     Prints one sha256 per file (portable md5/md5sum stand-in): Step 5's
+//     uniqueness gate, catching two subagents that raced onto one default
+//     output filename before compile ever runs.
+//
 // Dependency-free: PNG decode on node:zlib. Rejects interlaced and
 // indexed-color PNGs; convert those with sips/ImageMagick/PIL first.
 
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync, realpathSync, unlinkSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import zlib from 'node:zlib';
@@ -294,12 +300,29 @@ function cmdCompile(args) {
   }, null, 2));
 }
 
+// The uniqueness gate (Step 5 of visual-cues.md): two subagents racing on a
+// shared default output filename produce identical bytes under two paths,
+// and that is the one duplication compile's own per-file checks (square,
+// slug shape) never catch, because each hero is compiled on its own. `md5`
+// exists on macOS but not stock Linux (`md5sum` does, with a different
+// output format); sha256 via node:crypto works identically everywhere this
+// toolchain already requires node to run at all.
+function cmdHash(args) {
+  const files = args._;
+  if (!files.length) fail('usage: visual-cues.mjs hash <path...>');
+  for (const file of files) {
+    const digest = createHash('sha256').update(readFileSync(resolve(file))).digest('hex');
+    console.log(`${digest}  ${file}`);
+  }
+}
+
 function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   const args = parseArgs(rest);
   try {
     if (cmd === 'compile') cmdCompile(args);
-    else fail('usage: visual-cues.mjs compile <hero.png> --slug <slug> [options] (see reference/visual-cues.md)');
+    else if (cmd === 'hash') cmdHash(args);
+    else fail('usage: visual-cues.mjs compile <hero.png> --slug <slug> [options] | hash <path...> (see reference/visual-cues.md)');
   } catch (err) {
     fail(err.message);
   }

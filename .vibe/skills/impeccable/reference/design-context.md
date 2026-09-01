@@ -74,8 +74,8 @@ node .vibe/skills/impeccable/scripts/design-context-import.mjs <bundle.json> [--
 It refuses a project that already has a design context unless `--force`, and refuses while a document is open either way. Report what it prints:
 
 - `DESIGN_MD carried` with a DESIGN.md already here: ask whether to refresh it from the imported context, overwrite it, or merge by hand, then act.
-- `DESIGN_MD carried` with none here: offer to write it (`--design write`) or to re-seed from the imported answers through [document.md](document.md) Steps 5-6.
-- `DESIGN_MD absent`: say the bundle carried decisions but no design document, and offer to seed one.
+- `DESIGN_MD carried` with none here: if this is what the user wants, `--design write` has to be on *this* import command, not a follow-up (re-running import afterward hits the existing-context refusal and needs `--force`, which also wipes and re-lands assets and fonts). If the import already ran without it, re-seed DESIGN.md from the now-imported answers through [document.md](document.md) Steps 5-6 instead; that path does not require re-importing.
+- `DESIGN_MD absent`: say the bundle carried decisions but no design document, and offer to seed one through document.md's Steps 5-6.
 
 Then offer `open`.
 

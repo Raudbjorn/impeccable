@@ -11,7 +11,7 @@
  * rewriting what it sent.
  */
 
-import { readFile, mkdir, readdir, writeFile } from 'node:fs/promises';
+import { readFile, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   paths,
@@ -287,9 +287,26 @@ export function validateBundle(bundle) {
   return bundle;
 }
 
-export async function importDesignContext(cwd, bundle, { design = 'skip' } = {}) {
+export async function importDesignContext(cwd, bundle, { design = 'skip', force = false } = {}) {
   validateBundle(bundle);
   const target = paths(cwd);
+
+  /* A forced import replaces the store; a plain one only ever runs against an
+     empty one (design-context-import.mjs refuses otherwise). Without this,
+     replacing an existing context only ever adds and overwrites what the new
+     bundle names: an asset the old context had and the new one does not
+     survives beside the new answers that no longer mention it, and the cue
+     manifest and font manifest below, guarded on "nothing there yet", never
+     update to the imported project's own choices. Clear the managed areas
+     first so the store ends up exactly what the bundle describes, not a
+     merge of the two. */
+  if (force) {
+    await rm(target.assetsDir, { recursive: true, force: true });
+    await rm(target.fontsDir, { recursive: true, force: true });
+    await rm(target.cuePng, { force: true });
+    await rm(target.cuesJson, { force: true });
+    await rm(target.fontsManifestJson, { force: true });
+  }
 
   await writeAnswers(bundle.answers, cwd);
   const context = bundle.context && typeof bundle.context === 'object'
