@@ -61,6 +61,7 @@ export const SUITES = {
           'tests/context-signals.test.mjs',
           'tests/critique-storage.test.mjs',
           'tests/design-parser.test.mjs',
+          'tests/github-issue-gate.test.mjs',
           'tests/hook-build.test.mjs',
           'tests/hook.test.mjs',
           'tests/impeccable-paths.test.mjs',
@@ -266,7 +267,7 @@ export const SUITES = {
     needsPlaywright: true,
     triggers: [
       ...COMMON_INFRA_PATTERNS,
-      /^skill\/scripts\/(serve-question|generate-image|concept-seed)\.mjs$/,
+      /^skill\/scripts\/(serve-question|generate-image|concept-seed|embed-prompt)\.mjs$/,
       /^tests\/new-work-e2e(\.test\.mjs|\/)/,
     ],
     commands: [

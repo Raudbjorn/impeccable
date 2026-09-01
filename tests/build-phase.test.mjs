@@ -14,6 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SPEC_SCRIPT = path.join(ROOT, 'skill', 'scripts', 'comp-spec.mjs');
 const PHASE_SCRIPT = path.join(ROOT, 'skill', 'scripts', 'build-phase.mjs');
 const FONT_SCRIPT = path.join(ROOT, 'skill', 'scripts', 'font-match.mjs');
+const GEN_SCRIPT = path.join(ROOT, 'skill', 'scripts', 'generate-image.mjs');
 
 function lcg(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 0xffffffff); }
 
@@ -279,6 +280,32 @@ describe('build-phase state machine (CLI)', () => {
     res = run(PHASE_SCRIPT, ['advance'], dir);
     assert.equal(res.status, 0, res.stdout);
     assert.match(res.stdout, /ADVANCED plates -> hero/);
+  });
+
+  it('--score-only reaches the same verdict as the plates gate', () => {
+    // The producer's output contract says its line and the parent gate's line
+    // agree. Scoring alone does not: it misses the size floor and the
+    // comp-crop refusal, so an undersized native-tool plate could report a
+    // clean number here and be refused by the parent. Both run the same
+    // per-plate gate now.
+    const produced = run(GEN_SCRIPT, ['--plate', 'art', '--score-only'], dir);
+    assert.equal(produced.status, 0, produced.stdout + produced.stderr);
+    assert.match(produced.stdout, /PLATE-SCORE art \d+%/);
+
+    // a comp-size crop: the score is perfect, the gate refuses it twice over
+    const crop1x = run(SPEC_SCRIPT, ['--crop', 'art', '--out', 'assets/plates/art.png'], dir);
+    assert.equal(crop1x.status, 0, crop1x.stderr);
+    const refused = run(GEN_SCRIPT, ['--plate', 'art', '--score-only'], dir);
+    assert.notEqual(refused.status, 0, 'a plate the gate refuses must not exit 0');
+    assert.match(refused.stdout, /PLATE-WARN .*needs at least 480px/);
+    assert.match(refused.stdout, /PLATE-WARN .*is the comp crop of region art/);
+
+    // an unreadable plate produces no score at all, which must not read as success
+    fs.writeFileSync(path.join(dir, 'assets', 'plates', 'art.png'), 'not a png');
+    const unreadable = run(GEN_SCRIPT, ['--plate', 'art', '--score-only'], dir);
+    assert.equal(unreadable.status, 1);
+    assert.match(unreadable.stdout, /PLATE-WARN .*not a decodable PNG/);
+    assert.doesNotMatch(unreadable.stdout, /PLATE-SCORE art \d/);
   });
 
   it('above the bar, numeric readings advise instead of block', () => {

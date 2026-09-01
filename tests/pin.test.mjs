@@ -14,7 +14,7 @@ describe('pin command provider syntax', () => {
   beforeEach(() => {
     project = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-pin-'));
     fs.writeFileSync(path.join(project, 'package.json'), '{}\n');
-    for (const harness of ['.claude', '.agents', '.codex']) {
+    for (const harness of ['.claude', '.agents', '.codex', '.omp']) {
       fs.mkdirSync(path.join(project, harness, 'skills', 'impeccable'), { recursive: true });
     }
   });
@@ -47,5 +47,22 @@ describe('pin command provider syntax', () => {
       assert.doesNotMatch(skill, /^user-invocable:/m);
       assert.match(skill, /^metadata:\n  argument-hint:/m);
     }
+  });
+
+  it('pins the oh-my-pi shortcut with the /skill: prefix', () => {
+    // OMP invokes skills as `/skill:<name>`, the prefix the build already
+    // hands that provider. A pin written with the bare `/` redirects to an
+    // `/impeccable` command that harness cannot resolve.
+    const result = spawnSync(process.execPath, [PIN_SCRIPT, 'pin', 'audit'], {
+      cwd: project,
+      encoding: 'utf8',
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const skill = fs.readFileSync(path.join(project, '.omp', 'skills', 'audit', 'SKILL.md'), 'utf8');
+    assert.match(skill, /\/skill:impeccable audit/);
+    assert.doesNotMatch(skill, /(^|[^:])\/impeccable audit/m);
+    assert.doesNotMatch(skill, /\$impeccable audit/);
+    assert.match(skill, /^user-invocable: true$/m);
   });
 });

@@ -1,0 +1,78 @@
+name: Issue Gate
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: "Issue number to evaluate"
+        type: number
+        required: true
+      dry_run:
+        description: "Print planned changes without mutating GitHub"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: issue-gate-${{ github.event.issue.number || inputs.issue }}
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    # issue_comment fires for PR conversation comments too. In that payload the
+    # `issue` object carries a `pull_request` key that a plain issue comment
+    # does not have, so a null check on it is the way to tell the two apart.
+    # Skip those, and skip anything the gate itself posts.
+    if: >-
+      github.event_name != 'issue_comment' ||
+      (github.event.issue.pull_request == null && github.event.comment.user.type != 'Bot')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Run issue gate
+        # Every event value goes through env rather than being interpolated
+        # into the script body: a ${{ }} expression in `run:` is substituted
+        # before bash ever sees it, so the shell parses whatever the payload
+        # said. github.event_name is constrained by the `on:` keys today, but
+        # the issue and comment ids are not, and the pattern should not depend
+        # on which of them happens to be safe.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+        run: |
+          set -eu
+          mode="--apply"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$DRY_RUN" = "true" ]; then
+            mode="--dry-run"
+          fi
+
+          case "$EVENT_NAME" in
+            issue_comment)
+              node scripts/github/issue-gate.mjs "$mode" \
+                --repo "$GITHUB_REPOSITORY" \
+                --issue "$ISSUE_NUMBER" \
+                --comment-id "$COMMENT_ID"
+              ;;
+            *)
+              node scripts/github/issue-gate.mjs "$mode" \
+                --repo "$GITHUB_REPOSITORY" \
+                --issue "$ISSUE_NUMBER"
+              ;;
+          esac

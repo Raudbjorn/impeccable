@@ -1338,7 +1338,7 @@ describe('hook-admin.mjs', () => {
     assert.equal(claude.hooks.Stop, undefined, 'the impeccable-only Stop array should be dropped entirely');
   });
 
-  it('reset prunes all three provider manifests installed via `on`', () => {
+  it('reset prunes every provider manifest installed via `on`', () => {
     for (const provider of ['.claude', '.agents', '.github']) {
       fs.mkdirSync(path.join(cwd, provider, 'skills', 'impeccable', 'scripts'), { recursive: true });
     }
@@ -1367,9 +1367,11 @@ describe('hook-admin.mjs', () => {
 
     const out = runAdmin(['reset']);
 
-    // No config existed, so the message carries only the prune half.
+    // The shared file stays wired, so reset reports that rather than
+    // claiming a clean reset; the local prune still happened.
     assert.match(out, /Removed hook entries from: \.claude\./);
     assert.doesNotMatch(out, /Reset design hook config and cache/);
+    assert.match(out, /\.claude\/settings\.json still carries a hook entry/);
     assert.equal(fs.readFileSync(path.join(cwd, '.claude', 'settings.json'), 'utf-8'), shared, 'shared settings.json must survive reset untouched');
     assert.equal(fs.existsSync(path.join(cwd, '.claude', 'settings.local.json')), false, 'the local settings.local.json is still pruned');
   });
@@ -1410,6 +1412,122 @@ describe('hook-admin.mjs', () => {
     assert.equal(fs.existsSync(getConfigPath(cwd)), false);
     assert.equal(fs.existsSync(getLocalConfigPath(cwd)), false);
     assert.equal(fs.existsSync(path.join(cwd, '.claude', 'settings.local.json')), false);
+  });
+
+  // The three blocked paths below share one rule: reset only removes the
+  // config once nothing is left wired. A missing config falls back to
+  // enabled (DEFAULT_CONFIG), so deleting it while a manifest still carries
+  // an entry is the re-arm this ordering exists to prevent.
+
+  it('reset refuses to remove the config when a manifest cannot be rewritten', (t) => {
+    if (process.getuid?.() === 0) {
+      t.skip('a read-only file does not stop root from writing it');
+      return;
+    }
+    fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
+    fs.writeFileSync(getConfigPath(cwd), JSON.stringify({ hook: { enabled: false } }));
+    fs.mkdirSync(path.join(cwd, '.claude'), { recursive: true });
+    const manifest = JSON.stringify({
+      hooks: { PostToolUse: [{ matcher: 'Edit', hooks: [{ type: 'command', command: 'node ".claude/skills/impeccable/scripts/hook.mjs"' }] }] },
+      keepme: 1,
+    });
+    const manifestPath = path.join(cwd, '.claude', 'settings.local.json');
+    fs.writeFileSync(manifestPath, manifest);
+    fs.chmodSync(manifestPath, 0o444);
+
+    let err = null;
+    try { runAdmin(['reset']); } catch (e) { err = e; }
+    fs.chmodSync(manifestPath, 0o644);
+
+    assert.ok(err, 'a manifest that cannot be rewritten must fail the reset');
+    assert.equal(err.status, 1);
+    assert.match(err.stderr, /\.claude\/settings\.local\.json/);
+    assert.equal(fs.readFileSync(manifestPath, 'utf-8'), manifest, 'the manifest is untouched');
+    assert.equal(
+      JSON.parse(fs.readFileSync(getConfigPath(cwd), 'utf-8')).hook.enabled,
+      false,
+      'the kill switch survives a failed reset',
+    );
+  });
+
+  it('reset refuses to remove the config when a wired manifest does not parse', () => {
+    // pruneImpeccableHookFromManifest() reports unparseable JSON as "no
+    // marker" rather than as an error, so without a pre-check reset reported
+    // success while the entry survived.
+    fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
+    fs.writeFileSync(getConfigPath(cwd), JSON.stringify({ hook: { enabled: false } }));
+    fs.mkdirSync(path.join(cwd, '.claude'), { recursive: true });
+    const broken = '{"hooks":{"PostToolUse":[{"hooks":[{"command":"node .claude/skills/impeccable/scripts/hook.mjs"';
+    fs.writeFileSync(path.join(cwd, '.claude', 'settings.local.json'), broken);
+
+    let err = null;
+    try { runAdmin(['reset']); } catch (e) { err = e; }
+
+    assert.ok(err, 'a wired manifest that does not parse must fail the reset');
+    assert.equal(err.status, 1);
+    assert.match(err.stderr, /not valid JSON/);
+    assert.equal(fs.readFileSync(path.join(cwd, '.claude', 'settings.local.json'), 'utf-8'), broken);
+    assert.equal(JSON.parse(fs.readFileSync(getConfigPath(cwd), 'utf-8')).hook.enabled, false);
+  });
+
+  it('reset keeps an existing kill switch when the shared manifest stays wired', () => {
+    const shared = JSON.stringify({
+      hooks: { PostToolUse: [{ matcher: 'Edit', hooks: [{ type: 'command', command: 'node ".claude/skills/impeccable/scripts/hook.mjs"' }] }] },
+    });
+    fs.mkdirSync(path.join(cwd, '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(cwd, '.claude', 'settings.json'), shared);
+    fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
+    fs.writeFileSync(getConfigPath(cwd), JSON.stringify({ hook: { enabled: false } }));
+
+    const out = runAdmin(['reset']);
+
+    assert.match(out, /\.claude\/settings\.json still carries a hook entry/);
+    assert.match(out, /still disables the hook here/);
+    assert.equal(fs.readFileSync(path.join(cwd, '.claude', 'settings.json'), 'utf-8'), shared);
+    assert.equal(
+      JSON.parse(fs.readFileSync(getConfigPath(cwd), 'utf-8')).hook.enabled,
+      false,
+      'the config that disables the hook must not be deleted while the shared manifest is wired',
+    );
+  });
+
+  it('reset refuses when the shared manifest is wired but does not parse', () => {
+    // fileHasImpeccableHookMarker() returns false on a parse error, so a
+    // corrupt marker-bearing settings.json read as unwired and let the
+    // disabling config be deleted: the same re-arm the local pre-check
+    // closes, through the shared door.
+    fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
+    fs.writeFileSync(getConfigPath(cwd), JSON.stringify({ hook: { enabled: false } }));
+    fs.mkdirSync(path.join(cwd, '.claude'), { recursive: true });
+    const broken = '{"hooks":{"PostToolUse":[{"hooks":[{"command":"node .claude/skills/impeccable/scripts/hook.mjs"';
+    fs.writeFileSync(path.join(cwd, '.claude', 'settings.json'), broken);
+
+    let err = null;
+    try { runAdmin(['reset']); } catch (e) { err = e; }
+
+    assert.ok(err, 'a wired shared manifest that does not parse must fail the reset');
+    assert.equal(err.status, 1);
+    assert.match(err.stderr, /\.claude\/settings\.json/);
+    assert.equal(fs.readFileSync(path.join(cwd, '.claude', 'settings.json'), 'utf-8'), broken, 'the shared manifest is never written');
+    assert.equal(JSON.parse(fs.readFileSync(getConfigPath(cwd), 'utf-8')).hook.enabled, false);
+  });
+
+  it('reset reports the armed state rather than inventing a config that was never there', () => {
+    // reset preserves a kill switch; it does not manufacture one. A fresh
+    // clone of a repo whose committed settings.json carries a hook entry must
+    // come out of reset with the same files it went in with.
+    const shared = JSON.stringify({
+      hooks: { PostToolUse: [{ matcher: 'Edit', hooks: [{ type: 'command', command: 'node ".claude/skills/impeccable/scripts/hook.mjs"' }] }] },
+    });
+    fs.mkdirSync(path.join(cwd, '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(cwd, '.claude', 'settings.json'), shared);
+
+    const out = runAdmin(['reset']);
+
+    assert.match(out, /The hook is still armed here: run `off` to disable it\./);
+    assert.equal(fs.readFileSync(path.join(cwd, '.claude', 'settings.json'), 'utf-8'), shared);
+    assert.equal(fs.existsSync(getConfigPath(cwd)), false, 'reset must not create a config file');
+    assert.equal(fs.existsSync(getLocalConfigPath(cwd)), false);
   });
 });
 

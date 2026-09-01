@@ -25,6 +25,7 @@ const HARNESS_DIRS = [
 ];
 
 const CODEX_HARNESSES = new Set(['.codex', '.agents']);
+const OMP_HARNESSES = new Set(['.omp']);
 
 // Valid sub-command names
 const VALID_COMMANDS = [
@@ -89,7 +90,14 @@ function loadCommandMetadata() {
  * Generate a pinned skill's SKILL.md content.
  */
 function commandPrefixForSkillsDir(skillsDir) {
-  return CODEX_HARNESSES.has(basename(dirname(skillsDir))) ? '$' : '/';
+  const harness = basename(dirname(skillsDir));
+  if (CODEX_HARNESSES.has(harness)) return '$';
+  // oh-my-pi invokes skills as `/skill:<name> [args]`, so a pin written with
+  // the bare `/` would redirect to an `/impeccable` command that harness has
+  // no way to resolve. Same prefix the build hands that provider
+  // (PROVIDER_PLACEHOLDERS.omp in scripts/lib/utils.js).
+  if (OMP_HARNESSES.has(harness)) return '/skill:';
+  return '/';
 }
 
 function generatePinnedSkill(command, metadata, commandPrefix, isCodex) {
