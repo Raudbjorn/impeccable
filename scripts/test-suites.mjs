@@ -25,9 +25,10 @@ export const SUITES = {
     triggers: [
       ...COMMON_INFRA_PATTERNS,
       /^scripts\/(?!benchmark-detector|build-browser-detector|build-extension)/,
-      /^skill\/(SKILL\.src\.md|agents\/|reference\/|scripts\/(cleanup-deprecated|comp-diff|comp-spec|build-phase|font-match|generate-image|data\/font-index|concept-seed|context|context-signals|critique-storage|design-parser|doctor|hook|impeccable-paths|is-generated|lib\/(artifact-schema|png|raster|image-metrics|font-fingerprint|font-index|hero-checks|composition-catalog|concept-catalog|provider|staleness|staleness-deep|staleness-notice|surface-briefs|target-slug|template-extensions)|pin|surface-brief))/,
+      /^skill\/(SKILL\.src\.md|agents\/|reference\/|scripts\/(cleanup-deprecated|comp-diff|comp-spec|build-phase|font-match|generate-image|data\/(font-index|critique-evidence)|concept-seed|context|context-signals|critique-storage|score-evidence|design-parser|doctor|hook|impeccable-paths|is-generated|lib\/(artifact-schema|png|raster|image-metrics|font-fingerprint|font-index|hero-checks|composition-catalog|concept-catalog|provider|staleness|staleness-deep|staleness-notice|surface-briefs|target-slug|template-extensions)|pin|surface-brief))/,
       /^README(\.npm)?\.md$/,
       /^cli\/bin\//,
+      /^cli\/engine\/registry\//,
     ],
     commands: [
       {
@@ -60,6 +61,7 @@ export const SUITES = {
           'tests/context.test.mjs',
           'tests/context-signals.test.mjs',
           'tests/critique-storage.test.mjs',
+          'tests/score-evidence.test.mjs',
           'tests/design-parser.test.mjs',
           'tests/github-issue-gate.test.mjs',
           'tests/hook-build.test.mjs',

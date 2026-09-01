@@ -1,0 +1,445 @@
+{
+  "meta": {
+    "description": "Detector items: each rule from the anti-pattern registry becomes a negative evidence item that participates in the same scoring pool as LLM-collected items.",
+    "source_of_truth": "cli/engine/registry/antipatterns.mjs (ANTIPATTERNS array). When a rule is added or removed there, add or remove the matching row here. No build step enforces this; keep it manual.",
+    "impact_scale": {
+      "-1": "cosmetic / typography micro-issues (single rule, low-trust signal alone)",
+      "-2": "classic AI-slop tells / structural problems (multiple co-occur in slop)",
+      "-3": "accessibility issues (contrast, tiny text in interactive contexts)",
+      "-5": "reserved for genuine page breakage (none currently)"
+    },
+    "impact_source": {
+      "authored": "impact and heuristic_id hand-tuned by the evidence-item-rescoring branch this catalog was ported from",
+      "default": "no hand-tuned value exists yet; impact -1 / heuristic_id amd is a conservative placeholder, not a calibrated judgment. Retune with real review before treating these as authoritative."
+    }
+  },
+  "items": [
+    {
+      "id": "side-tab",
+      "impact": -2,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "authored"
+    },
+    {
+      "id": "border-accent-on-rounded",
+      "impact": -1,
+      "heuristic_id": "cas",
+      "source": "detector",
+      "impact_source": "authored"
+    },
+    {
+      "id": "overused-font",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "authored"
+    },
+    {
+      "id": "flat-type-hierarchy",
+      "impact": -2,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "authored"
+    },
+    {
+      "id": "gradient-text",
+      "impact": -2,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "authored"
+    },
+    {
+      "id": "ai-color-palette",
+      "impact": -3,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "authored"
+    },
+    {
+      "id": "nested-cards",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "authored"
+    },
+    {
+      "id": "monotonous-spacing",
+      "impact": -1,
+      "heuristic_id": "cas",
+      "source": "detector",
+      "impact_source": "authored"
+    },
+    {
+      "id": "bounce-easing",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "authored"
+    },
+    {
+      "id": "dark-glow",
+      "impact": -2,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "authored"
+    },
+    {
+      "id": "icon-tile-stack",
+      "impact": -2,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "authored"
+    },
+    {
+      "id": "gray-on-color",
+      "impact": -2,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "authored"
+    },
+    {
+      "id": "low-contrast",
+      "impact": -3,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "authored"
+    },
+    {
+      "id": "layout-transition",
+      "impact": -1,
+      "heuristic_id": "vss",
+      "source": "detector",
+      "impact_source": "authored"
+    },
+    {
+      "id": "line-length",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "authored"
+    },
+    {
+      "id": "cramped-padding",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "authored"
+    },
+    {
+      "id": "tight-leading",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "authored"
+    },
+    {
+      "id": "skipped-heading",
+      "impact": -2,
+      "heuristic_id": "cas",
+      "source": "detector",
+      "impact_source": "authored"
+    },
+    {
+      "id": "justified-text",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "authored"
+    },
+    {
+      "id": "tiny-text",
+      "impact": -2,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "authored"
+    },
+    {
+      "id": "all-caps-body",
+      "impact": -2,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "authored"
+    },
+    {
+      "id": "wide-tracking",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "authored"
+    },
+    {
+      "id": "cream-palette",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "pulsing-dot",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "blinking-cursor",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "shape-assembled-illustration",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "organic-clip-path",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "buried-raster",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "radial-halo",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "radial-spotlight-glow",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "marquee",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "italic-serif-display",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "hero-eyebrow-chip",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "kicker-above-heading",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "numbered-section-labels",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "em-dash-overuse",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "marketing-buzzword",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "aphoristic-cadence",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "oversized-h1",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "extreme-negative-tracking",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "broken-image",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "script-error",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "content-hidden-at-rest",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "edge-flush-cards",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "text-occlusion",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "first-viewport-column-overflow",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "body-text-viewport-edge",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "heading-rhythm",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "undersized-ui-text",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "text-overflow",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "repeated-container-text",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "clipped-overflow-container",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "design-system-font",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "design-system-color",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "design-system-radius",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "design-system-font-size",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "gpt-thin-border-wide-shadow",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "repeating-stripes-gradient",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "codex-grid-background",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "theater-slop-phrase",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
+      "id": "image-hover-transform",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    }
+  ]
+}
