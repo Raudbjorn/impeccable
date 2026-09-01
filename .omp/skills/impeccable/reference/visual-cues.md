@@ -1,6 +1,6 @@
 # Visual Cues Pipeline
 
-Loaded by `/skill:impeccable document` seed mode (Step 4) on the questionnaire path. Input: the seed interview's three named references and one anti-reference, the asset observations from seed Step 2, and PRODUCT.md. The chat interview asks no color, typography, or motion question on this path; the questionnaire and this pipeline own those decisions. Output: cue images plus `cues.json` under `.impeccable/visual-cues/`, ready for the user to pick from by eye in a later round.
+Loaded by `/skill:impeccable document` seed mode (Step 4), when Step 1 decided visual reference generation is worth running. Input: the seed interview's three named references and one anti-reference, the asset observations from seed Step 2, and PRODUCT.md. The chat interview asks its own color, typography, and motion questions regardless of whether this pipeline runs (there is no interactive picker anymore to ask them by eye instead; see `docs/add-branding.md`), so this pipeline's output supplements the interview's decisions rather than replacing any of them. Output: cue images plus `cues.json`, and `fonts.json`, under `.impeccable/visual-cues/`, reference material for the seed document.md's Step 5 writes from the interview.
 
 Tell the user once, before starting: *"Generating visual cues; this can take a minute or two."* Then work without narration. Chat carries no per-image commentary, no palette tables, no prompt dumps; the folder is the deliverable.
 
@@ -40,7 +40,7 @@ Subagents start without your context, so everything a specialist needs must reac
 Write one self-contained text block that a specialist with zero context can design from. Include, in full:
 
 - **The product**: from PRODUCT.md, what it is, sells, or shows; the audience; the positioning; the personality words.
-- **The interview**: the three named references and the anti-reference. State that the anti-reference is a hard constraint on every palette. There is no chat color strategy or hue anchor on this path; the territories (Step 2) own the color search.
+- **The interview**: the three named references and the anti-reference. State that the anti-reference is a hard constraint on every palette. The interview does ask a color strategy and hue anchor now (Step 3 Q1, document.md), but this pipeline still does not consume either: six competing palettes deliberately explore different territories rather than converging on one predetermined strategy or hue, the same reason an asset-fixed anchor (Step 2, below) only ever binds the one territory it belongs to, never all six. The territories own the color search regardless of what Q1 answered; that answer becomes DESIGN.md's own color-strategy Named Rule independently, in document.md's Step 5.
 - **The assets**: the seed Step 2 observations (logo colors, recurring materials, photo moods).
 
 Label it `BRIEF PACKET`; it goes into the brief file once (Step 3), so every specialist designs from the identical packet. Do **not** add your own palette leanings to it: the personas do the leaning.
@@ -365,7 +365,7 @@ Run this pass yourself after compiling the cues. Do not spawn specialists; six p
 
 Build the composition context from exactly these inputs:
 
-- **The surface modes** this step names below. The interview asks no typography direction on this path, so the modes, the references, and the assets are the anchor; compose from them instead of asking for a direction.
+- **The surface modes** this step names below, plus **the interview's typography-direction answer** (Step 3, document.md; the interview always asks one now, so this is real signal, not something this pipeline owns alone). Let it ground the spread below rather than composing blind to it; the modes, the references, and the assets remain the six pairs' anchor either way.
 - **The three named references** and **the anti-reference** from the seed interview. The anti-reference is a hard constraint on every pair.
 - From PRODUCT.md, only `## Users`, `## Product Purpose`, `## Positioning`, and `## Brand Commitments`.
 - The seed Step 2 asset observations when they exist, with the logo's letterforms as the strongest evidence.

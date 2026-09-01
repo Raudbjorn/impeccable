@@ -41,7 +41,7 @@ With answers on disk, report the status above and stop; offer `export` if the us
 node .opencode/skills/impeccable/scripts/design-context-export.mjs [--out DIR] [--no-assets]
 ```
 
-Writes two files and prints an `EXPORTED` line for each. Tell the user what each is for, in one line each:
+`--out` defaults to `.impeccable/design-context/exports/`. Writes two files and prints an `EXPORTED` line for each. Tell the user what each is for, in one line each:
 
 - `design-context.md` is the design context as one readable document. It is what to hand another tool, another agent, or a collaborator who needs to follow this design.
 - `design-context.bundle.json` is the same context in a form `/impeccable design-context import` reads, including the files the user supplied.
@@ -54,7 +54,7 @@ Do not read the export back into the conversation; the user asked for a file, no
 node .opencode/skills/impeccable/scripts/design-context-import.mjs <bundle.json> [--design skip|write] [--force]
 ```
 
-It refuses a project that already has a design context unless `--force`. Report what it prints:
+It refuses a project that already has a design context unless `--force`, and refuses either way while `runtime/session.json` names a still-running process (a stale leftover from before the picker's removal; there is no way to "close it" anymore, so treat this as a report-and-stop, not an instruction to relay). Report what it prints:
 
 - `DESIGN_MD carried` with a DESIGN.md already here: ask whether to refresh it from the imported context, overwrite it, or merge by hand, then act.
 - `DESIGN_MD carried` with none here: if this is what the user wants, `--design write` has to be on *this* import command, not a follow-up (re-running import afterward hits the existing-context refusal and needs `--force`, which also wipes and re-lands assets and fonts). If the import already ran without it, re-seed DESIGN.md from the now-imported answers through [document.md](document.md) Steps 5-6 instead; that path does not require re-importing.
