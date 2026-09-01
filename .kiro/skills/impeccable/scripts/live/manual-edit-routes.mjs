@@ -7,6 +7,7 @@ import {
   truncateBuffer as truncateManualEditsBuffer,
 } from './manual-edits-buffer.mjs';
 import {
+  shouldRetriggerManualApply,
   summarizeManualApplyFailures,
   summarizeManualDiagnostics,
   summarizeManualLogFile,
@@ -209,6 +210,17 @@ export function createManualEditRoutes({
             const shouldKeepTransaction = result?.needsManualDecision === true;
             if (!shouldKeepTransaction) manualApply.clearTransaction(transaction.id);
           }
+        }
+        if (shouldRetriggerManualApply(result) && typeof manualApply.retriggerFiles === 'function') {
+          const retrigger = manualApply.retriggerFiles(result.files || []);
+          result.warnings = [
+            ...(result.warnings || []),
+            ...retrigger.failures.map(({ file, reason }) => ({
+              file,
+              reason: 'hmr_retrigger_failed',
+              message: reason,
+            })),
+          ];
         }
         const { totalCount, perPage } = countPendingByPage(projectCwd());
         if (result?.needsManualDecision) {

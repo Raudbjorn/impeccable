@@ -154,6 +154,7 @@ export const SUITES = {
           'tests/live-insert.test.mjs',
           'tests/live-insert-ui.test.mjs',
           'tests/live-manual-edits-buffer.test.mjs',
+          'tests/live-path-glob.test.mjs',
           'tests/live-poll.test.mjs',
           'tests/live-project-ignores.test.mjs',
           'tests/live-poll-lanes.test.mjs',

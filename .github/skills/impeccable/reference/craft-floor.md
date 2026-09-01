@@ -40,5 +40,6 @@ Surface habits:
 - Unicode glyphs or emoji standing in for an icon system. Icons are drawn, from a real library or authored SVG, in one consistent stroke and weight.
 - Geometric masks standing in for organic contours. A circle, polygon, or radial-gradient cutout approximating a photographic subject's edge is the cheap version of the effect and reads worse than omitting it. Derive an alpha matte from the actual image, or produce a cut-out asset.
 - Light or dark picked by category. Pick it from the use scene: who, where, under what ambient light.
+- A cultural-symbol palette as the obvious pull for a domain that carries one (a nation's flag colors, a cuisine's stock hues, a holiday's palette). Reach past it; let the cultural reading come from typography, imagery, and copy, not the palette.
 
 The floor holds the mechanics; it never picks the direction. With every check green, spend the page on the committed world, and when torn between refined and committed, commit.
