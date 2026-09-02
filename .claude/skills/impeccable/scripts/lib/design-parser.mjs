@@ -268,6 +268,15 @@ function splitSubsections(lines) {
       subs.push(current);
       continue;
     }
+    // A stray level-2 heading marker with no title (or one malformed enough
+    // that splitSections' stricter regex skipped it) still ends the current
+    // subsection's body — without this it leaks in as trailing garbage text
+    // on whichever rule preceded it.
+    if (/^##(?:\s|$)/.test(raw.trim())) {
+      current = { name: null, lines: [] };
+      subs.push(current);
+      continue;
+    }
     current.lines.push(raw);
   }
 
@@ -355,6 +364,7 @@ function extractNamedRules(lines) {
   // Style B (Stitch): `### The "X" Rule` or `### The X Fallback`, body is the
   // bullets/paragraphs until the next heading. Accept Rule / Fallback / Principle.
   for (const subsection of splitSubsections(lines).slice(1)) {
+    if (!subsection.name) continue;
     const headerName = stripBold(subsection.name).replace(/["“”]/g, '').trim();
     if (!/^The\b.*\b(Rule|Fallback|Principle)\b/i.test(headerName)) continue;
 

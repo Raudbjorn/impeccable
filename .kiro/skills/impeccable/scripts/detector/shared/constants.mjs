@@ -70,9 +70,32 @@ const GENERIC_FONTS = new Set([
   '-apple-system', 'blinkmacsystemfont', 'segoe ui',
 ]);
 
+// CSS font-family quoting can embed a literal comma inside a single face
+// name (`'"Arial, Custom Brand", sans-serif'` names ONE quoted face, not
+// two) — a plain .split(',') misreads that as a stack boundary and would
+// treat "Arial" as the primary face. This tracks quote state instead.
+function splitFontFamilyList(fontFamily) {
+  const str = String(fontFamily || '');
+  const parts = [];
+  let quote = null;
+  let start = 0;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (quote) {
+      if (ch === quote) quote = null;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (ch === ',') {
+      parts.push(str.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(str.slice(start));
+  return parts;
+}
+
 function primaryFontFace(fontFamily, skip = CSS_GENERIC_FONTS) {
-  return String(fontFamily || '')
-    .split(',')
+  return splitFontFamilyList(fontFamily)
     .map(f => f.trim().replace(/^['"]|['"]$/g, '').toLowerCase())
     .find(f => f && !skip.has(f)) || null;
 }
@@ -118,6 +141,7 @@ export {
   BRAND_FONT_DOMAINS,
   isBrandFontOnOwnDomain,
   GENERIC_FONTS,
+  splitFontFamilyList,
   primaryFontFace,
   WCAG_LARGE_TEXT_PX,
   WCAG_LARGE_BOLD_TEXT_PX,

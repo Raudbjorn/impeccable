@@ -10,6 +10,7 @@ import {
   WCAG_LARGE_TEXT_PX,
   isBrandFontOnOwnDomain,
   primaryFontFace,
+  splitFontFamilyList,
 } from '../shared/constants.mjs';
 import {
   CSS_NAMED_COLORS,
@@ -331,7 +332,7 @@ function checkIconTile(opts) {
 // Returns { primary, isSerif } so the snippet can name the face.
 function resolveSerif(fontFamily) {
   if (!fontFamily) return { primary: null, isSerif: false };
-  const tokens = fontFamily.split(',').map(f => f.trim().replace(/^['"]|['"]$/g, '').toLowerCase());
+  const tokens = splitFontFamilyList(fontFamily).map(f => f.trim().replace(/^['"]|['"]$/g, '').toLowerCase());
   const primary = primaryFontFace(fontFamily, GENERIC_FONTS);
   if (!primary) return { primary: null, isSerif: false };
   if (KNOWN_SERIF_FONTS.has(primary)) return { primary, isSerif: true };
