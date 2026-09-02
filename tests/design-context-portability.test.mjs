@@ -267,6 +267,38 @@ describe('importDesignContext symlink rejection', () => {
     // The link target still holds the original secret, not the bundle bytes.
     assert.equal(await readFile(realOutside, 'utf8'), 'do not leak me');
   });
+
+  // Regression: the per-file destination checks above (and the store/
+  // workspace ancestor checks) never inspected writeJsonAtomic()'s own
+  // predictable `${filePath}.tmp` temp path. A pre-existing symlink there
+  // passed every other check, and writeFile() on the temp path followed it,
+  // overwriting the link's external target before rename() moved the
+  // (now-symlink) entry onto answers.json.
+  it('refuses to write through a pre-existing symlink at answers.json\'s atomic-write temp path', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(target.storeDir, { recursive: true });
+    const realOutside = path.join(path.dirname(cwd), `secret-answers-${path.basename(cwd)}.json`);
+    await writeFileP(realOutside, 'do not overwrite me');
+    const { symlink } = await import('node:fs/promises');
+    // writeJsonAtomic's old temp name was exactly `${filePath}.tmp`.
+    await symlink(realOutside, `${target.answersJson}.tmp`);
+
+    const bundle = {
+      kind: 'impeccable-design-context',
+      schemaVersion: 1,
+      answers: { 'palette-primary': '#B8422E' },
+      files: [],
+    };
+    await importDesignContext(cwd, bundle);
+
+    assert.equal(await readFile(realOutside, 'utf8'), 'do not overwrite me', 'the link target must be untouched');
+    // answers.json itself must be a real file with the imported content,
+    // not a symlink left behind by a rename() onto a followed link.
+    const answersStat = await import('node:fs/promises').then((m) => m.lstat(target.answersJson));
+    assert.ok(answersStat.isFile(), 'answers.json must end up a real file, not a symlink');
+    assert.equal(await readAnswers(cwd).then((a) => a['palette-primary']), '#B8422E');
+  });
 });
 
 describe('exportDesignContext with no questionnaire record', () => {

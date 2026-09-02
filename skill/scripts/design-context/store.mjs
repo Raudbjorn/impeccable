@@ -20,6 +20,7 @@
 
 import fs from 'node:fs';
 import { readFile, mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 
 const STORE_DIR = '.impeccable/design-context';
@@ -57,8 +58,16 @@ export function fontRelativePath(name) {
 
 export async function writeJsonAtomic(filePath, value) {
   await mkdir(path.dirname(filePath), { recursive: true });
-  const temporary = `${filePath}.tmp`;
-  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`);
+  // A predictable `${filePath}.tmp` name let a pre-placed symlink there
+  // redirect this write outside the project: writeFile() follows a symlink
+  // same as any other write, and only the rename() step below operates on
+  // the link itself rather than through it -- by which point the linked
+  // target had already been overwritten with this file's content. An
+  // unguessable suffix means no symlink can be pre-placed at the exact
+  // path this call will use, and `wx` (O_CREAT|O_EXCL) refuses to write
+  // through one on the rare chance a name collides anyway.
+  const temporary = `${filePath}.${randomBytes(8).toString('hex')}.tmp`;
+  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx' });
   await rename(temporary, filePath);
 }
 
