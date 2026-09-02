@@ -504,6 +504,12 @@ export const PROVIDER_PLACEHOLDERS = {
     ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
     command_prefix: '/'
   },
+  veto: {
+    model: 'the selected model',
+    config_file: '~/.veto/config.json',
+    ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
+    command_prefix: '/',
+  },
   'vibe': {
     model: 'Mistral',
     config_file: 'AGENTS.md',
@@ -548,6 +554,7 @@ export const PROVIDER_BLOCK_TAGS = new Set([
   'opencode',
   'pi',
   'vibe',
+  'veto',
 ]);
 
 /**

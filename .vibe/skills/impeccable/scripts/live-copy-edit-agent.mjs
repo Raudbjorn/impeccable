@@ -589,9 +589,9 @@ function runClaude(prompt, { cwd, env, resultPath, logPath, timeoutMs = DEFAULT_
     args.push('--model', env.IMPECCABLE_LIVE_COPY_AGENT_MODEL);
   }
   // Forward env as-is so CLAUDE_CODE_OAUTH_TOKEN and ANTHROPIC_API_KEY flow
-  // through. On macOS, `claude /login` stores creds in the Keychain, which a
-  // non-TTY subprocess cannot read; setting CLAUDE_CODE_OAUTH_TOKEN (via
-  // `claude setup-token`) is the supported headless auth path.
+  // through. `claude /login` stores creds in a way a non-TTY subprocess
+  // cannot read; setting CLAUDE_CODE_OAUTH_TOKEN (via `claude setup-token`)
+  // is the supported headless auth path.
   return runAgentProcess('claude', args, prompt, { cwd, env, logPath, timeoutMs, mirrorOutputPath: resultPath });
 }
 
@@ -685,7 +685,7 @@ export function describeNoProviderError({
     if (env.CLAUDE_CODE_OAUTH_TOKEN) {
       lines.push('  • Claude CLI: installed; CLAUDE_CODE_OAUTH_TOKEN is set but the CLI still rejected it. The token may be expired or invalid.');
     } else {
-      lines.push('  • Claude CLI: installed but not selected. If Apply still fails, the subprocess may be unable to read your `claude /login` credentials (on macOS, the Keychain can be unreachable from a no-TTY child).');
+      lines.push('  • Claude CLI: installed but not selected. If Apply still fails, the subprocess may be unable to read your `claude /login` credentials (unreachable from a no-TTY child).');
       lines.push('      Headless fix: run `claude setup-token` once, then `export CLAUDE_CODE_OAUTH_TOKEN=<the printed sk-ant-oat01-… token>` before starting `live-server.mjs`.');
       lines.push('      Alternative: `export ANTHROPIC_API_KEY=<key>` if you have console.anthropic.com credits.');
     }

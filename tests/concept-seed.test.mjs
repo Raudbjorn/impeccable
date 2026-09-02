@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -50,6 +50,26 @@ function run(scope, extraArgs = [], env = {}) {
 }
 
 describe('concept seed scopes', () => {
+  it('runs through a symlinked skill directory', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'concept-seed-symlink-'));
+    const linkedSkill = path.join(dir, 'skill');
+    try {
+      symlinkSync(path.join(ROOT, 'skill'), linkedSkill, 'dir');
+      const result = spawnSync(process.execPath, [
+        path.join(linkedSkill, 'scripts', 'concept-seed.mjs'),
+        '--scope', 'surface', '--mode', 'persuade', '--from', 'symlink-test',
+      ], {
+        cwd: ROOT,
+        encoding: 'utf-8',
+        env: { ...process.env, IMPECCABLE_CATALOG_DIR: FIXTURE_DIR },
+      });
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stdout, /SURFACE CONCEPT SEED/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   // SKIPPED: needs tests/fixtures/concept-catalog/concept-reviews.json, deleted from the repo.
   it.skip('keeps complete-direction and established-world surface rolls reproducible but independent', () => {
     const directionA = run('direction');

@@ -11,10 +11,11 @@
  */
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { execSync, execFileSync } from 'child_process';
-import { mkdtempSync, existsSync, readdirSync, readFileSync, mkdirSync, writeFileSync, rmSync, lstatSync, realpathSync, readlinkSync, symlinkSync, statSync } from 'fs';
+import { mkdtempSync, existsSync, readdirSync, readFileSync, mkdirSync, writeFileSync, chmodSync, rmSync, lstatSync, realpathSync, readlinkSync, symlinkSync, statSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import {
+  collectInstallDetections,
   copyProviderAgents,
   copyProviderHooks,
   copyProviderSkills,
@@ -860,6 +861,54 @@ describe('skills install/update: local universal bundle e2e', () => {
     rmSync(tmp, { recursive: true, force: true });
     rmSync(home, { recursive: true, force: true });
   });
+
+  test('detects an installed Veto CLI and targets its managed skill directory', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'imp-test-veto-detect-'));
+    const home = mkdtempSync(join(tmpdir(), 'imp-home-veto-detect-'));
+    const bin = join(tmp, 'bin');
+    mkdirSync(bin, { recursive: true });
+    mkdirSync(join(home, '.veto'), { recursive: true });
+    writeFileSync(join(bin, 'veto'), '#!/bin/sh\n');
+
+    const previousPath = process.env.PATH;
+    process.env.PATH = bin;
+    try {
+      expect(collectInstallDetections(tmp, home).some((detection) => detection.provider === '.veto')).toBe(false);
+
+      chmodSync(join(bin, 'veto'), 0o755);
+      const detections = collectInstallDetections(tmp, home);
+      const veto = detections.find((detection) => detection.provider === '.veto');
+      expect(veto).toEqual(expect.objectContaining({
+        provider: '.veto',
+        scope: 'user',
+        foundPath: join(bin, 'veto'),
+        installPath: join(home, '.veto', 'skills'),
+        reason: 'CLI on PATH',
+      }));
+    } finally {
+      process.env.PATH = previousPath;
+      rmSync(tmp, { recursive: true, force: true });
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  test('installs Veto skills into its global managed directory', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'imp-test-veto-install-'));
+    const home = mkdtempSync(join(tmpdir(), 'imp-home-veto-install-'));
+    execSync('git init', { cwd: tmp });
+    const bundleRoot = createFakeUniversalBundle(tmp, ['.veto']);
+
+    const output = run('install -y --providers=veto --scope=global --no-hooks', {
+      cwd: tmp,
+      env: { ...process.env, HOME: home, IMPECCABLE_BUNDLE_PATH: bundleRoot },
+    });
+
+    expect(output).toContain('Installed impeccable into: .veto (global)');
+    expect(existsSync(join(home, '.veto', 'skills', 'impeccable', 'SKILL.md'))).toBe(true);
+
+    rmSync(tmp, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+  }, 15000);
 
   test('installs provider-specific skills into a fresh project', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'imp-test-local-install-'));

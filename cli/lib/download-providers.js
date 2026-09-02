@@ -15,6 +15,7 @@ export const FILE_DOWNLOAD_PROVIDER_CONFIG_DIRS = Object.freeze({
   opencode: '.opencode',
   pi: '.pi',
   vibe: '.vibe',
+  veto: '.veto',
 });
 
 export const FILE_DOWNLOAD_PROVIDERS = Object.freeze(

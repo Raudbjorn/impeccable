@@ -5,7 +5,7 @@ Detect UI anti-patterns and design quality issues from the command line. Scans H
 ## Quick Start
 
 ```bash
-# Install skills into your AI harness (Claude, Cursor, Gemini, etc.)
+# Install skills into your AI harness (Claude, Gemini, Codex, etc.)
 npx impeccable skills install
 
 # Non-interactive install for a specific scope
@@ -81,7 +81,7 @@ impeccable detect [options] [file-or-dir-or-url...]
 
 ## Part of Impeccable
 
-This CLI is part of [Impeccable](https://impeccable.style), a cross-provider design skill pack for AI-powered development tools. The full suite includes 24 commands for Claude, Cursor, GitHub Copilot, Gemini, Codex, and more.
+This CLI is part of [Impeccable](https://impeccable.style), a cross-provider design skill pack for AI-powered development tools. The full suite includes 24 commands for Claude, GitHub Copilot, Gemini, Codex, Veto, and more.
 
 ## License
 

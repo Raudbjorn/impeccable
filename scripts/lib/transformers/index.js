@@ -15,5 +15,6 @@ export const transformPi = createTransformer(PROVIDERS.pi);
 export const transformVibe = createTransformer(PROVIDERS.vibe);
 export const transformAntigravity = createTransformer(PROVIDERS.antigravity);
 export const transformOmp = createTransformer(PROVIDERS.omp);
+export const transformVeto = createTransformer(PROVIDERS.veto);
 
 export { createTransformer, PROVIDERS };

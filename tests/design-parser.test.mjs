@@ -228,6 +228,56 @@ describe('parseDesignMd overview branch', () => {
   });
 });
 
+describe('parseDesignMd named rules', () => {
+  it('preserves format precedence while deduplicating later definitions', () => {
+    const md = `# Design System: Rules
+
+## Layout
+
+### The "Rhythm" Rule
+Ignore this duplicate heading definition.
+
+### The Fallback Principle
+Use the heading definition.
+
+### Named Rules
+- **The Fallback Principle:** Ignore this duplicate bullet definition.
+- **The Layering Principle:** Use the bullet definition.
+
+**The Rhythm Rule.** Keep the first definition.
+`;
+
+    assert.deepEqual(parseDesignMd(md).layout.rules, [
+      { name: 'The Rhythm Rule', body: 'Keep the first definition.' },
+      { name: 'The Fallback Principle', body: 'Use the heading definition.' },
+      { name: 'The Layering Principle', body: 'Use the bullet definition.' },
+    ]);
+  });
+
+  it('does not leak a bare, title-less "##" marker into the preceding rule body', () => {
+    // A malformed/empty level-2 heading matches neither the section splitter's
+    // nor the subsection splitter's regex (both require a title). Left
+    // unhandled it falls through as an ordinary content line and gets
+    // appended onto whatever rule preceded it.
+    const md = `# Design System: Test
+
+## Layout
+
+### The "Rhythm" Rule
+First rule body.
+
+##
+
+### The "Other" Rule
+Second rule body.
+`;
+    assert.deepEqual(parseDesignMd(md).layout.rules, [
+      { name: 'The Rhythm Rule', body: 'First rule body.' },
+      { name: 'The Other Rule', body: 'Second rule body.' },
+    ]);
+  });
+});
+
 describe('parseDesignMd canonical sections', () => {
   it('preserves content and named rules from all eight canonical sections', () => {
     const md = `# Design System: Complete

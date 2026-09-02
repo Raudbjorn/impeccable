@@ -70,12 +70,49 @@ function isBrandFontOnOwnDomain(font) {
   return allowed.some(suffix => host === suffix || host.endsWith('.' + suffix));
 }
 
-const GENERIC_FONTS = new Set([
+// Overused-font primary selection skips only CSS generics so a system stack
+// keeps the system face as primary; GENERIC_FONTS still includes platform
+// faces for design-system/serif resolution.
+const CSS_GENERIC_FONTS = new Set([
   'serif', 'sans-serif', 'monospace', 'cursive', 'fantasy',
-  'system-ui', 'ui-serif', 'ui-sans-serif', 'ui-monospace', 'ui-rounded',
-  '-apple-system', 'blinkmacsystemfont', 'segoe ui',
   'inherit', 'initial', 'unset', 'revert',
 ]);
+
+const GENERIC_FONTS = new Set([
+  ...CSS_GENERIC_FONTS,
+  'system-ui', 'ui-serif', 'ui-sans-serif', 'ui-monospace', 'ui-rounded',
+  '-apple-system', 'blinkmacsystemfont', 'segoe ui',
+]);
+
+// CSS font-family quoting can embed a literal comma inside a single face
+// name (`'"Arial, Custom Brand", sans-serif'` names ONE quoted face, not
+// two) — a plain .split(',') misreads that as a stack boundary and would
+// treat "Arial" as the primary face. This tracks quote state instead.
+function splitFontFamilyList(fontFamily) {
+  const str = String(fontFamily || '');
+  const parts = [];
+  let quote = null;
+  let start = 0;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (quote) {
+      if (ch === quote) quote = null;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (ch === ',') {
+      parts.push(str.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(str.slice(start));
+  return parts;
+}
+
+function primaryFontFace(fontFamily, skip = CSS_GENERIC_FONTS) {
+  return splitFontFamilyList(fontFamily)
+    .map(f => f.trim().replace(/^['"]|['"]$/g, '').toLowerCase())
+    .find(f => f && !skip.has(f)) || null;
+}
 
 // WCAG large text thresholds are defined in points: 18pt normal text and
 // 14pt bold text. Browsers expose font-size in CSS pixels at 96px per inch.
@@ -1590,8 +1627,8 @@ function checkIconTile(opts) {
 // Returns { primary, isSerif } so the snippet can name the face.
 function resolveSerif(fontFamily) {
   if (!fontFamily) return { primary: null, isSerif: false };
-  const tokens = fontFamily.split(',').map(f => f.trim().replace(/^['"]|['"]$/g, '').toLowerCase());
-  const primary = tokens.find(f => f && !GENERIC_FONTS.has(f)) || null;
+  const tokens = splitFontFamilyList(fontFamily).map(f => f.trim().replace(/^['"]|['"]$/g, '').toLowerCase());
+  const primary = primaryFontFace(fontFamily, GENERIC_FONTS);
   if (!primary) return { primary: null, isSerif: false };
   if (KNOWN_SERIF_FONTS.has(primary)) return { primary, isSerif: true };
   if (tokens.includes('serif')) return { primary, isSerif: true };
@@ -5190,8 +5227,7 @@ function checkTypography() {
     const style = getComputedStyle(el);
     const ff = style.fontFamily;
     if (!ff) continue;
-    const stack = ff.split(',').map(f => f.trim().replace(/^['"]|['"]$/g, '').toLowerCase());
-    const primary = stack.find(f => f && !GENERIC_FONTS.has(f));
+    const primary = primaryFontFace(ff);
     if (!primary) continue;
     fontUsage.set(primary, (fontUsage.get(primary) || 0) + 1);
     totalTextElements++;
@@ -5436,8 +5472,7 @@ function checkPageTypography(doc, win) {
       if (rule.type !== 1) continue;
       const ff = rule.style?.fontFamily;
       if (!ff) continue;
-      const stack = ff.split(',').map(f => f.trim().replace(/^['"]|['"]$/g, '').toLowerCase());
-      const primary = stack.find(f => f && !GENERIC_FONTS.has(f));
+      const primary = primaryFontFace(ff);
       if (primary) {
         fonts.add(primary);
         if (OVERUSED_FONTS.has(primary)) overusedFound.add(primary);
@@ -5456,11 +5491,10 @@ function checkPageTypography(doc, win) {
   const ffRe = /font-family\s*:\s*([^;}]+)/gi;
   let fm;
   while ((fm = ffRe.exec(html)) !== null) {
-    for (const f of fm[1].split(',').map(f => f.trim().replace(/^['"]|['"]$/g, '').toLowerCase())) {
-      if (f && !GENERIC_FONTS.has(f)) {
-        fonts.add(f);
-        if (OVERUSED_FONTS.has(f)) overusedFound.add(f);
-      }
+    const primary = primaryFontFace(fm[1]);
+    if (primary) {
+      fonts.add(primary);
+      if (OVERUSED_FONTS.has(primary)) overusedFound.add(primary);
     }
   }
 
