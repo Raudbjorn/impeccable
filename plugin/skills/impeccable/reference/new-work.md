@@ -82,11 +82,13 @@ Never copy the direction contract into implementation source or any browser-deli
 
 On a new or replacement world, DESIGN.md is written at finish, from the built world, by the shipped documenter (section 7); a rulebook written before the build gets defended against reality instead of describing it, and hands the design-system detector an unstable target. A new world shipped with no DESIGN.md is still an incomplete run. An ordinary extension does not rewrite DESIGN.md.
 
-If the work establishes durable strategy for a route or artifact, read its existing surface brief, then update it:
+Read the existing surface brief before updating it:
 
 `node "<skill-base-dir>/scripts/surface-brief.mjs" read <primary-target>`
 
 `node "<skill-base-dir>/scripts/surface-brief.mjs" write <primary-target> <body-file> [related-target ...]`
+
+After writing, read the brief once more and verify that all six contract blocks and the seed key are present before building.
 
 Keep the brief small: scope and visitor mode; audience, job, action/task, proof/content, and constraints; chosen direction and memorable moment; unresolved decisions. Do not copy global product truth or DESIGN.md tokens into it.
 
