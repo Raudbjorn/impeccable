@@ -46,6 +46,10 @@ Thumbs.db
 # skill dirs (**/skills/impeccable/scripts/.impeccable/). Anchored patterns
 # would miss the nested copies the build/hook writes.
 **/.impeccable/hook.cache.json
+# Local review/question runtime state, same as the canonical block README.md
+# hands to installing projects.
+.impeccable/review/
+.impeccable/questions/
 .impeccable/live/sessions/
 .impeccable/live/previews/
 .impeccable/live/annotations/

@@ -901,7 +901,7 @@ function collectInstallDetections(root, home = homedir()) {
       ? commandOnPath(hint.command)
       : hint.resolve ? hint.resolve(home) : join(home, hint.home);
     if (!foundPath || (!hint.command && !existsSync(foundPath))) continue;
-    if (hint.command && !existsSync(join(home, '.veto'))) continue;
+    if (hint.command && !existsSync(join(home, provider))) continue;
     const skillProbePaths = hint.command
       ? [userProviderSkillsDir(home, provider)]
       : hint.resolve

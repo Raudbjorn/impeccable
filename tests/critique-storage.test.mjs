@@ -205,6 +205,29 @@ describe('writeSnapshot + readLatestSnapshot', () => {
     assert.equal(latest.meta.target, 'docs: critique # main');
   });
 
+  it('quotes values containing embedded newlines so a fake frontmatter boundary cannot be forged', () => {
+    // A meta value with neither `:` nor `#` but an embedded "\n---\n" would,
+    // if left unquoted, fabricate an early frontmatter close. closeSnapshot's
+    // boundary regex is non-greedy, so it would then splice `closed: true`
+    // into the middle of the value instead of the real frontmatter end.
+    const out = writeSnapshot({
+      slug: 'index-astro',
+      meta: { target: 'line one\n---\nnot a real boundary' },
+      body: 'the real body',
+      cwd,
+    });
+    const latest = readLatestSnapshot('index-astro', { cwd });
+    assert.equal(latest.meta.target, 'line one\n---\nnot a real boundary');
+    assert.match(latest.body, /the real body/);
+
+    const closed = closeSnapshot(out, { cwd });
+    assert.equal(closed, out);
+    const reread = readLatestSnapshot('index-astro', { cwd });
+    // A corrupted close would leave the snapshot looking still-open (closed:
+    // true landed inside the quoted value instead of real frontmatter).
+    assert.equal(reread, null);
+  });
+
   it('closeSnapshot returns the path and leaves readLatestSnapshot null', () => {
     const out = writeSnapshot({ slug: 'index-astro', meta: { total_score: 20 }, body: 'open', cwd });
     const closed = closeSnapshot(out, { cwd });

@@ -253,6 +253,29 @@ Use the heading definition.
       { name: 'The Layering Principle', body: 'Use the bullet definition.' },
     ]);
   });
+
+  it('does not leak a bare, title-less "##" marker into the preceding rule body', () => {
+    // A malformed/empty level-2 heading matches neither the section splitter's
+    // nor the subsection splitter's regex (both require a title). Left
+    // unhandled it falls through as an ordinary content line and gets
+    // appended onto whatever rule preceded it.
+    const md = `# Design System: Test
+
+## Layout
+
+### The "Rhythm" Rule
+First rule body.
+
+##
+
+### The "Other" Rule
+Second rule body.
+`;
+    assert.deepEqual(parseDesignMd(md).layout.rules, [
+      { name: 'The Rhythm Rule', body: 'First rule body.' },
+      { name: 'The Other Rule', body: 'Second rule body.' },
+    ]);
+  });
 });
 
 describe('parseDesignMd canonical sections', () => {

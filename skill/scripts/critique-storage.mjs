@@ -127,8 +127,10 @@ function serializeFrontmatter(obj) {
   for (const [key, value] of Object.entries(obj)) {
     if (value === undefined || value === null) continue;
     const str = typeof value === 'string' ? value : String(value);
-    // Quote strings that contain : or # to keep parsing simple.
-    const needsQuotes = typeof value === 'string' && /[:#]/.test(str);
+    // Quote strings that contain : or # to keep parsing simple, or a raw
+    // newline, which could otherwise forge a fake `\n---` frontmatter
+    // boundary for closeSnapshot's non-greedy matcher to land on.
+    const needsQuotes = typeof value === 'string' && /[:#\r\n]/.test(str);
     lines.push(`${key}: ${needsQuotes ? JSON.stringify(str) : str}`);
   }
   lines.push('---');
@@ -172,8 +174,16 @@ function listSnapshots(suffix, cwd) {
 
 function readSnapshot(filePath) {
   if (!filePath) return null;
-  const body = fs.readFileSync(filePath, 'utf-8');
-  return { path: filePath, body, meta: parseFrontmatter(body) };
+  // Snapshot files can be deleted between the directory scan and the read
+  // (a concurrent critique run, a user cleaning .impeccable/critique/), so
+  // this mirrors fingerprintTarget's fail-soft-to-null rather than letting
+  // an ENOENT propagate as an uncaught exception through every caller.
+  try {
+    const body = fs.readFileSync(filePath, 'utf-8');
+    return { path: filePath, body, meta: parseFrontmatter(body) };
+  } catch {
+    return null;
+  }
 }
 
 function snapshotTargetIdentity(snapshot) {
@@ -240,7 +250,11 @@ export function closeSnapshot(snapshotFile, { cwd = process.cwd() } = {}) {
   if (closedBody === snapshot.body) {
     throw new Error(`Cannot close snapshot without frontmatter: ${snapshot.path}`);
   }
-  fs.writeFileSync(snapshot.path, closedBody, 'utf-8');
+  try {
+    fs.writeFileSync(snapshot.path, closedBody, 'utf-8');
+  } catch {
+    return null;
+  }
   return snapshot.path;
 }
 
@@ -362,7 +376,6 @@ function main(argv) {
       if (!latest) latest = newestForSlug;
       if (latest.meta.closed === true) { process.exit(2); }
 
-      const recordedTargetPath = latest.meta.target_path;
       const recordedTargetIdentity = snapshotTargetIdentity(latest);
       const matchingIdentity = recordedTargetIdentity === targetIdentity;
 
@@ -464,5 +477,10 @@ function isMainModule() {
 // Node resolves import.meta.url to the real file, while process.argv[1] keeps
 // the symlink path. Comparing canonical paths prevents a silent exit-0 no-op.
 if (isMainModule()) {
-  main(process.argv.slice(2));
+  try {
+    main(process.argv.slice(2));
+  } catch (error) {
+    process.stderr.write(`${error?.message || error}\n`);
+    process.exit(1);
+  }
 }
