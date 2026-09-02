@@ -25,9 +25,10 @@ export const SUITES = {
     triggers: [
       ...COMMON_INFRA_PATTERNS,
       /^scripts\/(?!benchmark-detector|build-browser-detector|build-extension)/,
-      /^skill\/(SKILL\.src\.md|agents\/|reference\/|scripts\/(cleanup-deprecated|comp-diff|comp-spec|build-phase|font-match|generate-image|data\/font-index|concept-seed|context|context-signals|critique-storage|design-context|design-parser|doctor|hook|impeccable-paths|is-generated|lib\/(artifact-schema|png|raster|image-metrics|font-fingerprint|font-index|hero-checks|composition-catalog|concept-catalog|provider|staleness|staleness-deep|staleness-notice|surface-briefs|target-slug|template-extensions)|pin|surface-brief))/,
+      /^skill\/(SKILL\.src\.md|agents\/|reference\/|scripts\/(cleanup-deprecated|comp-diff|comp-spec|build-phase|font-match|generate-image|data\/(font-index|critique-evidence)|concept-seed|context|context-signals|critique-storage|design-context|score-evidence|design-parser|doctor|hook|impeccable-paths|is-generated|lib\/(artifact-schema|png|raster|image-metrics|font-fingerprint|font-index|hero-checks|composition-catalog|concept-catalog|provider|staleness|staleness-deep|staleness-notice|surface-briefs|target-slug|template-extensions)|pin|surface-brief))/,
       /^README(\.npm)?\.md$/,
       /^cli\/bin\//,
+      /^cli\/engine\/registry\//,
     ],
     commands: [
       {
@@ -52,6 +53,7 @@ export const SUITES = {
         files: [
           'tests/cli-args.test.mjs',
           'tests/concept-seed.test.mjs',
+          'tests/generate-image-embed.test.mjs',
           'tests/comp-diff.test.mjs',
           'tests/build-phase.test.mjs',
           'tests/font-match.test.mjs',
@@ -62,6 +64,7 @@ export const SUITES = {
           'tests/critique-storage.test.mjs',
           'tests/design-context-import.test.mjs',
           'tests/design-context-portability.test.mjs',
+          'tests/score-evidence.test.mjs',
           'tests/design-parser.test.mjs',
           'tests/github-issue-gate.test.mjs',
           'tests/hook-build.test.mjs',
@@ -73,6 +76,7 @@ export const SUITES = {
           'tests/doctor.test.mjs',
           'tests/staleness.test.mjs',
           'tests/skill-reference.test.mjs',
+          'tests/readme-gitignore.test.mjs',
           'tests/target-args.test.mjs',
           'tests/surface-brief.test.mjs',
           'tests/template-extensions.test.mjs',

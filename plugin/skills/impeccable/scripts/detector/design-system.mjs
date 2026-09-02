@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { finding } from './findings.mjs';
-import { GENERIC_FONTS } from './shared/constants.mjs';
+import { GENERIC_FONTS, splitFontFamilyList } from './shared/constants.mjs';
 import { parseAnyColor, resolveLengthPx } from './rules/checks.mjs';
 
 const DESIGN_NAMES = ['DESIGN.md', 'Design.md', 'design.md'];
@@ -248,9 +248,7 @@ function normalizeFontName(value) {
 }
 
 function splitFontStack(stack) {
-  return String(stack || '')
-    .replace(/\s*!important\s*$/i, '')
-    .split(',')
+  return splitFontFamilyList(String(stack || '').replace(/\s*!important\s*$/i, ''))
     .map(normalizeFontName)
     .filter(Boolean);
 }
@@ -995,7 +993,9 @@ function extractRadiusTokens(value) {
   return String(value || '')
     .replace(/\s*\/\s*/g, ' ')
     .split(/\s+/)
-    .map(token => token.trim())
+    // var() fallbacks leave the closing parenthesis on the final token. Strip
+    // it before length resolution so `8px)` is not treated as unitless 8rem.
+    .map(token => token.trim().replace(/\)+$/, ''))
     .filter(Boolean);
 }
 

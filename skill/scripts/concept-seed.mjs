@@ -106,7 +106,7 @@
 
 import crypto from 'node:crypto';
 import { dirname, join, relative, resolve } from 'node:path';
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   approvedPoolRevision,
@@ -718,7 +718,18 @@ export function nextStepAfterChoice({ key, scope, cwd = process.cwd(), env = pro
   return `NEXT (comp-led, ${why}): the world is chosen; the composition is not. Run: node ${scripts}/build-phase.mjs start${seed} and follow its NEXT lines: it opens the comps phase (three comps under .impeccable/mocks/, one approved by the user through the decision page or structured question, sidecar "approved": true), then spec, plates, hero, sections, motion, responsive, review. Do not write page code before those gates close. Reference: reference/visualize.md for the comp round.\n`;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+function isMainModule() {
+  if (!process.argv[1]) return false;
+  try {
+    // Node resolves import.meta.url through symlinks but leaves argv[1] as the
+    // invoked path. Compare real paths so a linked skill still runs its CLI.
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isMainModule()) {
   const args = process.argv.slice(2);
   const fromIdx = args.indexOf('--from');
   const scopeIdx = args.indexOf('--scope');
