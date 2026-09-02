@@ -1279,6 +1279,39 @@ function fileTextHasHookMarker(filePath) {
   }
 }
 
+// Harness project settings are discovered by walking up from the active
+// working directory. Context resolution can intentionally select a nested
+// product root even when the harness project (and its hook manifest) lives at
+// the enclosing git root, so checking only projectRoot/repoRoot produces a
+// false MANUAL_DETECTOR_REQUIRED directive. Mirror the ancestor lookup through
+// the nearest git boundary, while retaining exact resolved roots for explicit
+// targets outside the invoking directory.
+function hookManifestSearchRoots(ctx) {
+  const roots = [];
+  const seen = new Set();
+  const add = (root) => {
+    if (!root) return;
+    const resolved = path.resolve(root);
+    if (seen.has(resolved)) return;
+    seen.add(resolved);
+    roots.push(resolved);
+  };
+
+  let current = path.resolve(process.cwd());
+  const home = path.resolve(os.homedir());
+  while (true) {
+    add(current);
+    if (current === home || hasGitBoundary(current)) break;
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+
+  add(ctx.projectRoot);
+  add(ctx.repoRoot);
+  return roots;
+}
+
 function automaticHookMode(ctx) {
   if (ctx.platform === 'android' || ctx.platform === 'adaptive') {
     return 'none';
@@ -1286,8 +1319,7 @@ function automaticHookMode(ctx) {
   const activeRoot = path.resolve(ctx.projectRoot || process.cwd());
   if (!hookEnabledAt(activeRoot)) return 'none';
   const manifests = HOOK_MANIFESTS_BY_PROVIDER[IMPECCABLE_PROVIDER_ID] || [];
-  const roots = [...new Set([process.cwd(), ctx.projectRoot, ctx.repoRoot].filter(Boolean).map((root) => path.resolve(root)))];
-  for (const root of roots) {
+  for (const root of hookManifestSearchRoots(ctx)) {
     for (const rel of manifests) {
       const abs = path.join(root, rel);
       let wired;
