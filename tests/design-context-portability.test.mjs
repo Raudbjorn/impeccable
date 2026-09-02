@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { importDesignContext, exportDesignContext } from '../skill/scripts/design-context/portability.mjs';
-import { paths, readAnswers } from '../skill/scripts/design-context/store.mjs';
+import { paths, readAnswers, writeJsonAtomic } from '../skill/scripts/design-context/store.mjs';
 
 async function makeCwd() {
   return mkdtemp(path.join(tmpdir(), 'design-context-portability-'));
@@ -164,6 +164,40 @@ describe('importDesignContext file entries', () => {
     ]);
 
     await assert.rejects(importDesignContext(cwd, bundle), /valid base64/);
+  });
+
+  // Regression: the prior canonical check stripped trailing "=" from both
+  // sides before comparing, which validated round-trip equality but never
+  // the padding itself -- excess or bare padding decoded identically
+  // underneath the strip and passed as canonical.
+  it('rejects excess padding ("YQ===") instead of accepting it as equivalent to correct padding', async () => {
+    const cwd = await makeCwd();
+    const bundle = bundleWithFiles([
+      { path: 'assets/logo.svg', base64: 'YQ===' },
+    ]);
+
+    await assert.rejects(importDesignContext(cwd, bundle), /valid base64/);
+  });
+
+  it('rejects a payload of bare padding characters instead of silently importing an empty file', async () => {
+    const cwd = await makeCwd();
+    const bundle = bundleWithFiles([
+      { path: 'assets/logo.svg', base64: '===' },
+    ]);
+
+    await assert.rejects(importDesignContext(cwd, bundle), /valid base64/);
+  });
+
+  it('still accepts correctly padded and unpadded-length base64', async () => {
+    const cwd = await makeCwd();
+    const bundle = bundleWithFiles([
+      { path: 'assets/a.svg', base64: Buffer.from('a').toString('base64') }, // 1 byte -> padded
+      { path: 'assets/abc.svg', base64: Buffer.from('abc').toString('base64') }, // 3 bytes -> no padding needed
+    ]);
+
+    const result = await importDesignContext(cwd, bundle);
+
+    assert.equal(result.written, 2);
   });
 });
 
@@ -720,5 +754,23 @@ describe('DESIGN.md symlink handling', () => {
 
     assert.equal(result.designWritten, false, 'writing through a dangling symlink must be refused');
     assert.equal(await stat(danglingTarget).then(() => true, () => false), false, 'nothing may be created at the link target');
+  });
+});
+
+describe('writeJsonAtomic', () => {
+  // Regression: the random temp-file suffix (added to defeat a pre-placed
+  // symlink at a predictable name) means a failed rename() no longer
+  // collides with and gets reused by the next attempt the way the old
+  // fixed `${filePath}.tmp` name did -- every failed call now leaves a new
+  // orphaned temp file behind unless cleaned up explicitly.
+  it('cleans up its temp file when rename() fails, instead of leaking a new orphan per attempt', async () => {
+    const cwd = await makeCwd();
+    const target = path.join(cwd, 'blocked');
+    await mkdirP(target, { recursive: true }); // a directory sits where the write wants to land a file
+
+    await assert.rejects(writeJsonAtomic(target, { hello: 'world' }));
+
+    const leftover = (await readdir(cwd)).filter((name) => name !== path.basename(target));
+    assert.deepEqual(leftover, [], 'no temp file may remain after a failed rename');
   });
 });

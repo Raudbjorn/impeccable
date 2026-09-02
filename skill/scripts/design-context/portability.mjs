@@ -114,17 +114,36 @@ export async function assertManagedRootsNotSymlinked(cwd) {
   }
 }
 
+// A flat repeated character class ([A-Za-z0-9+/]*) matches left to right
+// with no backtracking, so it stays linear-time on a multi-megabyte
+// payload; a single regex expressing the whole padded-base64 grammar as
+// alternated groups does not; a run of eleven million characters (an 8 MiB
+// file, this file's own per-file cap) blew V8's regex backtracking stack.
+const BASE64_ALPHABET_RE = /^[A-Za-z0-9+/]*$/;
+
 /* Buffer.from(str, 'base64') never throws: invalid characters are silently
-   dropped and missing padding is tolerated, so a garbled or truncated
-   payload decodes into stray bytes with no error, and a non-string payload
-   coerced by String() decodes whatever that stringification happens to
-   produce. Re-encoding the decoded bytes and comparing (ignoring padding,
-   which a sender may omit) is the strictness Buffer.from itself will not
-   provide: a canonical base64 string reproduces itself exactly. */
+   dropped and both missing and excess padding are tolerated, so a garbled
+   or truncated payload decodes into stray bytes with no error, and a
+   non-string payload coerced by String() decodes whatever that
+   stringification happens to produce. A prior version of this check
+   stripped trailing "=" from both the input and the re-encoded result
+   before comparing, meant to tolerate a sender omitting padding -- but
+   that also made the comparison blind to padding itself: "YQ===" (invalid,
+   one "=" too many) and a bare "=", "==", or "===" (no data at all) all
+   round-tripped underneath the strip and passed as canonical, decoding
+   silently to 1 byte or to an empty file. Validating the grammar first
+   (length a multiple of 4, at most two trailing "=" and none elsewhere,
+   alphabet everywhere else -- RFC 4648 padded base64, exactly what
+   Buffer.prototype.toString('base64') always produces) rejects all of
+   those before any decode happens; once grammar holds, encode/decode is a
+   true bijection, so a direct equality catches everything else. */
 function isCanonicalBase64(str) {
-  if (typeof str !== 'string') return false;
-  const strip = (s) => s.replace(/=+$/, '');
-  return strip(Buffer.from(str, 'base64').toString('base64')) === strip(str);
+  if (typeof str !== 'string' || str.length % 4 !== 0) return false;
+  const padding = str.match(/=*$/)[0];
+  if (padding.length > 2) return false;
+  const data = str.slice(0, str.length - padding.length);
+  if (data.includes('=') || !BASE64_ALPHABET_RE.test(data)) return false;
+  return Buffer.from(str, 'base64').toString('base64') === str;
 }
 
 /* ============================================================

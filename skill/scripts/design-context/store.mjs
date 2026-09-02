@@ -68,7 +68,17 @@ export async function writeJsonAtomic(filePath, value) {
   // through one on the rare chance a name collides anyway.
   const temporary = `${filePath}.${randomBytes(8).toString('hex')}.tmp`;
   await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx' });
-  await rename(temporary, filePath);
+  try {
+    await rename(temporary, filePath);
+  } catch (error) {
+    // Unlike the old fixed `${filePath}.tmp` name, a random suffix means a
+    // failed rename() (filePath is a directory, cross-device, permissions)
+    // leaves behind a temp file no later call will ever collide with or
+    // reuse -- repeated failures would otherwise accumulate a new orphan
+    // every time instead of the single stray file the old name bounded.
+    await rm(temporary, { force: true }).catch(() => {});
+    throw error;
+  }
 }
 
 export async function readJsonSoft(filePath) {

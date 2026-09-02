@@ -3232,6 +3232,20 @@ describe('parseApplyPatchPaths()', () => {
     const abs = parseApplyPatchPaths('*** Add File: /tmp/x.css\n*** Update File: src/y.html\n', cwd);
     assert.deepEqual(abs, ['/tmp/x.css', '/proj/src/y.html']);
   });
+
+  // Regression: path.resolve() collapses "://" to a single "/"
+  // ("xd://probe.tsx" becomes "<cwd>/xd:/probe.tsx"), so a URI-scheme guard
+  // that only ever sees this function's resolved output never gets the
+  // chance to see the "://" it is looking for. The raw patch path must be
+  // checked before resolution, not only after.
+  it('rejects a URI-shaped patch path instead of resolving it into a plain-looking one', () => {
+    const cwd = '/proj';
+    assert.deepEqual(parseApplyPatchPaths('*** Update File: xd://probe.tsx\n', cwd), []);
+    assert.deepEqual(
+      parseApplyPatchPaths('*** Update File: xd://probe.tsx\n*** Update File: src/real.tsx\n', cwd),
+      ['/proj/src/real.tsx'],
+    );
+  });
 });
 
 describe('resolveTargetFiles()', () => {
@@ -3259,6 +3273,21 @@ describe('resolveTargetFiles()', () => {
 
   it('accepts a top-level file_path', () => {
     assert.deepEqual(resolveTargetFiles({ file_path: '/a/c.css' }, '/proj'), ['/a/c.css']);
+  });
+
+  // Regression: a bare `.includes('://')` check rejected any path
+  // containing that substring anywhere, not only a URI scheme prefix, so a
+  // real (if unusual) filesystem path naming a URL in its own path was
+  // silently dropped from the scan.
+  it('does not mistake a real path containing "://" past the start for a URI', () => {
+    assert.deepEqual(
+      resolveTargetFiles({ tool_input: { file_path: '/tmp/snapshots/http://card.tsx' } }, '/proj'),
+      ['/tmp/snapshots/http://card.tsx'],
+    );
+  });
+
+  it('still rejects a URI-shaped tool_input.file_path', () => {
+    assert.deepEqual(resolveTargetFiles({ tool_input: { file_path: 'xd://probe.tsx' } }, '/proj'), []);
   });
 });
 

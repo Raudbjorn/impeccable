@@ -1240,12 +1240,25 @@ function relativize(filePath, cwd) {
 // https://developers.openai.com/codex/hooks#posttooluse
 const APPLY_PATCH_FILE_RE = /^\*\*\* (?:Update|Add) File: (.+)$/gm;
 
+// RFC 3986: scheme starts with a letter, then letters/digits/+/-/., then
+// "://". Anchored at the string start, same as the OMP adapter's own
+// device-URI guard, so a real filesystem path that merely contains "://"
+// somewhere past the start (a snapshot file named after a URL, say) is
+// never mistaken for one -- a bare .includes('://') check rejects that too.
+const URI_SCHEME_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
+
 export function parseApplyPatchPaths(command, projectCwd) {
   if (!command || typeof command !== 'string') return [];
   const out = [];
   for (const m of command.matchAll(APPLY_PATCH_FILE_RE)) {
     let p = (m[1] || '').trim();
     if (!p) continue;
+    // Checked on the raw patch path, before path.resolve() below: resolve()
+    // collapses "://" to a single "/" ("xd://probe.tsx" becomes
+    // "<cwd>/xd:/probe.tsx"), so resolveTargetFiles()'s own URI-scheme guard
+    // -- which only ever sees this caller's already-resolved output -- never
+    // gets the chance to see the "://" it is looking for.
+    if (URI_SCHEME_RE.test(p)) continue;
     if (!path.isAbsolute(p)) p = path.resolve(projectCwd, p);
     out.push(p);
   }
@@ -1257,7 +1270,7 @@ export function resolveTargetFiles(event, projectCwd) {
   const out = [];
   const add = (filePath) => {
     if (typeof filePath !== 'string' || !filePath) return;
-    if (filePath.includes('://')) return; // reject non-filesystem URI schemes before path resolution
+    if (URI_SCHEME_RE.test(filePath)) return; // reject non-filesystem URI schemes before path resolution
     if (!out.includes(filePath)) out.push(filePath);
   };
 
