@@ -556,6 +556,32 @@ describe('loadContext (monorepo project context)', () => {
     assert.doesNotMatch(res.stdout, /REGISTER:/);
   });
 
+  it('reports the selected target\'s own design context, not the invoking root\'s', () => {
+    // Regression: appendDesignContextDirective used to check process.cwd()
+    // before ctx.projectRoot, so a store sitting at the monorepo root (cwd
+    // when --target selects a workspace child) won the DESIGN_CONTEXT
+    // directive over the target's own store, every root chain elsewhere in
+    // this file puts the resolved project first for exactly this reason.
+    writeMonorepo();
+    write('apps/dashboard/PRODUCT.md', '# Dashboard product\n');
+    write('.impeccable/design-context/answers.json', JSON.stringify({ 'palette-primary': '#ROOT000' }));
+    write('apps/dashboard/.impeccable/design-context/answers.json', JSON.stringify({ 'palette-primary': '#DASH000' }));
+
+    const res = spawnSync(process.execPath, [SCRIPT_PATH, '--target', 'apps/dashboard/src/App.jsx'], {
+      cwd: scratch,
+      encoding: 'utf8',
+      env: { ...process.env, IMPECCABLE_NO_UPDATE_CHECK: '1', IMPECCABLE_NO_STALENESS_CHECK: '1' },
+    });
+    assert.equal(res.status, 0);
+    assert.match(res.stdout, /DESIGN_CONTEXT:/);
+    assert.match(res.stdout, /apps\/dashboard\/\.impeccable\/design-context\/answers\.json/);
+    assert.doesNotMatch(
+      res.stdout,
+      /(?<!apps\/dashboard\/)\.impeccable\/design-context\/answers\.json/,
+      'the root store must not be the one reported once the target has its own',
+    );
+  });
+
   it('asks for an app when the CLI runs from a monorepo root without selection', () => {
     writeMonorepo();
     const res = spawnSync(process.execPath, [SCRIPT_PATH], {

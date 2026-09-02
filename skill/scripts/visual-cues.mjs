@@ -20,139 +20,14 @@
 //     uniqueness gate, catching two subagents that raced onto one default
 //     output filename before compile ever runs.
 //
-// Dependency-free: PNG decode on node:zlib. Rejects interlaced and
-// indexed-color PNGs; convert those with sips/ImageMagick/PIL first.
+// PNG decode is the shared decoder in lib/png.mjs (handles every color
+// type, bit depth, and interlacing); this script only needs RGBA pixels.
 
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync, realpathSync, unlinkSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import zlib from 'node:zlib';
-
-// ---------------------------------------------------------------- PNG codec
-
-const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-
-// PNG filter type 4 (Paeth): predicts a byte from its left (a), above (b),
-// and above-left (c) neighbors, picking whichever of a, b, or a+b-c lands
-// closest to the actual gradient. Used by decodePng's unfilter step.
-function paeth(a, b, c) {
-  const p = a + b - c;
-  const pa = Math.abs(p - a);
-  const pb = Math.abs(p - b);
-  const pc = Math.abs(p - c);
-  if (pa <= pb && pa <= pc) return a;
-  if (pb <= pc) return b;
-  return c;
-}
-
-function decodePng(buf) {
-  if (!buf.subarray(0, 8).equals(PNG_SIG)) throw new Error('not a PNG file');
-  // Walk the chunk stream: each chunk is [4-byte length][4-byte type][data][4-byte crc].
-  // IHDR carries the header fields; IDAT is the (possibly multi-chunk)
-  // compressed pixel data, concatenated below before inflating; other
-  // chunk types (tEXt, iCCP, etc.) are skipped since nothing here needs them.
-  let pos = 8;
-  let ihdr = null;
-  const idat = [];
-  while (pos + 8 <= buf.length) {
-    const len = buf.readUInt32BE(pos);
-    const type = buf.toString('ascii', pos + 4, pos + 8);
-    const data = buf.subarray(pos + 8, pos + 8 + len);
-    if (type === 'IHDR') {
-      ihdr = {
-        width: data.readUInt32BE(0),
-        height: data.readUInt32BE(4),
-        bitDepth: data[8],
-        colorType: data[9],
-        interlace: data[12],
-      };
-    } else if (type === 'IDAT') {
-      idat.push(data);
-    } else if (type === 'IEND') {
-      break;
-    }
-    pos += 12 + len; // length + type + data + crc
-  }
-  if (!ihdr) throw new Error('PNG has no IHDR chunk');
-  const { width, height, bitDepth, colorType, interlace } = ihdr;
-  if (interlace) throw new Error('interlaced PNG not supported; re-save without interlacing (sips, ImageMagick, or PIL)');
-  if (colorType === 3) throw new Error('indexed-color PNG not supported; convert to RGB/RGBA first (sips, ImageMagick, or PIL)');
-  if (bitDepth !== 8 && bitDepth !== 16) throw new Error(`unsupported bit depth ${bitDepth}; convert to 8-bit first`);
-  const channels = { 0: 1, 2: 3, 4: 2, 6: 4 }[colorType];
-  if (!channels) throw new Error(`unsupported color type ${colorType}`);
-
-  const sampleBytes = bitDepth / 8;
-  const bpp = channels * sampleBytes; // bytes per pixel
-  const stride = width * bpp; // bytes per scanline, excluding the filter-type byte
-  const raw = zlib.inflateSync(Buffer.concat(idat));
-
-  // Each scanline in the inflated stream is prefixed with a 1-byte filter
-  // type (0-4) that says how it was delta-encoded against the row above
-  // and/or the pixel to the left; undo that in place, row by row, since
-  // filter 2-4 need the already-unfiltered previous row to reconstruct.
-  const px = Buffer.alloc(height * stride);
-  let rp = 0;
-  for (let y = 0; y < height; y++) {
-    const filter = raw[rp++];
-    const row = px.subarray(y * stride, (y + 1) * stride);
-    raw.copy(row, 0, rp, rp + stride);
-    rp += stride;
-    const prev = y > 0 ? px.subarray((y - 1) * stride, y * stride) : null;
-    if (filter === 0) continue; // None: bytes are already the real pixel values
-    if (filter === 1) {
-      // Sub: each byte was stored as (value - left).
-      for (let i = bpp; i < stride; i++) row[i] = (row[i] + row[i - bpp]) & 0xff;
-    } else if (filter === 2) {
-      // Up: each byte was stored as (value - above).
-      if (prev) for (let i = 0; i < stride; i++) row[i] = (row[i] + prev[i]) & 0xff;
-    } else if (filter === 3) {
-      // Average: each byte was stored as (value - floor((left + above) / 2)).
-      for (let i = 0; i < stride; i++) {
-        const left = i >= bpp ? row[i - bpp] : 0;
-        const up = prev ? prev[i] : 0;
-        row[i] = (row[i] + ((left + up) >> 1)) & 0xff;
-      }
-    } else if (filter === 4) {
-      // Paeth: each byte was stored as (value - paeth(left, above, above-left)).
-      for (let i = 0; i < stride; i++) {
-        const a = i >= bpp ? row[i - bpp] : 0;
-        const b = prev ? prev[i] : 0;
-        const c = prev && i >= bpp ? prev[i - bpp] : 0;
-        row[i] = (row[i] + paeth(a, b, c)) & 0xff;
-      }
-    } else {
-      throw new Error(`unknown PNG filter ${filter} at row ${y}`);
-    }
-  }
-
-  // Normalize every supported color type (grayscale, RGB, grayscale+alpha,
-  // RGBA) down to one consistent RGBA8 buffer, so everything past this
-  // point (palette search) only ever deals with one shape. 16-bit samples
-  // keep only the high byte; visual cues never need more than 8 bits of
-  // precision per channel.
-  const rgba = Buffer.alloc(width * height * 4);
-  const at = (base, ch) => px[base + ch * sampleBytes];
-  for (let i = 0; i < width * height; i++) {
-    const base = i * bpp;
-    let r, g, b, a;
-    if (colorType === 0) {
-      r = g = b = at(base, 0);
-      a = 255;
-    } else if (colorType === 2) {
-      r = at(base, 0); g = at(base, 1); b = at(base, 2);
-      a = 255;
-    } else if (colorType === 4) {
-      r = g = b = at(base, 0);
-      a = at(base, 1);
-    } else {
-      r = at(base, 0); g = at(base, 1); b = at(base, 2); a = at(base, 3);
-    }
-    const o = i * 4;
-    rgba[o] = r; rgba[o + 1] = g; rgba[o + 2] = b; rgba[o + 3] = a;
-  }
-  return { width, height, rgba, hasAlpha: colorType === 4 || colorType === 6 };
-}
+import { decodePng } from './lib/png.mjs';
 
 // The pipeline ships squares, and squaring after the fact always loses
 // something (cropping eats scene, padding invents background), so square
@@ -202,15 +77,15 @@ function snapPalette(img, palette) {
     for (let y = 0; y < img.height; y += step) {
       for (let x = 0; x < img.width; x += step) {
         const o = (y * img.width + x) * 4;
-        const dr = img.rgba[o] - pr;
-        const dg = img.rgba[o + 1] - pg;
-        const db = img.rgba[o + 2] - pb;
+        const dr = img.data[o] - pr;
+        const dg = img.data[o + 1] - pg;
+        const db = img.data[o + 2] - pb;
         const d = dr * dr + dg * dg + db * db;
         if (d < best) { best = d; bx = x; by = y; }
       }
     }
     const o = (by * img.width + bx) * 4;
-    const snapped = `#${[img.rgba[o], img.rgba[o + 1], img.rgba[o + 2]]
+    const snapped = `#${[img.data[o], img.data[o + 1], img.data[o + 2]]
       .map((v) => v.toString(16).padStart(2, '0'))
       .join('')
       .toUpperCase()}`;

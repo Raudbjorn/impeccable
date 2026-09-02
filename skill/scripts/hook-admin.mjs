@@ -817,7 +817,9 @@ function reset(cwd) {
   if (stillShared.length) {
     removeHookStateFiles(cwd);
     const done = pruned.length ? ` Removed hook entries from: ${pruned.join(', ')}.` : '';
-    const disabled = mergeHookConfig(readRawHookConfig(cwd)).enabled === false;
+    // readConfig() merges config.local.json on top of config.json, so a
+    // local-only disable (same gap uiState() had) is reflected here too.
+    const disabled = readConfig(cwd).enabled === false;
     const state = disabled
       ? 'The existing config still disables the hook here, so it was left in place.'
       : 'The hook is still armed here: run `off` to disable it.';
@@ -866,14 +868,21 @@ function reset(cwd) {
    writer added after that read is never silently clobbered.
    ============================================================ */
 
+// readConfig() merges config.json then config.local.json, local winning,
+// the same as the hook actually sees at runtime. Reading only the shared
+// file here (as an earlier version of this function did, via
+// readRawHookConfig/readRawDetectorConfig with no opts.local) reported
+// `enabled: true` for a project that had disabled the hook in
+// config.local.json alone: the UI showed it on, and toggling it back
+// "on" was then a silent no-op, since the desired value already matched
+// what uiState() (wrongly) reported as current.
 function uiState(cwd) {
-  const detector = readRawDetectorConfig(cwd) || mergeDetectorConfig(null);
-  const hook = readRawHookConfig(cwd);
+  const config = readConfig(cwd);
   return {
-    enabled: !(hook && hook.enabled === false),
-    ignoreRules: Array.isArray(detector.ignoreRules) ? detector.ignoreRules : [],
-    ignoreFiles: Array.isArray(detector.ignoreFiles) ? detector.ignoreFiles : [],
-    ignoreValues: normalizeIgnoreValueEntries(detector.ignoreValues || []),
+    enabled: config.enabled,
+    ignoreRules: Array.isArray(config.ignoreRules) ? config.ignoreRules : [],
+    ignoreFiles: Array.isArray(config.ignoreFiles) ? config.ignoreFiles : [],
+    ignoreValues: normalizeIgnoreValueEntries(config.ignoreValues || []),
   };
 }
 

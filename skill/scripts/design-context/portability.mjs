@@ -11,7 +11,7 @@
  * rewriting what it sent.
  */
 
-import { readFile, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { readFile, mkdir, readdir, rm, writeFile, lstat } from 'node:fs/promises';
 import path from 'node:path';
 import {
   paths,
@@ -39,8 +39,19 @@ const MIME = new Map([
 ]);
 
 /* Exactly the three places an export puts bytes, and so exactly the three an
-   import will write them back to. Anything else in a bundle is not ours. */
-const ALLOWED_FILE = /^(assets\/[^/]+|fonts\/[^/]+|cue\.png)$/;
+   import will write them back to. Anything else in a bundle is not ours.
+   The negative lookahead excludes a bare "." or ".." as the file segment:
+   without it, "assets/.." matches assets/[^/]+ (".." has no slash in it),
+   resolves to the assets directory's parent, and writeFile() on a directory
+   throws EISDIR instead of hitting the containment check below at all.
+   The segment also excludes a literal backslash: on Windows, path.resolve
+   treats "\" as a separator too, so "assets/..\answers.json" (no forward
+   slash, so [^/]+ alone accepts it whole) resolves to the store's own
+   answers.json, and the containment check below allows it right back in
+   because that stays inside storeDir -- a bundle overwriting the record
+   it was meant to only add to. No legitimate exported filename (see the
+   MIME extension list above) ever contains a backslash. */
+const ALLOWED_FILE = /^(assets\/(?!\.{1,2}$)[^/\\]+|fonts\/(?!\.{1,2}$)[^/\\]+|cue\.png)$/;
 
 const SURFACE_LABELS = { persuade: 'Landing page', operate: 'Tool', read: 'Docs', experience: 'Portfolio' };
 const ROLES = ['primary', 'secondary', 'tertiary', 'neutral'];
@@ -57,6 +68,25 @@ async function collectFiles(cwd, { includeAssets = true } = {}) {
   let total = 0;
 
   const take = async (absolute, relative) => {
+    // A symlink under the store could point anywhere on disk (a cloned
+    // repo can carry one pointing at a local credential); readFile()
+    // follows it, and the export bundle is meant to be handed to someone
+    // else, so a followed link would base64-embed whatever it points at.
+    // None of assets/, fonts/, or cue.png legitimately holds a link.
+    let stat;
+    try {
+      stat = await lstat(absolute);
+    } catch {
+      return;
+    }
+    if (!stat.isFile()) {
+      skipped.push({
+        path: relative,
+        bytes: 0,
+        reason: stat.isSymbolicLink() ? 'symlink, not a real file' : 'not a regular file',
+      });
+      return;
+    }
     let bytes;
     try {
       bytes = await readFile(absolute);
@@ -92,8 +122,13 @@ async function collectFiles(cwd, { includeAssets = true } = {}) {
 
 async function buildBundle(cwd, { includeAssets = true, now = new Date() } = {}) {
   const target = paths(cwd);
-  const answers = await readAnswers(cwd);
-  if (!answers) throw new Error('No design interview found. Run /impeccable document to create one.');
+  /* The pickerless interview seed (document.md's default path today) never
+     writes answers.json: it writes DESIGN.md straight from the chat and, when
+     the user supplied files, stages them under assets/. Requiring answers.json
+     here made export fail for every fresh seed even with DESIGN.md and staged
+     assets on disk. Missing answers is only a hard failure once nothing else
+     is on record either, checked below once designMd and files are known. */
+  const answers = (await readAnswers(cwd)) || {};
 
   const stored = (await readContext(cwd)) || { schemaVersion: SCHEMA_VERSION };
   const cues = await readJsonSoft(target.cuesJson);
@@ -108,6 +143,10 @@ async function buildBundle(cwd, { includeAssets = true, now = new Date() } = {})
     designMd = await readFile(path.resolve(cwd, 'DESIGN.md'), 'utf8');
   } catch {
     /* Not written yet, which an import is told about rather than guessing. */
+  }
+
+  if (!Object.keys(answers).length && !files.length && !designMd) {
+    throw new Error('No design interview found. Run /impeccable document to create one.');
   }
 
   return {
@@ -141,17 +180,35 @@ function paletteTable(answers) {
   return `| Role | Value |\n| --- | --- |\n${rows.map(([role, hex]) => `| ${role} | \`${hex}\` |`).join('\n')}\n\n`;
 }
 
+/* `_chosen` (document.md's own name for the field) is a JSON-encoded array of
+   the per-surface keys the user actually set; a `<key>-<mode>` field present
+   in `answers` but missing from it is a preset minted when the surface was
+   switched on, not a decision. Without this, an export declared "source of
+   truth" reads a preset default back as if the user picked it. */
+function chosenKeys(answers) {
+  const raw = answers._chosen;
+  try {
+    if (typeof raw === 'string') return new Set(JSON.parse(raw));
+    if (Array.isArray(raw)) return new Set(raw);
+  } catch { /* malformed _chosen: fall through to "unknown", not "none chosen" */ }
+  return null;
+}
+
 function perSurfaceTable(answers, surfaces) {
+  const chosen = chosenKeys(answers);
   const rows = [];
   for (const key of PER_SURFACE) {
     for (const mode of surfaces) {
-      const value = answers[`${key}-${mode}`];
-      if (value) rows.push([key, SURFACE_LABELS[mode] || mode, String(value), answers[key] === value]);
+      const fieldKey = `${key}-${mode}`;
+      const value = answers[fieldKey];
+      if (!value) continue;
+      const provisional = chosen ? !chosen.has(fieldKey) : false;
+      rows.push([key, SURFACE_LABELS[mode] || mode, String(value), answers[key] === value, provisional]);
     }
   }
   if (!rows.length) return '';
   return `| Question | Surface | Answer |\n| --- | --- | --- |\n${rows
-    .map(([key, label, value, leads]) => `| ${key} | ${label}${leads ? ' (leads)' : ''} | ${value} |`)
+    .map(([key, label, value, leads, provisional]) => `| ${key} | ${label}${leads ? ' (leads)' : ''} | ${value}${provisional ? ' (preset, not chosen)' : ''} |`)
     .join('\n')}\n\n`;
 }
 
@@ -325,7 +382,13 @@ export async function importDesignContext(cwd, bundle, { design = 'skip', force 
       continue;
     }
     const absolute = path.resolve(target.storeDir, relative);
-    if (path.relative(target.storeDir, absolute).startsWith('..')) continue;
+    const contained = path.relative(target.storeDir, absolute);
+    // A real file's relative path is never empty; an empty result means
+    // `relative` resolved to storeDir itself (writeFile() on a directory
+    // throws EISDIR, uncaught, rather than skipping), same failure the
+    // ALLOWED_FILE lookahead above already closes off, kept here in case a
+    // future entry point reaches this loop past a differently-shaped check.
+    if (!contained || contained.startsWith('..')) continue;
     await mkdir(path.dirname(absolute), { recursive: true });
     await writeFile(absolute, Buffer.from(String(file.base64 || ''), 'base64'));
     written += 1;

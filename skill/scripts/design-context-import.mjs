@@ -12,10 +12,29 @@
  * branch on. Exit 1 on a bundle this release cannot read.
  */
 
+import { existsSync, readdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { migrate, paths, pidAlive, readAnswers, readJsonSoft } from './design-context/store.mjs';
+import { migrate, paths, pidAlive, readJsonSoft } from './design-context/store.mjs';
 import { importDesignContext, validateBundle } from './design-context/portability.mjs';
+
+/* A pickerless interview seed stages a provided logo or moodboard under
+   assets/ (and can carry context.json / cue.png from an earlier import)
+   without ever writing answers.json, so checking answers.json alone treated
+   that seed as an empty store. A plain import then installed another
+   project's answers on top while leaving the seed's own staged assets and
+   manifests in place -- a mixed context, despite the refusal below existing
+   specifically to require --force before anything gets replaced. */
+function hasManagedState(cwd) {
+  const target = paths(cwd);
+  if (existsSync(target.answersJson) || existsSync(target.contextJson) || existsSync(target.cuePng)) return true;
+  for (const dir of [target.assetsDir, target.fontsDir]) {
+    try {
+      if (readdirSync(dir).length > 0) return true;
+    } catch { /* directory absent: nothing staged there */ }
+  }
+  return false;
+}
 
 function printHelp() {
   console.log(`Usage: node design-context-import.mjs <bundle.json> [options]
@@ -74,7 +93,7 @@ if (session && pidAlive(session.pid)) {
   process.exit(1);
 }
 
-if (!args.includes('--force') && await readAnswers(process.cwd())) {
+if (!args.includes('--force') && hasManagedState(process.cwd())) {
   console.error('This project already has a design context. Re-run with --force to replace it.');
   process.exit(1);
 }

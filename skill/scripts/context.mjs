@@ -1349,8 +1349,13 @@ async function appendCompRoundOpenDirective(parts, ctx) {
 const DESIGN_CONTEXT_DIR = '.impeccable/design-context';
 
 function appendDesignContextDirective(parts, ctx) {
+  // The resolved project decides first, same precedence every other root
+  // chain in this file uses: with --target selecting another workspace, cwd
+  // is the caller's app, not the target's, and a store found there first
+  // would report the wrong project's design context. cwd stands in only
+  // when no project resolved at all.
   const roots = [...new Set(
-    [process.cwd(), ctx.projectRoot, ctx.contextDir]
+    [ctx.projectRoot, ctx.contextDir, process.cwd()]
       .filter(Boolean)
       .map((dir) => path.resolve(dir)),
   )];

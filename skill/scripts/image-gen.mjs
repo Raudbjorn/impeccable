@@ -29,6 +29,7 @@ import os from "node:os";
 import path from "node:path";
 import dns from "node:dns";
 import { execFileSync, spawnSync } from "node:child_process";
+import { isPng } from "./lib/png.mjs";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -45,8 +46,13 @@ function loadEnv(...names) {
   if (!fs.existsSync(envPath)) return undefined;
   const vars = {};
   for (const line of fs.readFileSync(envPath, "utf8").split("\n")) {
+    // The trailing `\s*$` here never trims anything on its own: `(.*)` is
+    // greedy and already consumes the trailing whitespace, so an explicit
+    // .trim() is what actually strips a copy-pasted trailing space from an
+    // unquoted value before the quote strip runs (which needs the quote at
+    // the very end to match, so it has to run after the trim, not before).
     const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)\s*$/);
-    if (m) vars[m[1]] = m[2].replace(/^["']|["']$/g, "");
+    if (m) vars[m[1]] = m[2].trim().replace(/^["']|["']$/g, "");
   }
   for (const name of names) if (vars[name]) return vars[name];
   return undefined;
@@ -112,7 +118,11 @@ async function curlJson(url, { method = "GET", headers = {}, body } = {}) {
   let bodyFile;
   if (body !== undefined) {
     bodyFile = path.join(os.tmpdir(), `image-gen-body-${process.pid}-${Date.now()}.json`);
-    fs.writeFileSync(bodyFile, body);
+    // Same reasoning as the header file above: the body can carry the full
+    // prompt and a base64 reference image, and a shared tmpdir under a
+    // normal 022 umask would otherwise leave it world-readable for curl's
+    // timeout window.
+    fs.writeFileSync(bodyFile, body, { mode: 0o600 });
     args.push("-d", `@${bodyFile}`);
   }
   args.push(url);
@@ -134,8 +144,6 @@ async function curlJson(url, { method = "GET", headers = {}, body } = {}) {
   }
 }
 
-const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-
 // Downloads to a sibling temp path, checks the PNG signature (BFL is asked
 // for output_format: "png", but a 2xx response body is not proof of that --
 // a delivery-CDN edge error page or truncated body would otherwise land
@@ -155,7 +163,7 @@ async function download(url, outPath) {
       const buf = fs.existsSync(tmpPath) ? fs.readFileSync(tmpPath) : null;
       if (!buf || buf.length === 0) {
         lastErr = new Error("download produced an empty file");
-      } else if (!buf.subarray(0, 8).equals(PNG_SIGNATURE)) {
+      } else if (!isPng(buf)) {
         lastErr = new Error("downloaded file is not a valid PNG (bad signature)");
       } else {
         fs.renameSync(tmpPath, outPath);
@@ -271,7 +279,7 @@ async function generateBfl({ apiKey, prompt, ref, width, height, out }) {
 // the actual bytes, sniffed from the format signature rather than trusted
 // from the file extension.
 function sniffImageMime(buf) {
-  if (buf.subarray(0, 8).equals(PNG_SIGNATURE)) return "image/png";
+  if (isPng(buf)) return "image/png";
   if (buf.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) return "image/jpeg";
   if (buf.subarray(0, 4).toString("ascii") === "RIFF" && buf.subarray(8, 12).toString("ascii") === "WEBP") return "image/webp";
   fail("--ref file is not a recognized image format (expected PNG, JPEG, or WebP signature)");
@@ -338,7 +346,7 @@ function writeAsPng(buf, out) {
     return;
   }
   const tmp = path.join(os.tmpdir(), `image-gen-raw-${process.pid}-${Date.now()}.img`);
-  fs.writeFileSync(tmp, buf);
+  fs.writeFileSync(tmp, buf, { mode: 0o600 });
   const converters = [
     ["sips", ["-s", "format", "png", tmp, "--out", out]],
     ["magick", [tmp, `png:${out}`]],

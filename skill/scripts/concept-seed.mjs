@@ -796,7 +796,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         process.stdout.write([
           'NO_DESIGN_MD: the dice stay in the cup until the user answers the seed question.',
           'First action: create a tracked todo "Ask user: document --seed or skip" with the harness todo tool and start no other todo until it is answered; with no todo tool, state this gate to the user in chat before anything else.',
-          'Then ask one question: recommend `document --seed`, the guided interview plus browser questionnaire (reference/document.md, seed mode), because a world built from the user\'s own choices beats one assigned to them; offer the skip in the same breath.',
+          'Then ask one question: recommend `document --seed`, the guided interview (reference/document.md, seed mode), because a world built from the user\'s own choices beats one assigned to them; offer the skip in the same breath.',
           'User accepts: run document seed mode; its seed DESIGN.md reads as an established world, so no direction roll happens.',
           'User skips: re-run this exact command with --seed-declined="<their verbatim skip answer>" quoting the user\'s actual words from this conversation.',
           'The original build request is never a skip answer, a bare or empty flag refuses again, and a fabricated or paraphrased quote is a contract violation.',
