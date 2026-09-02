@@ -1214,6 +1214,36 @@ describe('context.mjs CLI', () => {
     assert.doesNotMatch(res.stdout, /detect\.mjs --json <changed targets>/);
   });
 
+  it('recognizes an installed oh-my-pi hook module even though it is not JSON', () => {
+    const scripts = path.join(scratch, 'bundle', 'skills', 'impeccable', 'scripts');
+    stageContextBundle(scripts, { providerId: 'omp' });
+
+    const project = path.join(scratch, 'project');
+    fs.mkdirSync(path.join(project, '.omp', 'hooks', 'post'), { recursive: true });
+    fs.writeFileSync(path.join(project, 'PRODUCT.md'), '# Acme\n');
+    fs.writeFileSync(
+      path.join(project, '.omp', 'hooks', 'post', 'impeccable.js'),
+      'export default function impeccableHook(pi) {}\n',
+    );
+
+    const res = spawnSync(process.execPath, [path.join(scripts, 'context.mjs')], {
+      cwd: project,
+      encoding: 'utf8',
+      env: { ...process.env, IMPECCABLE_NO_UPDATE_CHECK: '1', IMPECCABLE_NO_STALENESS_CHECK: '1' },
+    });
+    assert.equal(res.status, 0, res.stderr);
+    assert.doesNotMatch(res.stdout, /MANUAL_DETECTOR_REQUIRED:/);
+
+    fs.rmSync(path.join(project, '.omp', 'hooks', 'post', 'impeccable.js'));
+    const missing = spawnSync(process.execPath, [path.join(scripts, 'context.mjs')], {
+      cwd: project,
+      encoding: 'utf8',
+      env: { ...process.env, IMPECCABLE_NO_UPDATE_CHECK: '1', IMPECCABLE_NO_STALENESS_CHECK: '1' },
+    });
+    assert.equal(missing.status, 0, missing.stderr);
+    assert.match(missing.stdout, /MANUAL_DETECTOR_REQUIRED:/);
+  });
+
   it('treats tokenized code as incumbent design authority when DESIGN.md is missing', () => {
     write('PRODUCT.md', '# Acme\n');
     write('src/app.css', ':root { --color-brand: red; --color-surface: white; --color-text: black; }\nbody { font-family: system-ui; background: var(--color-surface); color: var(--color-text); }\n');

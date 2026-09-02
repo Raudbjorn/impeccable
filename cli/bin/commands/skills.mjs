@@ -119,6 +119,10 @@ const IMPECCABLE_HOOK_COMMAND_MARKERS = [
   'skills/impeccable/scripts/hook-after-edit.mjs',
   'skills/impeccable/scripts/hook-stop.mjs',
 ];
+// oh-my-pi's hook module builds its hook.mjs path via join(...) with separate
+// string segments, so none of the markers above appear as one substring in
+// it. The exported function's name is the stable, unique marker instead.
+const OMP_HOOK_MODULE_MARKER = 'impeccableHook';
 const PROVIDER_HOOK_ARTIFACTS = {
   '.claude': [
     // The hook is a machine-local install side effect, so it lands in the
@@ -138,6 +142,13 @@ const PROVIDER_HOOK_ARTIFACTS = {
   // so source and dest are the same path.
   '.github': [
     { sourceProvider: '.github', rel: 'hooks/impeccable.json', destProvider: '.github' },
+  ],
+  // oh-my-pi discovers hooks as one file per module under `.omp/hooks/post/`,
+  // auto-loaded by presence rather than a settings entry the CLI has to merge
+  // into. `isModule` tells the consumers below to treat this as a plain text
+  // file (copy verbatim, marker-check by substring) instead of JSON.
+  '.omp': [
+    { sourceProvider: '.omp', rel: 'hooks/post/impeccable.js', destProvider: '.omp', isModule: true },
   ],
 };
 
@@ -1313,11 +1324,12 @@ function refreshProviderSkills(bundleDir, root, providers, scope) {
 }
 
 function hookArtifactsForProvider(bundleDir, root, provider) {
-  return (PROVIDER_HOOK_ARTIFACTS[provider] || []).map(({ sourceProvider, rel, destProvider, destRel }) => {
+  return (PROVIDER_HOOK_ARTIFACTS[provider] || []).map(({ sourceProvider, rel, destProvider, destRel, isModule }) => {
     const writeRel = destRel || rel;
     const artifact = {
       src: join(bundleDir, sourceProvider, rel),
       dest: join(root, destProvider, writeRel),
+      isModule,
     };
     // When the write target is a local override (e.g. settings.local.json), the
     // team-shared sibling (settings.json) is where a legacy install or a
@@ -1445,12 +1457,24 @@ function fileHasImpeccableHookMarker(file) {
 function hookInstalledForProvider(root, provider) {
   const artifacts = PROVIDER_HOOK_ARTIFACTS[provider] || [];
   if (artifacts.length === 0) return true;
-  return artifacts.every(({ destProvider, rel, destRel }) => {
+  return artifacts.every(({ destProvider, rel, destRel, isModule }) => {
     const writeRel = destRel || rel;
+    if (isModule) return fileHasOmpHookMarker(join(root, destProvider, writeRel));
     if (fileHasImpeccableHookMarker(join(root, destProvider, writeRel))) return true;
     if (writeRel !== rel && fileHasImpeccableHookMarker(join(root, destProvider, rel))) return true;
     return false;
   });
+}
+
+// Module-file twin of fileHasImpeccableHookMarker: a plain text scan, never
+// JSON (oh-my-pi's hook is a loaded JS module, not a manifest).
+function fileHasOmpHookMarker(file) {
+  if (!existsSync(file)) return false;
+  try {
+    return readFileSync(file, 'utf-8').includes(OMP_HOOK_MODULE_MARKER);
+  } catch {
+    return false;
+  }
 }
 
 function valueHasImpeccableHookMarker(value) {
@@ -1570,8 +1594,21 @@ function copyProviderHooks(bundleDir, root, providers, { force = false, skillRoo
   const targets = Array.isArray(providers) ? providers : [providers];
   const written = [];
   for (const provider of targets) {
-    for (const { src, dest, sharedDest } of hookArtifactsForProvider(bundleDir, root, provider)) {
+    for (const { src, dest, sharedDest, isModule } of hookArtifactsForProvider(bundleDir, root, provider)) {
       if (!existsSync(src)) continue;
+
+      if (isModule) {
+        // A plain file, not a JSON manifest: no per-install path rewriting
+        // (the module resolves its own hook.mjs path relative to itself) and
+        // nothing to merge (oh-my-pi gives every hook its own file), so this
+        // is just an idempotent copy.
+        const content = readFileSync(src, 'utf8');
+        if (existsSync(dest) && readFileSync(dest, 'utf8') === content) continue;
+        mkdirSync(dirname(dest), { recursive: true });
+        writeFileSync(dest, content);
+        written.push(provider);
+        continue;
+      }
 
       // Leave-it-never-duplicate: our hook already lives in the team-shared
       // settings.json (a legacy install or a deliberate user move). Honor it in
@@ -2238,6 +2275,7 @@ export {
   expectedHookDests,
   extractZip,
   formatInstallDetectionLines,
+  hookInstalledForProvider,
   HOME_SKILLS_DIR_OVERRIDES,
   linkProviderSkills,
   mergeHookManifests,

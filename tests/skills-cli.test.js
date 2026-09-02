@@ -24,6 +24,7 @@ import {
   downloadFile,
   expectedHookDests,
   formatInstallDetectionLines,
+  hookInstalledForProvider,
   mergeHookManifests,
   migrateUnprefixImpeccable,
   resolveInstallTargets,
@@ -1478,6 +1479,32 @@ describe('skills install/update: local universal bundle e2e', () => {
     rmSync(tmp, { recursive: true, force: true });
   }, 15000);
 
+  // hookInstalledForProvider's omp branch is a plain text marker scan, not a
+  // JSON parse (see fileHasOmpHookMarker). decideHookInstall's non-interactive
+  // fallback returns true regardless of this check, so it can't discriminate
+  // a working marker from a broken one — test the real function directly, the
+  // one thing `decideHookInstall`'s "existing hook users are never nagged"
+  // short-circuit (used by `skills update`) actually depends on.
+  test('hookInstalledForProvider recognizes a correctly-installed oh-my-pi hook module', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'imp-test-omp-installed-'));
+    mkdirSync(join(tmp, '.omp', 'hooks', 'post'), { recursive: true });
+    writeFileSync(join(tmp, '.omp', 'hooks', 'post', 'impeccable.js'), 'export default function impeccableHook(pi) {}\n');
+
+    expect(hookInstalledForProvider(tmp, '.omp')).toBe(true);
+
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  test('hookInstalledForProvider reports the oh-my-pi hook missing when the file has no marker', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'imp-test-omp-missing-'));
+    mkdirSync(join(tmp, '.omp', 'hooks', 'post'), { recursive: true });
+    writeFileSync(join(tmp, '.omp', 'hooks', 'post', 'impeccable.js'), 'export default function someoneElsesHook(pi) {}\n');
+
+    expect(hookInstalledForProvider(tmp, '.omp')).toBe(false);
+
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
   test('--no-hooks installs skills without hook manifests', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'imp-test-local-no-hooks-'));
     execSync('git init', { cwd: tmp });
@@ -1844,6 +1871,46 @@ describe('copyProviderHooks: hook command path resolution (#399)', () => {
     
     rmSync(tmp, { recursive: true, force: true });
     rmSync(skillHome, { recursive: true, force: true });
+  });
+});
+
+// A bundle whose omp hook is a JS module, not a JSON manifest — oh-my-pi
+// discovers hooks by file presence under `.omp/hooks/post/`, one file per hook.
+function createOmpBundle(root) {
+  const bundleRoot = join(root, 'omp-bundle');
+  const skillDir = join(bundleRoot, '.omp', 'skills', 'impeccable', 'scripts');
+  mkdirSync(skillDir, { recursive: true });
+  writeFileSync(join(bundleRoot, '.omp', 'skills', 'impeccable', 'SKILL.md'),
+    '---\nname: impeccable\nversion: 9.9.9-local\n---\nbundle\n');
+  const hookDir = join(bundleRoot, '.omp', 'hooks', 'post');
+  mkdirSync(hookDir, { recursive: true });
+  writeFileSync(join(hookDir, 'impeccable.js'), 'export default function impeccableHook(pi) {}\n');
+  return bundleRoot;
+}
+
+describe('copyProviderHooks: oh-my-pi module hook (not a JSON manifest)', () => {
+  test('copies the omp hook module file verbatim into the project', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'imp-hook-omp-'));
+    const bundleDir = createOmpBundle(tmp);
+
+    copyProviderHooks(bundleDir, tmp, ['.omp'], { skillRoot: tmp });
+
+    const dest = join(tmp, '.omp', 'hooks', 'post', 'impeccable.js');
+    expect(existsSync(dest)).toBe(true);
+    expect(readFileSync(dest, 'utf8')).toContain('impeccableHook');
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  test('does not duplicate the hook on a second install (idempotent)', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'imp-hook-omp-idem-'));
+    const bundleDir = createOmpBundle(tmp);
+
+    copyProviderHooks(bundleDir, tmp, ['.omp'], { skillRoot: tmp });
+    const dest = join(tmp, '.omp', 'hooks', 'post', 'impeccable.js');
+    const first = readFileSync(dest, 'utf8');
+    copyProviderHooks(bundleDir, tmp, ['.omp'], { skillRoot: tmp });
+    expect(readFileSync(dest, 'utf8')).toBe(first);
+    rmSync(tmp, { recursive: true, force: true });
   });
 });
 
