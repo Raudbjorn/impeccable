@@ -446,10 +446,17 @@ export function writeScaffold(spec, state, { dir = path.join(BUILD_DIR, 'scaffol
     const cap = type.comp && type.comp.capHeightPx;
     const chosen = type.chosen || null;
     const fontPx = chosen && chosen.fontSizePx ? chosen.fontSizePx : (cap ? Math.round(cap / 0.7) : null);
-    if (cap) vars.push(`  --r-${id}-cap: ${cap}px;${fontPx ? ` --r-${id}-font: ${fontPx}px;` : ''}${chosen ? ` --r-${id}-family: '${chosen.family}'; --r-${id}-weight: ${chosen.weight};` : ''}`);
+    // Single-quoted CSS string: a family name carrying a quote or backslash
+    // would otherwise close the string early and let the rest of its value
+    // run as CSS. A newline or other control character breaks the string the
+    // same way, so strip those before escaping.
+    const cssFamily = chosen ? String(chosen.family).replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/['\\]/g, '\\$&') : '';
+    if (cap) vars.push(`  --r-${id}-cap: ${cap}px;${fontPx ? ` --r-${id}-font: ${fontPx}px;` : ''}${chosen ? ` --r-${id}-family: '${cssFamily}'; --r-${id}-weight: ${chosen.weight};` : ''}`);
     if (chosen && chosen.family) fontLinks.add(`${chosen.family}:${chosen.weight}`);
     rules.push(`.r-${id} { position: absolute; left: var(--r-${id}-x); top: var(--r-${id}-y); width: var(--r-${id}-w); height: var(--r-${id}-h); }`);
-    const label = (r.note || id).replace(/</g, '&lt;');
+    // "<" keeps it from opening a tag; "--" keeps it from closing the HTML
+    // comment this renders inside early.
+    const label = (r.note || id).replace(/</g, '&lt;').replace(/--/g, '\u2013\u2013');
     if (r.medium === 'raster' && r.kind !== 'texture') {
       const src = r.plate ? path.relative(dir, r.plate) : '';
       bodyParts.push(`  <figure class="r-${id} region plate" data-region="${id}"><img src="${src}" alt="" style="width:100%;height:100%;object-fit:contain;object-position:${r.kind === 'image' ? 'center' : 'top left'}"></figure>`);

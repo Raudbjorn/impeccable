@@ -234,71 +234,77 @@ export async function renderCandidates(candidates, text, targetCapPx, { transfor
   const html = `<!doctype html><html><head><meta charset="utf-8">${links}<style>body{margin:0;background:#fff}div.s{position:absolute;left:0;top:0;white-space:nowrap;color:#000;line-height:1;padding:8px;text-transform:${transform}}</style></head><body></body></html>`;
   const results = [];
   const size0 = Math.max(12, Math.round(targetCapPx * 1.4));
-  if (b.kind === 'playwright') {
-    const page = await browser.newPage({ viewport: { width: 1600, height: 400 }, deviceScaleFactor: 1 });
-    await page.setContent(html, { waitUntil: 'load' });
-    await page.waitForTimeout(800);
-    for (const c of candidates) {
-      // two passes: measure at size0, then rescale so the fingerprint's cap height matches the comp
-      let size = size0, fp = null, ok = true;
-      for (let pass = 0; pass < 2; pass++) {
-        await page.evaluate(({ family, weight, size, text }) => {
-          document.body.innerHTML = `<div class="s" style="font-family:'${family}',sans-serif;font-weight:${weight};font-size:${size}px">${text}</div>`;
-        }, { family: c.family, weight: c.weight, size, text });
-        let loaded = false;
-        // Loaded means a real face of this family covers the requested weight;
-        // fonts.check() answers true for a synthetic bold of a lighter file.
-        try {
-          loaded = await page.evaluate(async (f) => {
-            const faces = await document.fonts.load(`${f.weight} 32px '${f.family}'`);
-            await document.fonts.ready;
-            const covers = (face) => { const w = String(face.weight || '400').split(/\s+/).map(Number); const lo = w[0], hi = w[1] ?? w[0]; return f.weight >= lo - 50 && f.weight <= hi + 50; };
-            return faces.some((face) => face.family.replace(/["']/g, '') === f.family && face.status === 'loaded' && covers(face));
-          }, c);
-        } catch { loaded = false; }
-        await page.waitForTimeout(100);
-        if (!loaded) ok = false;
-        const box = await page.evaluate(() => { const r = document.querySelector('div.s').getBoundingClientRect(); return { w: Math.ceil(r.width) + 8, h: Math.ceil(r.height) + 8 }; });
-        const buf = await page.screenshot({ clip: { x: 0, y: 0, width: Math.min(1600, box.w), height: Math.min(400, box.h) } });
-        fp = fingerprint(decodePng(buf));
-        if (!fp || pass === 1) break;
-        size = Math.max(8, Math.round(size * (targetCapPx / fp.capHeightPx)));
+  // Every step below can throw (a page crash, a stalled font load); without
+  // a finally here that skipped browser.close() and stranded the process,
+  // one bad candidate mid-loop leaked a Chromium/Puppeteer instance for the
+  // life of the parent process.
+  try {
+    if (b.kind === 'playwright') {
+      const page = await browser.newPage({ viewport: { width: 1600, height: 400 }, deviceScaleFactor: 1 });
+      await page.setContent(html, { waitUntil: 'load' });
+      await page.waitForTimeout(800);
+      for (const c of candidates) {
+        // two passes: measure at size0, then rescale so the fingerprint's cap height matches the comp
+        let size = size0, fp = null, ok = true;
+        for (let pass = 0; pass < 2; pass++) {
+          await page.evaluate(({ family, weight, size, text }) => {
+            document.body.innerHTML = `<div class="s" style="font-family:'${family}',sans-serif;font-weight:${weight};font-size:${size}px">${text}</div>`;
+          }, { family: c.family, weight: c.weight, size, text });
+          let loaded = false;
+          // Loaded means a real face of this family covers the requested weight;
+          // fonts.check() answers true for a synthetic bold of a lighter file.
+          try {
+            loaded = await page.evaluate(async (f) => {
+              const faces = await document.fonts.load(`${f.weight} 32px '${f.family}'`);
+              await document.fonts.ready;
+              const covers = (face) => { const w = String(face.weight || '400').split(/\s+/).map(Number); const lo = w[0], hi = w[1] ?? w[0]; return f.weight >= lo - 50 && f.weight <= hi + 50; };
+              return faces.some((face) => face.family.replace(/["']/g, '') === f.family && face.status === 'loaded' && covers(face));
+            }, c);
+          } catch { loaded = false; }
+          await page.waitForTimeout(100);
+          if (!loaded) ok = false;
+          const box = await page.evaluate(() => { const r = document.querySelector('div.s').getBoundingClientRect(); return { w: Math.ceil(r.width) + 8, h: Math.ceil(r.height) + 8 }; });
+          const buf = await page.screenshot({ clip: { x: 0, y: 0, width: Math.min(1600, box.w), height: Math.min(400, box.h) } });
+          fp = fingerprint(decodePng(buf));
+          if (!fp || pass === 1) break;
+          size = Math.max(8, Math.round(size * (targetCapPx / fp.capHeightPx)));
+        }
+        results.push({ ...c, loaded: ok, fontSizePx: size, fp });
       }
-      results.push({ ...c, loaded: ok, fontSizePx: size, fp });
-    }
-    await browser.close();
-  } else {
-    const page = await browser.newPage();
-    await page.setViewport({ width: 1600, height: 400 });
-    await page.setContent(html, { waitUntil: 'load' });
-    await new Promise((r) => setTimeout(r, 800));
-    for (const c of candidates) {
-      let size = size0, fp = null, ok = true;
-      for (let pass = 0; pass < 2; pass++) {
-        await page.evaluate(({ family, weight, size, text }) => {
-          document.body.innerHTML = `<div class="s" style="font-family:'${family}',sans-serif;font-weight:${weight};font-size:${size}px">${text}</div>`;
-        }, { family: c.family, weight: c.weight, size, text });
-        let loaded = false;
-        // Loaded means a real face of this family covers the requested weight;
-        // fonts.check() answers true for a synthetic bold of a lighter file.
-        try {
-          loaded = await page.evaluate(async (f) => {
-            const faces = await document.fonts.load(`${f.weight} 32px '${f.family}'`);
-            await document.fonts.ready;
-            const covers = (face) => { const w = String(face.weight || '400').split(/\s+/).map(Number); const lo = w[0], hi = w[1] ?? w[0]; return f.weight >= lo - 50 && f.weight <= hi + 50; };
-            return faces.some((face) => face.family.replace(/["']/g, '') === f.family && face.status === 'loaded' && covers(face));
-          }, c);
-        } catch { loaded = false; }
-        await new Promise((r) => setTimeout(r, 100));
-        if (!loaded) ok = false;
-        const box = await page.evaluate(() => { const r = document.querySelector('div.s').getBoundingClientRect(); return { w: Math.ceil(r.width) + 8, h: Math.ceil(r.height) + 8 }; });
-        const buf = await page.screenshot({ clip: { x: 0, y: 0, width: Math.min(1600, box.w), height: Math.min(400, box.h) } });
-        fp = fingerprint(decodePng(buf));
-        if (!fp || pass === 1) break;
-        size = Math.max(8, Math.round(size * (targetCapPx / fp.capHeightPx)));
+    } else {
+      const page = await browser.newPage();
+      await page.setViewport({ width: 1600, height: 400 });
+      await page.setContent(html, { waitUntil: 'load' });
+      await new Promise((r) => setTimeout(r, 800));
+      for (const c of candidates) {
+        let size = size0, fp = null, ok = true;
+        for (let pass = 0; pass < 2; pass++) {
+          await page.evaluate(({ family, weight, size, text }) => {
+            document.body.innerHTML = `<div class="s" style="font-family:'${family}',sans-serif;font-weight:${weight};font-size:${size}px">${text}</div>`;
+          }, { family: c.family, weight: c.weight, size, text });
+          let loaded = false;
+          // Loaded means a real face of this family covers the requested weight;
+          // fonts.check() answers true for a synthetic bold of a lighter file.
+          try {
+            loaded = await page.evaluate(async (f) => {
+              const faces = await document.fonts.load(`${f.weight} 32px '${f.family}'`);
+              await document.fonts.ready;
+              const covers = (face) => { const w = String(face.weight || '400').split(/\s+/).map(Number); const lo = w[0], hi = w[1] ?? w[0]; return f.weight >= lo - 50 && f.weight <= hi + 50; };
+              return faces.some((face) => face.family.replace(/["']/g, '') === f.family && face.status === 'loaded' && covers(face));
+            }, c);
+          } catch { loaded = false; }
+          await new Promise((r) => setTimeout(r, 100));
+          if (!loaded) ok = false;
+          const box = await page.evaluate(() => { const r = document.querySelector('div.s').getBoundingClientRect(); return { w: Math.ceil(r.width) + 8, h: Math.ceil(r.height) + 8 }; });
+          const buf = await page.screenshot({ clip: { x: 0, y: 0, width: Math.min(1600, box.w), height: Math.min(400, box.h) } });
+          fp = fingerprint(decodePng(buf));
+          if (!fp || pass === 1) break;
+          size = Math.max(8, Math.round(size * (targetCapPx / fp.capHeightPx)));
+        }
+        results.push({ ...c, loaded: ok, fontSizePx: size, fp });
       }
-      results.push({ ...c, loaded: ok, fontSizePx: size, fp });
     }
+  } finally {
     await browser.close();
   }
   return results;
