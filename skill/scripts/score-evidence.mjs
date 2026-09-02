@@ -174,8 +174,12 @@ async function main(argv) {
   } catch (err) {
     // A bad file path, malformed JSON, or an invalid item/option all land here.
     // A user-invoked CLI should report a short reason and a clean exit code,
-    // not an uncaught-exception stack trace.
-    process.stderr.write(`score-evidence: ${err.message}\n`);
+    // not an uncaught-exception stack trace. Tolerate a non-Error throw (err.message
+    // would be undefined) and avoid double-prefixing if a message already carries it,
+    // rather than relying on every throw site upstream to omit the prefix themselves.
+    const message = err instanceof Error ? err.message : String(err);
+    const prefix = 'score-evidence: ';
+    process.stderr.write(`${message.startsWith(prefix) ? '' : prefix}${message}\n`);
     return 2;
   }
 }
