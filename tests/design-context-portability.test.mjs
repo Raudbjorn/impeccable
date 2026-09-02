@@ -85,6 +85,54 @@ describe('importDesignContext file entries', () => {
   });
 });
 
+describe('importDesignContext symlink rejection', () => {
+  // Regression for PR #15 review thread: a pre-existing symlink at `assets/`
+  // or `fonts/` would let writeFile() follow the link and write the bundle's
+  // bytes outside the project. The lexical containment check on its own
+  // does not see this; refuse any link along the destination path or at the
+  // file itself.
+  it('refuses to write when the destination parent is a symlink to outside the store', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    // Point `assets/` at a directory outside the project entirely.
+    const outsideDir = path.join(path.dirname(cwd), `outside-${path.basename(cwd)}`);
+    const { mkdir, symlink } = await import('node:fs/promises');
+    await mkdir(outsideDir, { recursive: true });
+    await mkdirP(target.storeDir, { recursive: true });
+    await symlink(outsideDir, target.assetsDir);
+
+    const bundle = bundleWithFiles([
+      { path: 'assets/logo.svg', base64: Buffer.from('escaped bytes').toString('base64') },
+    ]);
+    const result = await importDesignContext(cwd, bundle);
+
+    assert.equal(result.written, 0, 'a symlinked assets/ must block the write');
+    // The bytes must not have landed at the symlink target either.
+    const outsideContents = await readdir(outsideDir).catch(() => []);
+    assert.equal(outsideContents.length, 0, 'the linked target must stay empty');
+  });
+
+  it('refuses to write when the destination file itself is a pre-existing symlink', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(target.assetsDir, { recursive: true });
+    // Pre-existing link at the exact destination the bundle wants to write.
+    const realOutside = path.join(cwd, '..', `secret-${path.basename(cwd)}.txt`);
+    await writeFileP(realOutside, 'do not leak me');
+    const { symlink } = await import('node:fs/promises');
+    await symlink(realOutside, path.join(target.assetsDir, 'logo.svg'));
+
+    const bundle = bundleWithFiles([
+      { path: 'assets/logo.svg', base64: Buffer.from('payload').toString('base64') },
+    ]);
+    const result = await importDesignContext(cwd, bundle);
+
+    assert.equal(result.written, 0, 'a symlinked destination must not be followed');
+    // The link target still holds the original secret, not the bundle bytes.
+    assert.equal(await readFile(realOutside, 'utf8'), 'do not leak me');
+  });
+});
+
 describe('exportDesignContext with no questionnaire record', () => {
   it('still exports when a pickerless interview seed left DESIGN.md and staged assets but no answers.json', async () => {
     const cwd = await makeCwd();
@@ -98,13 +146,61 @@ describe('exportDesignContext with no questionnaire record', () => {
     assert.ok(result.bundlePath);
     const bundle = JSON.parse(await readFile(result.bundlePath, 'utf8'));
     assert.equal(bundle.designMd.trim(), '# Seed\n\nSome direction.\n'.trim());
-    assert.deepEqual(bundle.answers, {}, 'no answers.json on disk still yields a valid empty answers object');
+    assert.equal(bundle.answers, null, 'no answers.json on disk preserves the absence as an explicit null, not an empty object that would import as a fully-answered questionnaire');
     assert.equal(bundle.files.length, 1);
   });
 
   it('still refuses when there is genuinely nothing to export', async () => {
     const cwd = await makeCwd();
     await assert.rejects(exportDesignContext(cwd), /No design interview found/);
+  });
+});
+
+// Regression for PR #15 review thread: importing a bundle whose answers are
+// null (no questionnaire on the source side) must not create answers.json
+// on disk -- downstream `document.md` / `design-context.md` key off the
+// file's existence to decide whether the questionnaire was answered.
+describe('importDesignContext answers: null signal', () => {
+  it('does not create answers.json when the bundle carries answers: null', async () => {
+    const cwd = await makeCwd();
+    await writeFileP(path.resolve(cwd, 'DESIGN.md'), '# Seed\n');
+    const target = paths(cwd);
+    await mkdirP(target.assetsDir, { recursive: true });
+    await writeFileP(path.join(target.assetsDir, 'logo.svg'), '<svg></svg>');
+
+    const bundle = {
+      kind: 'impeccable-design-context',
+      schemaVersion: 1,
+      answers: null,
+      context: { schemaVersion: 1 },
+      files: [{ path: 'assets/logo.svg', base64: Buffer.from('<svg></svg>').toString('base64') }],
+    };
+
+    await importDesignContext(cwd, bundle);
+
+    const answersPath = path.join(target.storeDir, 'answers.json');
+    assert.equal(await stat(answersPath).then(() => true, () => false), false, 'answers.json must stay absent when the bundle has no questionnaire');
+    assert.equal(await readAnswers(cwd).then((a) => a), null, 'readAnswers() must report null, not {}');
+    // The rest of the import still ran -- the asset landed.
+    const written = await readdir(target.assetsDir);
+    assert.deepEqual(written, ['logo.svg']);
+  });
+
+  it('writes answers.json when the bundle carries a non-null answers object', async () => {
+    const cwd = await makeCwd();
+    const bundle = {
+      kind: 'impeccable-design-context',
+      schemaVersion: 1,
+      answers: { 'palette-primary': '#B8422E' },
+      files: [],
+    };
+
+    await importDesignContext(cwd, bundle);
+
+    const target = paths(cwd);
+    const answersPath = path.join(target.storeDir, 'answers.json');
+    assert.equal(await stat(answersPath).then(() => true, () => false), true, 'a non-null answers object must reach disk');
+    assert.equal(await readAnswers(cwd).then((a) => a['palette-primary']), '#B8422E');
   });
 });
 

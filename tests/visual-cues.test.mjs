@@ -100,6 +100,32 @@ describe('visual-cues compile', () => {
     assert.deepEqual(cues.cues, ['first-cue', 'second-cue']);
   });
 
+  // Regression for PR #15 review thread: re-running compile on the canonical
+  // <out>/<slug>.png to add a palette used to crash because copyFileSync
+  // tried to copy a file onto itself. The skip-when-srcPath===heroPath
+  // branch now lets the re-run succeed and update cues.json.
+  it('re-runs cleanly when the source is the canonical <slug>.png from a prior compile', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'visual-cues-compile-'));
+    const outDir = path.join(dir, 'out');
+    const hero = path.join(dir, 'hero.png');
+    writeFileSync(hero, squarePng(8, '#202020', '#B8422E'));
+
+    // First compile with no palette.
+    const first = run(['compile', hero, '--slug', 'amber-dusk', '--out', outDir]);
+    assert.equal(first.status, 0, first.stderr);
+    const canonical = path.join(outDir, 'amber-dusk.png');
+    assert.ok(existsSync(canonical));
+
+    // Re-run pointing compile at the canonical output itself, this time
+    // with a palette. Without the fix this throws EEXIST/EBUSY because the
+    // copy would target the file it is reading from.
+    const second = run(['compile', canonical, '--slug', 'amber-dusk', '--palette', 'primary=#B8422E;neutral=#202020', '--out', outDir]);
+    assert.equal(second.status, 0, second.stderr);
+
+    const cues = JSON.parse(readFileSync(path.join(outDir, 'cues.json'), 'utf8'));
+    assert.equal(cues.palette['amber-dusk'].primary.hex, '#B8422E', 'the palette from the re-run is now on the manifest');
+  });
+
   it('rejects a non-square hero instead of silently cropping or stretching it', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'visual-cues-compile-'));
     const hero = path.join(dir, 'hero.png');

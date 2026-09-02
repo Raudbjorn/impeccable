@@ -152,12 +152,19 @@ function cmdCompile(args) {
   mkdirSync(outDir, { recursive: true });
   const heroPath = join(outDir, `${slug}.png`);
   const srcPath = resolve(heroFile);
-  copyFileSync(srcPath, heroPath); // the hero ships untouched, no crop
-  // Subagents drop `<slug>-hero.png` intermediates into the out dir; once
-  // the canonical `<slug>.png` exists, that intermediate is a byte-identical
-  // duplicate that doubles the folder, so remove it. A source outside the
-  // out dir (a native tool's own output folder) is not ours to delete.
-  if (srcPath !== heroPath && dirname(srcPath) === outDir) unlinkSync(srcPath);
+  /* Re-running compile on the canonical `<out>/<slug>.png` is explicitly
+     supported below for adding a palette later, so when the caller pointed
+     compile at its own prior output the copy would be a file-onto-itself
+     and fail before the manifest could update. Skip the copy in that case
+     and trust the bytes already on disk. */
+  if (srcPath !== heroPath) {
+    copyFileSync(srcPath, heroPath); // the hero ships untouched, no crop
+    // Subagents drop `<slug>-hero.png` intermediates into the out dir; once
+    // the canonical `<slug>.png` exists, that intermediate is a byte-identical
+    // duplicate that doubles the folder, so remove it. A source outside the
+    // out dir (a native tool's own output folder) is not ours to delete.
+    if (dirname(srcPath) === outDir) unlinkSync(srcPath);
+  }
 
   // --palette is optional: the agent may compile before it has finished
   // designing the palette, and can re-run compile later once it has hexes.

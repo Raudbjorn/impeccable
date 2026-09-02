@@ -127,12 +127,19 @@ async function buildBundle(cwd, { includeAssets = true, now = new Date() } = {})
      the user supplied files, stages them under assets/. Requiring answers.json
      here made export fail for every fresh seed even with DESIGN.md and staged
      assets on disk. Missing answers is only a hard failure once nothing else
-     is on record either, checked below once designMd and files are known. */
-  const answers = (await readAnswers(cwd)) || {};
+     is on record either, checked below once designMd and files are known.
+
+     Preserved as `null` rather than coerced to `{}` so the import side can
+     tell "the source had no questionnaire" apart from "the source answered
+     every screen with empty defaults". The downstream `document.md` and
+     `design-context.md` flows both key off the existence of `answers.json`
+     to recognise a completed questionnaire, so an import that synthesizes
+     an empty object would install a record that reads as fully answered. */
+  const answers = await readAnswers(cwd);
 
   const stored = (await readContext(cwd)) || { schemaVersion: SCHEMA_VERSION };
   const cues = await readJsonSoft(target.cuesJson);
-  const source = typeof answers['palette-source'] === 'string' ? answers['palette-source'] : '';
+  const source = typeof answers?.['palette-source'] === 'string' ? answers['palette-source'] : '';
   /* A seed or custom palette names no cue, so there is no image and no dealt
      entry to carry. The hexes in the answers are the palette of record. */
   const chosenCuePalette = source && cues?.palette?.[source] ? cues.palette[source] : null;
@@ -145,7 +152,7 @@ async function buildBundle(cwd, { includeAssets = true, now = new Date() } = {})
     /* Not written yet, which an import is told about rather than guessing. */
   }
 
-  if (!Object.keys(answers).length && !files.length && !designMd) {
+  if (!answers && !files.length && !designMd) {
     throw new Error('No design interview found. Run /impeccable document to create one.');
   }
 
@@ -340,7 +347,13 @@ export function validateBundle(bundle) {
   if (bundle.schemaVersion !== BUNDLE_SCHEMA) {
     throw new Error(`This bundle is schema version ${String(bundle.schemaVersion)}; this release reads ${BUNDLE_SCHEMA}. Update impeccable.`);
   }
-  if (!bundle.answers || typeof bundle.answers !== 'object') throw new Error('The bundle carries no answers');
+  /* `answers: null` is the explicit "no questionnaire was answered"
+     signal (the pickerless interview seed path); an object is the normal
+     carried-record path. Anything else (undefined, a string, a number) is a
+     malformed bundle. */
+  if (bundle.answers !== null && (typeof bundle.answers !== 'object' || Array.isArray(bundle.answers))) {
+    throw new Error('The bundle carries no answers');
+  }
   return bundle;
 }
 
@@ -365,7 +378,11 @@ export async function importDesignContext(cwd, bundle, { design = 'skip', force 
     await rm(target.fontsManifestJson, { force: true });
   }
 
-  await writeAnswers(bundle.answers, cwd);
+  /* The questionnaire's existence is the trigger downstream readers key
+     off, so the absent-answers signal must reach disk as an absent file,
+     not as `{}` written under the same path. A bundle that does carry
+     answers writes them as usual. */
+  if (bundle.answers !== null) await writeAnswers(bundle.answers, cwd);
   const context = bundle.context && typeof bundle.context === 'object'
     ? bundle.context
     : { schemaVersion: SCHEMA_VERSION };
@@ -389,6 +406,42 @@ export async function importDesignContext(cwd, bundle, { design = 'skip', force 
     // ALLOWED_FILE lookahead above already closes off, kept here in case a
     // future entry point reaches this loop past a differently-shaped check.
     if (!contained || contained.startsWith('..')) continue;
+    /* Containment is also not enough against a symlink in the destination
+       path: a plain import into a project whose `assets/` or `fonts/` is a
+       pre-existing link to somewhere outside the store would follow that
+       link and write the bundle's bytes wherever it points. Walk from the
+       file's parent up to the store root, refuse any link along the way,
+       and also refuse a link at the file itself if one already exists.
+       `mkdir({recursive:true})` is still safe: on POSIX it refuses to
+       traverse a symlinked directory component, so the walk is what
+       actually blocks the follow. */
+    let blocked = false;
+    for (let cursor = path.dirname(absolute); cursor.startsWith(target.storeDir) && cursor !== target.storeDir; cursor = path.dirname(cursor)) {
+      let parentStat;
+      try {
+        parentStat = await lstat(cursor);
+      } catch {
+        /* Parent does not yet exist (mkdir below will create it) or has
+           already gone: nothing to check. */
+        break;
+      }
+      if (parentStat.isSymbolicLink()) {
+        process.stderr.write(`Skipped ${relative}: a symlinked component in the destination path would write outside the store\n`);
+        blocked = true;
+        break;
+      }
+    }
+    if (blocked) continue;
+    let existing;
+    try {
+      existing = await lstat(absolute);
+    } catch {
+      existing = null;
+    }
+    if (existing?.isSymbolicLink()) {
+      process.stderr.write(`Skipped ${relative}: a pre-existing symlink at the destination would be followed\n`);
+      continue;
+    }
     await mkdir(path.dirname(absolute), { recursive: true });
     await writeFile(absolute, Buffer.from(String(file.base64 || ''), 'base64'));
     written += 1;
