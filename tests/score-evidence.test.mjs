@@ -169,14 +169,14 @@ describe('score-evidence.mjs CLI', () => {
     const r = spawnSync(process.execPath, [SCRIPT, '-'], { input: '{not json', encoding: 'utf-8' });
     assert.equal(r.status, 2);
     assert.match(r.stderr, /^score-evidence: /);
-    assert.doesNotMatch(r.stderr, /at Object|at Module|node:internal/);
+    assert.doesNotMatch(r.stderr, /^\s+at\s/m);
   });
 
   it('exits 2 with a clean message (no stack trace) on an unreadable file path', () => {
     const r = spawnSync(process.execPath, [SCRIPT, '/no/such/file.json'], { encoding: 'utf-8' });
     assert.equal(r.status, 2);
     assert.match(r.stderr, /^score-evidence: /);
-    assert.doesNotMatch(r.stderr, /at Object|at Module|node:internal/);
+    assert.doesNotMatch(r.stderr, /^\s+at\s/m);
   });
 
   it('exits 2 with a clean message (no stack trace) on a non-finite --center override', () => {
