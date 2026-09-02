@@ -291,6 +291,7 @@ export function createManualApplyController({
     hasTimedOutId,
     pruneStaleEvidence,
     pushBatchInChunksAndWait,
+    retriggerFiles: (files = []) => retriggerManualApplyFiles(files, projectCwd()),
     readTransaction: () => readManualApplyTransaction(projectCwd()),
     rejectDeferred,
     resolveDeferred,
@@ -832,6 +833,35 @@ export function collectManualApplyFiles(batch, extraFiles = [], cwd = process.cw
   return [...new Set(files)]
     .map((file) => normalizeProjectFile(file, cwd))
     .filter(Boolean);
+}
+
+// Chat Apply can write the same source file several times in quick succession.
+// A final mtime bump makes file watchers observe the verified end state instead
+// of leaving the browser on an intermediate hot-update.
+export function retriggerManualApplyFiles(files, cwd = process.cwd()) {
+  const touched = [];
+  const failures = [];
+  const realRoot = fs.realpathSync(cwd);
+  for (const relativeFile of collectManualApplyFiles({ entries: [] }, files, cwd)) {
+    const absolute = path.resolve(cwd, relativeFile);
+    try {
+      const realFile = fs.realpathSync(absolute);
+      const realRelative = path.relative(realRoot, realFile);
+      if (!realRelative || realRelative.startsWith('..') || path.isAbsolute(realRelative)) continue;
+      const stat = fs.statSync(realFile);
+      if (!stat.isFile()) continue;
+      const mtime = new Date(Math.max(Date.now(), stat.mtimeMs + 1));
+      fs.utimesSync(realFile, stat.atime, mtime);
+      touched.push(relativeFile);
+    } catch (err) {
+      failures.push({ file: relativeFile, reason: err.message });
+    }
+  }
+  return { touched, failures };
+}
+
+export function shouldRetriggerManualApply(result) {
+  return result?.needsManualDecision !== true && Number(result?.cleared) > 0;
 }
 
 function normalizeProjectFile(file, cwd = process.cwd()) {
