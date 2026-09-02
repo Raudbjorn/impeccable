@@ -2267,6 +2267,18 @@ rounded:
     assert.equal(r.audit.skipped, 'extension');
   });
 
+  it('rejects non-filesystem URI targets before path resolution', async () => {
+    writeFixture('xd:/probe.tsx', 'export const probe = true;');
+    const r = await runHook({
+      stdinJson: JSON.stringify(eventFor('xd://probe.tsx')),
+      env: {},
+      cwd,
+    });
+    assert.equal(r.stdout, '');
+    assert.equal(r.audit.skipped, 'no-file-path');
+    assert.ok(!fs.existsSync(path.join(cwd, '.impeccable')));
+  });
+
   it('config ignoreFiles glob suppresses', async () => {
     const file = writeFixture('src/legacy/Foo.tsx', 'noop');
     fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });

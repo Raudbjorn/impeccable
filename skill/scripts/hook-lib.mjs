@@ -1257,6 +1257,7 @@ export function resolveTargetFiles(event, projectCwd) {
   const out = [];
   const add = (filePath) => {
     if (typeof filePath !== 'string' || !filePath) return;
+    if (filePath.includes('://')) return; // reject non-filesystem URI schemes before path resolution
     if (!out.includes(filePath)) out.push(filePath);
   };
 

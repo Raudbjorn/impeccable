@@ -253,7 +253,7 @@ export default function impeccableHook(pi) {
     // happens. Anchored to the start of filePath so real paths (absolute,
     // relative, Windows-drive) never match. RFC 3986: scheme starts with a
     // letter, then letters/digits/+/-/., then ://.
-    if (/^[a-z][a-z0-9+.\-]*:\/\//i.test(filePath)) return;
+    if (/^[a-z][a-z0-9+.-]*:\\/\\//i.test(filePath)) return;
     const text = runHook({
       hook_event_name: "PostToolUse",
       tool_name: event.toolName,

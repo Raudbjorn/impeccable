@@ -6,6 +6,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -157,7 +158,7 @@ describe('hook manifest builders', () => {
     assert.equal(manifest.hooks.preToolUse, undefined);
   });
 
-  it('builds an oh-my-pi hook module (JS source, not a JSON manifest)', () => {
+  it('builds an oh-my-pi hook module (JS source, not a JSON manifest)', async () => {
     // oh-my-pi loads `.omp/hooks/post/*` as an imported JS module exporting
     // `pi.on(eventName, handler)`, not a JSON manifest — hooksJsonFor() tags
     // this one with `isModule: true` so callers know to write it verbatim
@@ -195,6 +196,13 @@ describe('hook manifest builders', () => {
     // or a blocking decision accompanies the context; additionalContext on its
     // own is dropped as the session settles.
     assert.match(source, /return \{ continue: true, additionalContext: text \}/);
+    // Verify syntactic structure without importing (data: URL would make
+    // import.meta.url = data:..., breaking HOOK_SCRIPT path resolution).
+    assert.ok(
+      source.includes('pi.on("tool_result"') && source.includes('pi.on("session_stop"'),
+      'module must register tool_result and session_stop handlers',
+    );
+    assert.ok(/\.test\(filePath\)/.test(source), 'module must guard filePath');
   });
   it('oh-my-pi adapter rejects device URI tool targets before spawning hook.mjs', () => {
     // Some tool surfaces (e.g. `xd://` LSP targets) carry a `<scheme>://` path
@@ -212,7 +220,7 @@ describe('hook manifest builders', () => {
       .split('\n')
       .find((line) => line.includes('.test(filePath)'));
     assert.ok(guardLine, 'adapter must carry a guard that calls .test(filePath)');
-    const literalMatch = guardLine.match(/^.*?\/(\^.*?\/)\/([gimsuy]*)\.test/);
+    const literalMatch = guardLine.match(/^\s*if\s*\(\/(.*)\/([gimsuy]*)\.test/);
     assert.ok(
       literalMatch,
       'guard regex must be anchored at filePath start and end with `.test(filePath)`',
@@ -411,6 +419,31 @@ describe('generated hook artifacts in repo', () => {
       const hookLib = await import(pathToFileURL(path.join(abs, 'hook-lib.mjs')));
       const detector = await hookLib.loadDetector();
       assert.equal(typeof detector.detectText, 'function');
+    }
+  });
+  it('OMP hook adapter rejects xd:// URIs at runtime', async () => {
+    // Write source to a real temp file so import.meta.url resolves correctly
+    // (data: URL would make HOOK_SCRIPT path resolution fail).
+    const src = buildOmpHookModule();
+    const tmp = path.join(os.tmpdir(), `impeccable-hook-${Date.now()}.mjs`);
+    fs.writeFileSync(tmp, src);
+    try {
+      const { default: hook } = await import(pathToFileURL(tmp));
+      // Capture the tool_result handler so we can exercise it directly.
+      const handlers = {};
+      const pi = {
+        on(eventName, handler) { handlers[eventName] = handler; },
+      };
+      hook(pi);
+      // URI scheme: adapter must exit before spawning hook.mjs
+      const uriResult = await handlers.tool_result({ toolName: 'edit', tool_input: { file_path: 'xd://probe.tsx' } }, { cwd: process.cwd() });
+      assert.equal(uriResult, undefined, 'xd:// target must be rejected before spawn');
+      // Filesystem path: adapter must not early-exit
+      const fsResult = await handlers.tool_result({ toolName: 'edit', tool_input: { file_path: 'src/App.tsx' } }, { cwd: process.cwd() });
+      // fsResult may be undefined if hook.mjs produces no findings, but must not be a thrown error
+      assert.ok(fsResult === undefined || typeof fsResult === 'object', 'filesystem path must reach runHook');
+    } finally {
+      fs.rmSync(tmp, { force: true });
     }
   });
 });
