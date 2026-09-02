@@ -7,6 +7,7 @@
 // skill/scripts/<name>/ is gitignored build output; `bun run build:release`
 // regenerates it and syncs the result into every provider directory.
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { cp, rm } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -30,6 +31,17 @@ export async function buildAstroComponent({ root, name, astroConfig, assetsDir =
     cwd: root,
     stdio: 'inherit',
   });
+
+  // astro build honors astroConfig's own outDir; nothing here enforces that
+  // it matches build-${name}. A silent mismatch would otherwise surface as
+  // an opaque ENOENT from cp() below, so name the expected directory and the
+  // config that controls it while the real cause is still knowable.
+  if (!existsSync(buildDir)) {
+    throw new Error(
+      `Expected the astro build to write to ${buildDir}, but nothing is there. `
+        + `Check outDir in ${astroConfig} matches build-${name} (relative to ${root}).`,
+    );
+  }
 
   await rm(outputDir, { recursive: true, force: true });
   await cp(buildDir, outputDir, { recursive: true });

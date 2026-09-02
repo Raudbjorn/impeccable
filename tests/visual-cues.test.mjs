@@ -25,9 +25,12 @@ describe('visual-cues hash', () => {
 
     const res = run(['hash', a, b, c]);
     assert.equal(res.status, 0, res.stderr);
-    const lines = res.stdout.trim().split('\n').map((l) => l.split(/\s+/));
+    const lines = res.stdout.trim().split('\n');
     assert.equal(lines.length, 3);
-    const [hashA, , hashB, , hashC] = lines.flat();
+    // Each line is "<64-hex-digest>  <path>" (md5sum-style); a path containing
+    // spaces would break a whitespace split, so match the fixed-width digest
+    // instead of splitting the line.
+    const [hashA, hashB, hashC] = lines.map((line) => line.match(/^[0-9a-f]{64}/)[0]);
     assert.equal(hashA, hashC, 'identical files must hash identically, so the uniqueness gate catches the race');
     assert.notEqual(hashA, hashB);
     assert.match(hashA, /^[0-9a-f]{64}$/, 'sha256 hex digest');
