@@ -25,7 +25,7 @@
 
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync, realpathSync, unlinkSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { decodePng } from './lib/png.mjs';
 
@@ -161,9 +161,14 @@ function cmdCompile(args) {
     copyFileSync(srcPath, heroPath); // the hero ships untouched, no crop
     // Subagents drop `<slug>-hero.png` intermediates into the out dir; once
     // the canonical `<slug>.png` exists, that intermediate is a byte-identical
-    // duplicate that doubles the folder, so remove it. A source outside the
-    // out dir (a native tool's own output folder) is not ours to delete.
-    if (dirname(srcPath) === outDir) unlinkSync(srcPath);
+    // duplicate that doubles the folder, so remove it. Matched by the exact
+    // expected intermediate name, not merely "some file in outDir": compiling
+    // one already-canonical cue's hero into a different slug must never
+    // delete it, and it (like every other file already in outDir) shares
+    // `dirname(srcPath) === outDir` with the real intermediate. A source
+    // outside the out dir (a native tool's own output folder) is not ours to
+    // delete either way.
+    if (srcPath === join(outDir, `${slug}-hero.png`)) unlinkSync(srcPath);
   }
 
   // --palette is optional: the agent may compile before it has finished

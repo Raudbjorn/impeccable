@@ -27,7 +27,15 @@ import { importDesignContext, validateBundle } from './design-context/portabilit
    specifically to require --force before anything gets replaced. */
 function hasManagedState(cwd) {
   const target = paths(cwd);
-  if (existsSync(target.answersJson) || existsSync(target.contextJson) || existsSync(target.cuePng)) return true;
+  if (
+    existsSync(target.answersJson) ||
+    existsSync(target.contextJson) ||
+    existsSync(target.cuePng) ||
+    existsSync(target.cuesJson) ||
+    existsSync(target.fontsManifestJson)
+  ) {
+    return true;
+  }
   for (const dir of [target.assetsDir, target.fontsDir]) {
     try {
       if (readdirSync(dir).length > 0) return true;

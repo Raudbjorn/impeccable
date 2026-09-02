@@ -41,6 +41,32 @@ describe('design-context-import.mjs already-has-a-context guard', () => {
     assert.match(res.stderr, /already has a design context/);
   });
 
+  it('refuses a plain import into a project carrying only a cue manifest (cues.json)', () => {
+    const cwd = makeCwd();
+    const workspaceDir = path.join(cwd, '.impeccable', 'visual-cues');
+    mkdirSync(workspaceDir, { recursive: true });
+    writeFileSync(path.join(workspaceDir, 'cues.json'), JSON.stringify({ cues: [], palette: {} }));
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.notEqual(res.status, 0, 'a store with a cue manifest but no answers.json must not read as empty');
+    assert.match(res.stderr, /already has a design context/);
+  });
+
+  it('refuses a plain import into a project carrying only a font manifest (fonts.json)', () => {
+    const cwd = makeCwd();
+    const workspaceDir = path.join(cwd, '.impeccable', 'visual-cues');
+    mkdirSync(workspaceDir, { recursive: true });
+    writeFileSync(path.join(workspaceDir, 'fonts.json'), JSON.stringify([]));
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.notEqual(res.status, 0, 'a store with a font manifest but no answers.json must not read as empty');
+    assert.match(res.stderr, /already has a design context/);
+  });
+
   it('still allows a plain import into a genuinely empty project', () => {
     const cwd = makeCwd();
     const bundle = bundleFile(cwd);

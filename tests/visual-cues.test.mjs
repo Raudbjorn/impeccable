@@ -126,6 +126,33 @@ describe('visual-cues compile', () => {
     assert.equal(cues.palette['amber-dusk'].primary.hex, '#B8422E', 'the palette from the re-run is now on the manifest');
   });
 
+  // Regression for PR #15 review thread: the cleanup after copying the hero
+  // matched any file in outDir sharing srcPath's directory, not only the
+  // `<slug>-hero.png` intermediate it was meant to remove. Compiling an
+  // already-canonical cue's hero (itself sitting in outDir) into a different
+  // slug deleted that first cue's file out from under cues.json, which still
+  // named it.
+  it('compiling one canonical cue into another slug leaves the first cue\'s file in place', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'visual-cues-compile-'));
+    const outDir = path.join(dir, 'out');
+    const heroA = path.join(dir, 'a.png');
+    writeFileSync(heroA, squarePng(8, '#111111'));
+
+    const first = run(['compile', heroA, '--slug', 'first-cue', '--out', outDir]);
+    assert.equal(first.status, 0, first.stderr);
+    const firstCanonical = path.join(outDir, 'first-cue.png');
+    assert.ok(existsSync(firstCanonical));
+
+    // Compile that same canonical file again, under a different slug.
+    const second = run(['compile', firstCanonical, '--slug', 'second-cue', '--out', outDir]);
+    assert.equal(second.status, 0, second.stderr);
+
+    assert.ok(existsSync(firstCanonical), 'first-cue.png must survive compiling it into second-cue');
+    assert.ok(existsSync(path.join(outDir, 'second-cue.png')));
+    const cues = JSON.parse(readFileSync(path.join(outDir, 'cues.json'), 'utf8'));
+    assert.deepEqual(cues.cues, ['first-cue', 'second-cue']);
+  });
+
   it('rejects a non-square hero instead of silently cropping or stretching it', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'visual-cues-compile-'));
     const hero = path.join(dir, 'hero.png');

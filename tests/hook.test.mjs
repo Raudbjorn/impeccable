@@ -1529,6 +1529,56 @@ describe('hook-admin.mjs', () => {
     assert.equal(fs.existsSync(getConfigPath(cwd)), false, 'reset must not create a config file');
     assert.equal(fs.existsSync(getLocalConfigPath(cwd)), false);
   });
+
+  // Regression for PR #15 review threads: `state`/`apply` (the design-context
+  // document's Hooks page) read the merged shared+local view via uiState(),
+  // but only ever wrote shared config.json. A conflicting local override
+  // then survived the write and got unioned/overridden right back in on the
+  // next merged read, so the page's toggle or removal silently failed to
+  // take effect.
+  describe('state/apply local-scope reconciliation', () => {
+    it('apply turning the hook on clears a local `enabled: false` that would otherwise keep it off', () => {
+      fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
+      fs.writeFileSync(getLocalConfigPath(cwd), JSON.stringify({ hook: { enabled: false, consent: 'accepted' } }));
+
+      assert.equal(JSON.parse(runAdmin(['state'])).enabled, false, 'the merged state must show local\'s override');
+
+      const applied = JSON.parse(
+        execFileSync(process.execPath, [script, 'apply'], {
+          cwd,
+          input: JSON.stringify({ enabled: true, ignoreRules: [], ignoreFiles: [], ignoreValues: [] }),
+          encoding: 'utf-8',
+        }),
+      );
+      assert.equal(applied.enabled, true, 'the requested turn-on must be reflected immediately');
+
+      const local = JSON.parse(fs.readFileSync(getLocalConfigPath(cwd), 'utf-8'));
+      assert.equal(local.hook.enabled, undefined, 'the stale local override must be cleared, not left to win the next merge');
+      assert.equal(local.hook.consent, 'accepted', 'unrelated local hook keys survive');
+
+      assert.equal(JSON.parse(runAdmin(['state'])).enabled, true, 'a fresh merged read confirms the hook is actually on');
+    });
+
+    it('apply removing an ignore entry clears its local-only copy instead of unioning it back in', () => {
+      fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
+      fs.writeFileSync(getLocalConfigPath(cwd), JSON.stringify({ detector: { ignoreRules: ['overused-font'] } }));
+      assert.deepEqual(JSON.parse(runAdmin(['state'])).ignoreRules, ['overused-font']);
+
+      const applied = JSON.parse(
+        execFileSync(process.execPath, [script, 'apply'], {
+          cwd,
+          input: JSON.stringify({ ignoreRules: [], ignoreFiles: [], ignoreValues: [] }),
+          encoding: 'utf-8',
+        }),
+      );
+      assert.deepEqual(applied.ignoreRules, [], 'the removal must be reflected immediately');
+
+      const local = JSON.parse(fs.readFileSync(getLocalConfigPath(cwd), 'utf-8'));
+      assert.equal(local.detector?.ignoreRules?.length ?? 0, 0, 'the local-only entry must be cleared, not survive to union back in');
+
+      assert.deepEqual(JSON.parse(runAdmin(['state'])).ignoreRules, [], 'a fresh merged read confirms the removal held');
+    });
+  });
 });
 
 describe('renderTemplate()', () => {

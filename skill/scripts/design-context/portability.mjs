@@ -31,6 +31,9 @@ const BUNDLE_SCHEMA = 1;
    them; MAX_BUNDLE_BYTES still bounds the whole. */
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const MAX_BUNDLE_BYTES = 20 * 1024 * 1024;
+/* An export never produces more than assets + fonts + cue.png, so a bundle
+   naming more than this is not something this toolchain wrote. */
+const MAX_BUNDLE_FILES = 512;
 
 const MIME = new Map([
   ['.svg', 'image/svg+xml'], ['.png', 'image/png'], ['.jpg', 'image/jpeg'],
@@ -50,8 +53,12 @@ const MIME = new Map([
    answers.json, and the containment check below allows it right back in
    because that stays inside storeDir -- a bundle overwriting the record
    it was meant to only add to. No legitimate exported filename (see the
-   MIME extension list above) ever contains a backslash. */
-const ALLOWED_FILE = /^(assets\/(?!\.{1,2}$)[^/\\]+|fonts\/(?!\.{1,2}$)[^/\\]+|cue\.png)$/;
+   MIME extension list above) ever contains a backslash or a NUL byte: a NUL
+   passes this check without it, then survives the containment walk (whose
+   lstat() calls swallow its ENOENT-shaped rejection into "nothing to check"),
+   and reaches writeFile(), which throws synchronously and uncaught -- after
+   a forced import has already cleared the target's existing store. */
+const ALLOWED_FILE = /^(assets\/(?!\.{1,2}$)[^/\\\0]+|fonts\/(?!\.{1,2}$)[^/\\\0]+|cue\.png)$/;
 
 const SURFACE_LABELS = { persuade: 'Landing page', operate: 'Tool', read: 'Docs', experience: 'Portfolio' };
 const ROLES = ['primary', 'secondary', 'tertiary', 'neutral'];
@@ -85,6 +92,13 @@ async function collectFiles(cwd, { includeAssets = true } = {}) {
         bytes: 0,
         reason: stat.isSymbolicLink() ? 'symlink, not a real file' : 'not a regular file',
       });
+      return;
+    }
+    // Reject by the cheap stat.size first so an oversized file is never
+    // fully read into memory just to be thrown away; the post-read check
+    // stays as the authority for a file that grows between the two calls.
+    if (stat.size > MAX_FILE_BYTES || total + stat.size > MAX_BUNDLE_BYTES) {
+      skipped.push({ path: relative, bytes: stat.size, reason: 'too large for the bundle' });
       return;
     }
     let bytes;
@@ -361,6 +375,48 @@ export async function importDesignContext(cwd, bundle, { design = 'skip', force 
   validateBundle(bundle);
   const target = paths(cwd);
 
+  /* hasManagedState() (design-context-import.mjs) only probes specific files
+     inside the store; an empty store root that is itself a symlink to
+     somewhere outside the project passes that guard with nothing to find
+     there. Every write below -- the forced rm()s, writeAnswers, writeContext,
+     and the per-file writes -- resolves through target.storeDir, so a
+     symlinked root would carry all of them outside the project before the
+     per-file containment walk further down ever runs. Reject before any
+     mutation, not after the first one. */
+  const rootStat = await lstat(target.storeDir).catch(() => null);
+  if (rootStat?.isSymbolicLink()) {
+    throw new Error('The design context store is a symlink; refusing to import through it.');
+  }
+
+  /* Decode and size-check every file entry before any mutation below. The
+     export side enforces MAX_FILE_BYTES / MAX_BUNDLE_BYTES on the way out;
+     the import side owes the same bound on the way in, plus an entry-count
+     cap no real export ever produces, and it has to happen before a forced
+     import destroys the target's existing store -- not partway through the
+     per-file write loop that used to be the first place size was checked. */
+  const rawFiles = Array.isArray(bundle.files) ? bundle.files : [];
+  if (rawFiles.length > MAX_BUNDLE_FILES) {
+    throw new Error(`This bundle names ${rawFiles.length} files; this release imports at most ${MAX_BUNDLE_FILES}.`);
+  }
+  const decoded = new Map();
+  let totalBytes = 0;
+  for (const file of rawFiles) {
+    const relative = String(file?.path || '');
+    if (!ALLOWED_FILE.test(relative)) continue;
+    const raw = String(file?.base64 || '');
+    // Base64 expands the source by ~4/3; reject the estimate before
+    // allocating the full decoded buffer for a payload already too large.
+    if (Math.floor((raw.length * 3) / 4) > MAX_FILE_BYTES) {
+      throw new Error(`Bundle entry ${relative} is larger than this release accepts.`);
+    }
+    const bytes = Buffer.from(raw, 'base64');
+    totalBytes += bytes.length;
+    if (bytes.length > MAX_FILE_BYTES || totalBytes > MAX_BUNDLE_BYTES) {
+      throw new Error(`Bundle entry ${relative} is larger than this release accepts.`);
+    }
+    decoded.set(relative, bytes);
+  }
+
   /* A forced import replaces the store; a plain one only ever runs against an
      empty one (design-context-import.mjs refuses otherwise). Without this,
      replacing an existing context only ever adds and overwrites what the new
@@ -369,13 +425,18 @@ export async function importDesignContext(cwd, bundle, { design = 'skip', force 
      manifest and font manifest below, guarded on "nothing there yet", never
      update to the imported project's own choices. Clear the managed areas
      first so the store ends up exactly what the bundle describes, not a
-     merge of the two. */
+     merge of the two. answers.json is included even though a non-null
+     bundle.answers overwrites it two lines down: a bundle.answers of `null`
+     (the pickerless-seed signal) writes nothing there, so without this an
+     old questionnaire survives a forced import of a source that never had
+     one, and a downstream reader sees it as the imported project's record. */
   if (force) {
     await rm(target.assetsDir, { recursive: true, force: true });
     await rm(target.fontsDir, { recursive: true, force: true });
     await rm(target.cuePng, { force: true });
     await rm(target.cuesJson, { force: true });
     await rm(target.fontsManifestJson, { force: true });
+    await rm(target.answersJson, { force: true });
   }
 
   /* The questionnaire's existence is the trigger downstream readers key
@@ -389,12 +450,12 @@ export async function importDesignContext(cwd, bundle, { design = 'skip', force 
   await writeContext(context, cwd);
 
   let written = 0;
-  for (const file of Array.isArray(bundle.files) ? bundle.files : []) {
+  for (const file of rawFiles) {
     const relative = String(file?.path || '');
     /* Containment is not enough on its own: a bundle could otherwise name a
        store file and overwrite what was just written. Only the three places an
        export puts bytes are accepted. */
-    if (!ALLOWED_FILE.test(relative)) {
+    if (!decoded.has(relative)) {
       process.stderr.write(`Skipped ${relative || '(unnamed)'}: not a place a design context keeps files\n`);
       continue;
     }
@@ -443,7 +504,7 @@ export async function importDesignContext(cwd, bundle, { design = 'skip', force 
       continue;
     }
     await mkdir(path.dirname(absolute), { recursive: true });
-    await writeFile(absolute, Buffer.from(String(file.base64 || ''), 'base64'));
+    await writeFile(absolute, decoded.get(relative));
     written += 1;
   }
 

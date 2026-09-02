@@ -83,6 +83,32 @@ describe('importDesignContext file entries', () => {
 
     assert.equal(result.written, 0, 'a backslash-separator escape must be skipped, not written');
   });
+
+  it('rejects a NUL byte in the file segment instead of crashing writeFile() uncaught', async () => {
+    const cwd = await makeCwd();
+    const bundle = bundleWithFiles([
+      { path: 'assets/logo\0.svg', base64: Buffer.from('x').toString('base64') },
+    ]);
+
+    const result = await importDesignContext(cwd, bundle);
+
+    assert.equal(result.written, 0, 'a NUL-containing entry must be skipped, not written');
+    // The rest of the import still completed instead of throwing partway through.
+    assert.equal(await readAnswers(cwd).then((a) => a['palette-primary']), '#B8422E');
+  });
+
+  it('rejects a bundle entry larger than the per-file cap before writing anything', async () => {
+    const cwd = await makeCwd();
+    const oversized = Buffer.alloc(9 * 1024 * 1024, 'a');
+    const bundle = bundleWithFiles([
+      { path: 'assets/huge.png', base64: oversized.toString('base64') },
+    ]);
+
+    await assert.rejects(importDesignContext(cwd, bundle), /larger than this release accepts/);
+    // No mutation must have landed: the oversized entry is caught before any write.
+    const target = paths(cwd);
+    assert.equal(await stat(target.storeDir).then(() => true, () => false), false);
+  });
 });
 
 describe('importDesignContext symlink rejection', () => {
@@ -110,6 +136,27 @@ describe('importDesignContext symlink rejection', () => {
     // The bytes must not have landed at the symlink target either.
     const outsideContents = await readdir(outsideDir).catch(() => []);
     assert.equal(outsideContents.length, 0, 'the linked target must stay empty');
+  });
+
+  it('refuses to import through a symlinked store root before any mutation', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    const outsideDir = path.join(path.dirname(cwd), `outside-root-${path.basename(cwd)}`);
+    const { symlink } = await import('node:fs/promises');
+    await mkdirP(outsideDir, { recursive: true });
+    await mkdirP(path.dirname(target.storeDir), { recursive: true });
+    // hasManagedState() (design-context-import.mjs) only checks for specific
+    // files inside the store, so an empty symlinked root would otherwise
+    // pass that guard and let every write below follow the link outside.
+    await symlink(outsideDir, target.storeDir);
+
+    const bundle = bundleWithFiles([
+      { path: 'assets/logo.svg', base64: Buffer.from('bytes').toString('base64') },
+    ]);
+    await assert.rejects(importDesignContext(cwd, bundle), /symlink/);
+
+    const outsideContents = await readdir(outsideDir).catch(() => []);
+    assert.equal(outsideContents.length, 0, 'nothing must have been written through the symlinked root');
   });
 
   it('refuses to write when the destination file itself is a pre-existing symlink', async () => {
@@ -184,6 +231,26 @@ describe('importDesignContext answers: null signal', () => {
     // The rest of the import still ran -- the asset landed.
     const written = await readdir(target.assetsDir);
     assert.deepEqual(written, ['logo.svg']);
+  });
+
+  it('removes an existing answers.json on a forced import of a null-answer bundle', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(target.storeDir, { recursive: true });
+    await writeFileP(target.answersJson, JSON.stringify({ 'palette-primary': '#OLD000' }));
+
+    const bundle = {
+      kind: 'impeccable-design-context',
+      schemaVersion: 1,
+      answers: null,
+      context: { schemaVersion: 1 },
+      files: [],
+    };
+
+    await importDesignContext(cwd, bundle, { force: true });
+
+    assert.equal(await stat(target.answersJson).then(() => true, () => false), false,
+      'a forced import of a null-answer bundle must remove the target\'s old questionnaire, not leave it in place');
   });
 
   it('writes answers.json when the bundle carries a non-null answers object', async () => {

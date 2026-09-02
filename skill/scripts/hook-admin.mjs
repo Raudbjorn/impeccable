@@ -965,6 +965,54 @@ function canonState(state) {
   return JSON.stringify([state.enabled === true, list(state.ignoreRules), list(state.ignoreFiles), values]);
 }
 
+// uiState() reads the merged (shared + local, local winning) view so the
+// document's Hooks page shows what the hook actually does, not just the
+// shared file. setEnabled()/setDetectorExact() below only ever write shared
+// config.json, so applying a change through this page left a conflicting
+// local override in place: a local `enabled: false` made a "turn on" apply
+// a silent no-op, and a local-only ignore entry could never be removed
+// through the page, because readConfig() unions it back in on every read.
+// The page presents these keys as one complete set the user has full
+// authority over ("what it sends back is the whole managed set and
+// removals are as deliberate as additions" -- the comment above this
+// section), so after writing the desired state to shared, clear any local
+// override of the same keys: shared alone then determines the merged
+// result. Other local-only keys (consent, quiet, an ignore entry never
+// surfaced through this page) are untouched.
+function clearLocalScope(cwd, { hookKeys = [], detectorKeys = [] } = {}) {
+  const filePath = getLocalConfigPath(cwd);
+  const existingRaw = readRawConfigFile(filePath).raw;
+  if (!existingRaw || typeof existingRaw !== 'object' || Array.isArray(existingRaw)) return;
+  let changed = false;
+  const next = { ...existingRaw };
+  const existingHook = hookSection(existingRaw);
+  if (hookKeys.length && existingHook) {
+    const hook = { ...existingHook };
+    for (const key of hookKeys) {
+      if (key in hook) {
+        delete hook[key];
+        changed = true;
+      }
+    }
+    if (Object.keys(hook).length > 0) next.hook = hook;
+    else delete next.hook;
+  }
+  const existingDetector = detectorSection(existingRaw);
+  if (detectorKeys.length && existingDetector) {
+    const detector = { ...existingDetector };
+    for (const key of detectorKeys) {
+      if (key in detector) {
+        delete detector[key];
+        changed = true;
+      }
+    }
+    if (Object.keys(detector).length > 0) next.detector = detector;
+    else delete next.detector;
+  }
+  if (!changed) return;
+  fs.writeFileSync(filePath, JSON.stringify(next, null, 2) + '\n');
+}
+
 function applyUiState(cwd) {
   let payload;
   try {
@@ -994,6 +1042,10 @@ function applyUiState(cwd) {
     setEnabled(cwd, payload.enabled);
   }
   setDetectorExact(cwd, desired);
+  clearLocalScope(cwd, {
+    hookKeys: ['enabled'],
+    detectorKeys: ['ignoreRules', 'ignoreFiles', 'ignoreValues'],
+  });
   return JSON.stringify(uiState(cwd));
 }
 
