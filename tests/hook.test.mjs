@@ -3800,6 +3800,20 @@ describe('runHook() — events without file_path', () => {
     assert.equal(r.stdout, '');
     assert.equal(r.audit.skipped, 'no-file-path');
   });
+
+  it('returns silent skip for an MCP write whose file_path is a non-project URI', async () => {
+    const event = JSON.stringify({
+      session_id: 'sid-xd',
+      cwd,
+      hook_event_name: 'PostToolUse',
+      tool_name: 'write',
+      tool_input: { file_path: 'xd://mcp__context_mode_ctx_execute' },
+    });
+    const det = fakeDetector([finding('side-tab', 1)]);
+    const r = await runHook({ stdinJson: event, env: {}, cwd, detector: det });
+    assert.equal(r.exitCode, 0);
+    assert.equal(r.stdout, '');
+  });
 });
 
 describe('runHook() — configured template extensions (issue #316)', () => {
