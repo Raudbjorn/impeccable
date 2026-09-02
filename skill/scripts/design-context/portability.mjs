@@ -64,6 +64,45 @@ const SURFACE_LABELS = { persuade: 'Landing page', operate: 'Tool', read: 'Docs'
 const ROLES = ['primary', 'secondary', 'tertiary', 'neutral'];
 const PER_SURFACE = ['color-strategy', 'boundary-style', 'corner-style', 'depth-style', 'motion-energy'];
 
+/* Checking only the leaf (e.g. target.storeDir) misses a symlinked ancestor:
+   an `.impeccable` that is itself a link resolves every path under it through
+   that link, and if the leaf does not exist yet inside the link's target,
+   lstat(leaf) reports ENOENT with no hint that its parent was ever a link.
+   Walk from cwd down to targetPath, checking every existing component, and
+   stop (nothing to report) as soon as one is missing, since nothing deeper
+   can exist without it. Returns the first offending absolute path, or null. */
+async function symlinkedAncestor(targetPath, cwd) {
+  const boundary = path.resolve(cwd);
+  const resolved = path.resolve(targetPath);
+  const relative = path.relative(boundary, resolved);
+  if (!relative || relative.startsWith('..')) return null;
+  let cursor = boundary;
+  for (const segment of relative.split(path.sep).filter(Boolean)) {
+    cursor = path.join(cursor, segment);
+    let stat;
+    try {
+      stat = await lstat(cursor);
+    } catch {
+      return null;
+    }
+    if (stat.isSymbolicLink()) return cursor;
+  }
+  return null;
+}
+
+/* Buffer.from(str, 'base64') never throws: invalid characters are silently
+   dropped and missing padding is tolerated, so a garbled or truncated
+   payload decodes into stray bytes with no error, and a non-string payload
+   coerced by String() decodes whatever that stringification happens to
+   produce. Re-encoding the decoded bytes and comparing (ignoring padding,
+   which a sender may omit) is the strictness Buffer.from itself will not
+   provide: a canonical base64 string reproduces itself exactly. */
+function isCanonicalBase64(str) {
+  if (typeof str !== 'string') return false;
+  const strip = (s) => s.replace(/=+$/, '');
+  return strip(Buffer.from(str, 'base64').toString('base64')) === strip(str);
+}
+
 /* ============================================================
    Export
    ============================================================ */
@@ -101,6 +140,13 @@ async function collectFiles(cwd, { includeAssets = true } = {}) {
       skipped.push({ path: relative, bytes: stat.size, reason: 'too large for the bundle' });
       return;
     }
+    // A count no import will accept is not worth generating: the caller gets
+    // a skipped entry naming why, rather than a bundle that fails whole on
+    // the way back in.
+    if (files.length >= MAX_BUNDLE_FILES) {
+      skipped.push({ path: relative, bytes: 0, reason: `bundle already holds the ${MAX_BUNDLE_FILES}-file maximum an import accepts` });
+      return;
+    }
     let bytes;
     try {
       bytes = await readFile(absolute);
@@ -121,7 +167,28 @@ async function collectFiles(cwd, { includeAssets = true } = {}) {
 
   if (!includeAssets) return { files, skipped };
 
+  // readdir() follows a symlinked directory transparently, and lstat() on
+  // whatever readdir() found back would then report the linked target's own
+  // files as ordinary regular files -- take()'s own symlink check never
+  // sees the directory itself, only the names it was handed. Refuse a
+  // symlinked assetsDir/fontsDir (or a symlinked ancestor of the store, e.g.
+  // `.impeccable` itself) before ever calling readdir() on it.
+  const storeLinked = await symlinkedAncestor(target.storeDir, cwd);
+  if (storeLinked) {
+    skipped.push({ path: '.', bytes: 0, reason: `${path.relative(cwd, storeLinked)} is a symlink; nothing exported` });
+    return { files, skipped };
+  }
   for (const [dir, prefix] of [[target.assetsDir, 'assets'], [target.fontsDir, 'fonts']]) {
+    let dirStat;
+    try {
+      dirStat = await lstat(dir);
+    } catch {
+      continue;
+    }
+    if (dirStat.isSymbolicLink()) {
+      skipped.push({ path: prefix, bytes: 0, reason: 'symlink, not a real directory' });
+      continue;
+    }
     let names = [];
     try {
       names = await readdir(dir);
@@ -209,8 +276,17 @@ function paletteTable(answers) {
 function chosenKeys(answers) {
   const raw = answers._chosen;
   try {
-    if (typeof raw === 'string') return new Set(JSON.parse(raw));
-    if (Array.isArray(raw)) return new Set(raw);
+    if (typeof raw === 'string') {
+      // JSON.parse('null') -> null and JSON.parse('"x"') -> a string are
+      // both valid JSON but not the array this field is documented to hold;
+      // `new Set(null)` silently yields an empty set (every key then reads
+      // as "not chosen") and `new Set("x")` iterates the string's characters
+      // as if they were field keys. Only an actual array is real provenance.
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return new Set(parsed);
+    } else if (Array.isArray(raw)) {
+      return new Set(raw);
+    }
   } catch { /* malformed _chosen: fall through to "unknown", not "none chosen" */ }
   return null;
 }
@@ -381,11 +457,20 @@ export async function importDesignContext(cwd, bundle, { design = 'skip', force 
      there. Every write below -- the forced rm()s, writeAnswers, writeContext,
      and the per-file writes -- resolves through target.storeDir, so a
      symlinked root would carry all of them outside the project before the
-     per-file containment walk further down ever runs. Reject before any
-     mutation, not after the first one. */
-  const rootStat = await lstat(target.storeDir).catch(() => null);
-  if (rootStat?.isSymbolicLink()) {
-    throw new Error('The design context store is a symlink; refusing to import through it.');
+     per-file containment walk further down ever runs. Checking only
+     target.storeDir itself is not enough either: an ancestor such as
+     `.impeccable` can be the symlink, in which case target.storeDir may not
+     even exist yet under it, and a symlinked `.impeccable/visual-cues`
+     carries the cue/font manifest writes further down outside the project
+     while sitting entirely outside storeDir. Walk every existing ancestor of
+     both managed roots before any mutation, not after the first one. */
+  const storeLinked = await symlinkedAncestor(target.storeDir, cwd);
+  if (storeLinked) {
+    throw new Error(`${path.relative(cwd, storeLinked)} is a symlink; refusing to import through it.`);
+  }
+  const workspaceLinked = await symlinkedAncestor(path.dirname(target.cuesJson), cwd);
+  if (workspaceLinked) {
+    throw new Error(`${path.relative(cwd, workspaceLinked)} is a symlink; refusing to import through it.`);
   }
 
   /* Decode and size-check every file entry before any mutation below. The
@@ -403,7 +488,15 @@ export async function importDesignContext(cwd, bundle, { design = 'skip', force 
   for (const file of rawFiles) {
     const relative = String(file?.path || '');
     if (!ALLOWED_FILE.test(relative)) continue;
-    const raw = String(file?.base64 || '');
+    // Buffer.from(..., 'base64') is lenient: a non-string coerced by String()
+    // or a garbled/truncated payload both decode into *something* instead of
+    // throwing, so import would report success while writing empty or wrong
+    // bytes. Require an actual string that round-trips through its own
+    // decode, before any mutation.
+    if (!isCanonicalBase64(file?.base64)) {
+      throw new Error(`Bundle entry ${relative} does not carry a valid base64 payload.`);
+    }
+    const raw = file.base64;
     // Base64 expands the source by ~4/3; reject the estimate before
     // allocating the full decoded buffer for a payload already too large.
     if (Math.floor((raw.length * 3) / 4) > MAX_FILE_BYTES) {

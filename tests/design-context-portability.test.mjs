@@ -109,6 +109,40 @@ describe('importDesignContext file entries', () => {
     const target = paths(cwd);
     assert.equal(await stat(target.storeDir).then(() => true, () => false), false);
   });
+
+  it('rejects a bundle naming more files than an export ever produces', async () => {
+    const cwd = await makeCwd();
+    const files = Array.from({ length: 513 }, (_, i) => ({
+      path: `assets/file-${i}.png`,
+      base64: Buffer.from('x').toString('base64'),
+    }));
+    const bundle = bundleWithFiles(files);
+
+    await assert.rejects(importDesignContext(cwd, bundle), /imports at most/);
+    const target = paths(cwd);
+    assert.equal(await stat(target.storeDir).then(() => true, () => false), false, 'no mutation before the count check');
+  });
+
+  it('rejects a non-canonical base64 payload instead of writing garbled or truncated bytes', async () => {
+    const cwd = await makeCwd();
+    // "!!" are not valid base64 alphabet characters; Buffer.from silently
+    // drops them rather than throwing, so a naive decode would succeed with
+    // wrong bytes and report the import as having worked.
+    const bundle = bundleWithFiles([
+      { path: 'assets/logo.svg', base64: 'not-!!valid-base64!!' },
+    ]);
+
+    await assert.rejects(importDesignContext(cwd, bundle), /valid base64/);
+  });
+
+  it('rejects a non-string base64 field instead of coercing it with String()', async () => {
+    const cwd = await makeCwd();
+    const bundle = bundleWithFiles([
+      { path: 'assets/logo.svg', base64: { not: 'a string' } },
+    ]);
+
+    await assert.rejects(importDesignContext(cwd, bundle), /valid base64/);
+  });
 });
 
 describe('importDesignContext symlink rejection', () => {
@@ -157,6 +191,45 @@ describe('importDesignContext symlink rejection', () => {
 
     const outsideContents = await readdir(outsideDir).catch(() => []);
     assert.equal(outsideContents.length, 0, 'nothing must have been written through the symlinked root');
+  });
+
+  it('refuses to import when an ancestor of the store root (not the root itself) is a symlink', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    // Symlink `.impeccable` itself, one level above target.storeDir. The
+    // store dir (`.impeccable/design-context`) does not exist inside the
+    // link's target, so an lstat of target.storeDir alone reports ENOENT
+    // and would previously miss that its parent is the symlink.
+    const outsideDir = path.join(path.dirname(cwd), `outside-impeccable-${path.basename(cwd)}`);
+    const { symlink } = await import('node:fs/promises');
+    await mkdirP(outsideDir, { recursive: true });
+    await symlink(outsideDir, path.dirname(target.storeDir));
+
+    const bundle = bundleWithFiles([
+      { path: 'assets/logo.svg', base64: Buffer.from('bytes').toString('base64') },
+    ]);
+    await assert.rejects(importDesignContext(cwd, bundle), /symlink/);
+
+    const outsideContents = await readdir(outsideDir).catch(() => []);
+    assert.equal(outsideContents.length, 0, 'nothing must have been written through the symlinked ancestor');
+  });
+
+  it('refuses to import when the visual-cues workspace dir is a symlink, even with a real store root', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(target.storeDir, { recursive: true });
+    const workspaceDir = path.dirname(target.cuesJson);
+    const outsideDir = path.join(path.dirname(cwd), `outside-workspace-${path.basename(cwd)}`);
+    const { symlink } = await import('node:fs/promises');
+    await mkdirP(outsideDir, { recursive: true });
+    await mkdirP(path.dirname(workspaceDir), { recursive: true });
+    await symlink(outsideDir, workspaceDir);
+
+    const bundle = bundleWithFiles([]);
+    await assert.rejects(importDesignContext(cwd, bundle), /symlink/);
+
+    const outsideContents = await readdir(outsideDir).catch(() => []);
+    assert.equal(outsideContents.length, 0, 'cues.json/fonts.json must never be written through the symlinked workspace dir');
   });
 
   it('refuses to write when the destination file itself is a pre-existing symlink', async () => {
@@ -308,6 +381,44 @@ describe('exportDesignContext per-surface table', () => {
 
     assert.doesNotMatch(md, /preset, not chosen/, 'unknown provenance must not be guessed as provisional');
   });
+
+  it('leaves every row unmarked when _chosen is the JSON string "null" instead of an array', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(target.storeDir, { recursive: true });
+    await writeFileP(target.answersJson, JSON.stringify({
+      'surface-modes': ['persuade'],
+      'color-strategy': 'restrained',
+      'color-strategy-persuade': 'restrained',
+      // Valid JSON, not an array: `new Set(JSON.parse('null'))` used to yield
+      // an empty Set, which reads as "nothing was ever chosen".
+      _chosen: 'null',
+    }));
+
+    const result = await exportDesignContext(cwd);
+    const md = await readFile(result.markdownPath, 'utf8');
+
+    assert.doesNotMatch(md, /preset, not chosen/, 'a null _chosen must read as unknown provenance, not as nothing chosen');
+  });
+
+  it('leaves every row unmarked when _chosen is a bare JSON string rather than an array', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(target.storeDir, { recursive: true });
+    await writeFileP(target.answersJson, JSON.stringify({
+      'surface-modes': ['persuade'],
+      'color-strategy': 'restrained',
+      'color-strategy-persuade': 'restrained',
+      // Valid JSON, not an array: `new Set(JSON.parse('"color-strategy-persuade"'))`
+      // used to iterate the string's characters as if they were field keys.
+      _chosen: '"color-strategy-persuade"',
+    }));
+
+    const result = await exportDesignContext(cwd);
+    const md = await readFile(result.markdownPath, 'utf8');
+
+    assert.doesNotMatch(md, /preset, not chosen/, 'a string _chosen must read as unknown provenance, not as character-keyed choices');
+  });
 });
 
 describe('exportDesignContext symlink handling', () => {
@@ -329,5 +440,61 @@ describe('exportDesignContext symlink handling', () => {
     assert.match(bundle.skipped[0].reason, /symlink/);
     const markdown = await readFile(result.markdownPath, 'utf8');
     assert.doesNotMatch(markdown, /do not export me/, 'the link target\'s bytes must never reach the readable export');
+  });
+
+  it('skips a symlinked assets/ directory itself instead of following readdir() through it', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(target.storeDir, { recursive: true });
+    const outsideDir = path.join(path.dirname(cwd), `outside-assets-${path.basename(cwd)}`);
+    await mkdirP(outsideDir, { recursive: true });
+    await writeFileP(path.join(outsideDir, 'secret.txt'), 'do not export me');
+    const { symlink } = await import('node:fs/promises');
+    await symlink(outsideDir, target.assetsDir);
+    await writeFileP(path.resolve(cwd, 'DESIGN.md'), '# Seed\n');
+
+    const result = await exportDesignContext(cwd);
+    const bundle = JSON.parse(await readFile(result.bundlePath, 'utf8'));
+
+    assert.equal(bundle.files.length, 0, 'nothing from the linked directory may be collected');
+    assert.ok(bundle.skipped?.some((s) => /symlink/.test(s.reason)));
+    const markdown = await readFile(result.markdownPath, 'utf8');
+    assert.doesNotMatch(markdown, /do not export me/);
+  });
+
+  it('exports nothing when an ancestor of the store (not assets/fonts itself) is a symlink', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    const outsideDir = path.join(path.dirname(cwd), `outside-store-${path.basename(cwd)}`);
+    const { symlink } = await import('node:fs/promises');
+    await mkdirP(outsideDir, { recursive: true });
+    await writeFileP(path.join(outsideDir, 'DESIGN.md'), '# Not this project\n');
+    await symlink(outsideDir, path.dirname(target.storeDir));
+    await writeFileP(path.resolve(cwd, 'DESIGN.md'), '# Seed\n');
+
+    const result = await exportDesignContext(cwd);
+    const bundle = JSON.parse(await readFile(result.bundlePath, 'utf8'));
+
+    assert.equal(bundle.files.length, 0);
+    assert.ok(bundle.skipped?.some((s) => /symlink/.test(s.reason)));
+  });
+});
+
+describe('exportDesignContext file-count cap', () => {
+  it('caps collected files at the same limit importDesignContext enforces, skipping the rest', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(target.assetsDir, { recursive: true });
+    for (let i = 0; i < 513; i++) {
+      await writeFileP(path.join(target.assetsDir, `file-${String(i).padStart(4, '0')}.png`), 'x');
+    }
+    await writeFileP(path.resolve(cwd, 'DESIGN.md'), '# Seed\n');
+
+    const result = await exportDesignContext(cwd);
+    const bundle = JSON.parse(await readFile(result.bundlePath, 'utf8'));
+
+    assert.equal(bundle.files.length, 512, 'export must not produce more files than an import will accept');
+    assert.equal(bundle.skipped?.length, 1);
+    assert.match(bundle.skipped[0].reason, /512-file maximum/);
   });
 });

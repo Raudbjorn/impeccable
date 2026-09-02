@@ -423,9 +423,13 @@ describe('generated hook artifacts in repo', () => {
   });
   it('OMP hook adapter rejects xd:// URIs at runtime', async () => {
     // Write source to a real temp file so import.meta.url resolves correctly
-    // (data: URL would make HOOK_SCRIPT path resolution fail).
+    // (data: URL would make HOOK_SCRIPT path resolution fail). A predictable
+    // path directly under os.tmpdir() would let a pre-existing symlink there
+    // redirect the write; mkdtempSync gives a fresh, unpredictable directory
+    // instead, matching the pattern used elsewhere in this file.
     const src = buildOmpHookModule();
-    const tmp = path.join(os.tmpdir(), `impeccable-hook-${Date.now()}.mjs`);
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-hook-'));
+    const tmp = path.join(dir, 'impeccable.mjs');
     fs.writeFileSync(tmp, src);
     try {
       const { default: hook } = await import(pathToFileURL(tmp));
@@ -443,7 +447,7 @@ describe('generated hook artifacts in repo', () => {
       // fsResult may be undefined if hook.mjs produces no findings, but must not be a thrown error
       assert.ok(fsResult === undefined || typeof fsResult === 'object', 'filesystem path must reach runHook');
     } finally {
-      fs.rmSync(tmp, { force: true });
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 });
