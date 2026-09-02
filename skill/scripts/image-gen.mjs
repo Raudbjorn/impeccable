@@ -93,6 +93,25 @@ async function resolveIp(hostname) {
   throw new Error(`cannot resolve ${hostname} via system resolver, dig, 8.8.8.8, or 1.1.1.1`);
 }
 
+// Creates `filePath` exclusively (O_CREAT|O_EXCL via the "wx" flag: refuses
+// a pre-existing symlink or file) and writes `data` to it. `onCreated`
+// fires the instant the exclusive open succeeds -- before the write -- so
+// a caller's cleanup-ownership flag is set even if the write itself later
+// fails partway (e.g. ENOSPC): the file exists on disk and is this
+// process's to remove regardless of whether the write completed. Setting
+// the flag only after writeFileSync(path, ...) returned in full (the prior
+// approach) missed exactly that case: the exception from a failed write
+// skips the assignment, leaking a partial file no cleanup ever owns.
+function writeFileExclusive(filePath, data, mode, onCreated) {
+  const fd = fs.openSync(filePath, "wx", mode);
+  onCreated();
+  try {
+    fs.writeFileSync(fd, data);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 // ----------------------------------------------------------------- curl
 
 // Returns { status, json, text } instead of throwing on HTTP errors, so
@@ -132,10 +151,9 @@ async function curlJson(url, { method = "GET", headers = {}, body } = {}) {
       // predictable tmpdir path, another local user could pre-create a
       // symlink (or a plain file) there, and a plain writeFileSync would
       // follow the link or truncate the existing file without ever touching
-      // its mode. `flag: "wx"` (O_CREAT|O_EXCL) refuses to write unless this
-      // call creates the file itself.
-      fs.writeFileSync(headerFile, lines.join("\n") + "\n", { mode: 0o600, flag: "wx" });
-      headerCreated = true;
+      // its mode. The exclusive open refuses to write unless this call
+      // creates the file itself.
+      writeFileExclusive(headerFile, lines.join("\n") + "\n", 0o600, () => { headerCreated = true; });
       args.push("-K", headerFile);
     }
     if (body !== undefined) {
@@ -144,8 +162,7 @@ async function curlJson(url, { method = "GET", headers = {}, body } = {}) {
       // prompt and a base64 reference image, and a shared tmpdir under a
       // normal 022 umask would otherwise leave it world-readable for curl's
       // timeout window.
-      fs.writeFileSync(bodyFile, body, { mode: 0o600, flag: "wx" });
-      bodyCreated = true;
+      writeFileExclusive(bodyFile, body, 0o600, () => { bodyCreated = true; });
       args.push("-d", `@${bodyFile}`);
     }
     args.push(url);
@@ -369,15 +386,19 @@ function writeAsPng(buf, out) {
   }
   const tmp = path.join(os.tmpdir(), `image-gen-raw-${process.pid}-${Date.now()}.img`);
   // See curlJson's header/body temp files above: exclusive create closes
-  // the same predictable-shared-path symlink/overwrite gap.
-  fs.writeFileSync(tmp, buf, { mode: 0o600, flag: "wx" });
-  const converters = [
-    ["sips", ["-s", "format", "png", tmp, "--out", out]],
-    ["magick", [tmp, `png:${out}`]],
-    ["convert", [tmp, `png:${out}`]],
-    ["ffmpeg", ["-y", "-i", tmp, out]],
-  ];
+  // the same predictable-shared-path symlink/overwrite gap. Ownership is
+  // tracked the same way too: the write itself sat outside any try/finally
+  // here, so a failure partway through it (after the exclusive create had
+  // already landed the file) leaked `tmp` with no cleanup ever reached.
+  let tmpCreated = false;
   try {
+    writeFileExclusive(tmp, buf, 0o600, () => { tmpCreated = true; });
+    const converters = [
+      ["sips", ["-s", "format", "png", tmp, "--out", out]],
+      ["magick", [tmp, `png:${out}`]],
+      ["convert", [tmp, `png:${out}`]],
+      ["ffmpeg", ["-y", "-i", tmp, out]],
+    ];
     for (const [cmd, args] of converters) {
       try {
         execFileSync(cmd, args, { stdio: "ignore" });
@@ -388,7 +409,7 @@ function writeAsPng(buf, out) {
     }
     fail("Provider returned non-PNG image bytes and no converter is available (tried sips, magick, convert, ffmpeg); install one and re-run");
   } finally {
-    fs.rmSync(tmp, { force: true });
+    if (tmpCreated) fs.rmSync(tmp, { force: true });
   }
 }
 

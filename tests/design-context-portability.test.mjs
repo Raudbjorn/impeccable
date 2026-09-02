@@ -589,6 +589,67 @@ describe('exportDesignContext symlink handling', () => {
 
     await assert.rejects(exportDesignContext(cwd), /symlink/);
   });
+
+  // Regression: the managed-input checks above cover what buildBundle()
+  // reads; they say nothing about the output directory. mkdir() and both
+  // writes would otherwise follow a pre-existing symlink at the default
+  // exports/ path and place the export outside the project.
+  it('refuses to export outright when the default exports/ destination is a symlink', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(target.storeDir, { recursive: true });
+    await writeFileP(target.answersJson, JSON.stringify({ 'palette-primary': '#B8422E' }));
+    const outsideDir = path.join(path.dirname(cwd), `outside-exports-${path.basename(cwd)}`);
+    const { symlink } = await import('node:fs/promises');
+    await mkdirP(outsideDir, { recursive: true });
+    await symlink(outsideDir, target.exportsDir);
+
+    await assert.rejects(exportDesignContext(cwd), /symlink/);
+
+    const outsideContents = await readdir(outsideDir).catch(() => []);
+    assert.equal(outsideContents.length, 0, 'nothing must have been written through the symlinked destination');
+  });
+
+  it('refuses to export outright when an explicit --out inside the project is a symlink', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(target.storeDir, { recursive: true });
+    await writeFileP(target.answersJson, JSON.stringify({ 'palette-primary': '#B8422E' }));
+    const outsideDir = path.join(path.dirname(cwd), `outside-custom-out-${path.basename(cwd)}`);
+    const { symlink } = await import('node:fs/promises');
+    await mkdirP(outsideDir, { recursive: true });
+    await symlink(outsideDir, path.join(cwd, 'custom-out'));
+
+    await assert.rejects(exportDesignContext(cwd, { outDir: 'custom-out' }), /symlink/);
+  });
+});
+
+describe('exportDesignContext bundle size cap', () => {
+  it('refuses to write an export whose serialized bundle exceeds the documented import cap', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(target.storeDir, { recursive: true });
+    await writeFileP(target.answersJson, JSON.stringify({ 'palette-primary': '#B8422E' }));
+    // designMd is not bounded by MAX_FILE_BYTES/MAX_BUNDLE_BYTES at all --
+    // exactly the gap this cap closes.
+    await writeFileP(path.resolve(cwd, 'DESIGN.md'), '#'.repeat(33 * 1024 * 1024));
+
+    await assert.rejects(exportDesignContext(cwd), /bundles this release can import back in are capped/);
+    const bundlePath = path.join(target.exportsDir, 'design-context.bundle.json');
+    assert.equal(await stat(bundlePath).then(() => true, () => false), false, 'no oversized bundle may be written');
+  });
+
+  it('still exports a bundle comfortably under the cap', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(target.storeDir, { recursive: true });
+    await writeFileP(target.answersJson, JSON.stringify({ 'palette-primary': '#B8422E' }));
+    await writeFileP(path.resolve(cwd, 'DESIGN.md'), '# Seed\n');
+
+    const result = await exportDesignContext(cwd);
+
+    assert.equal(await stat(result.bundlePath).then(() => true, () => false), true);
+  });
 });
 
 describe('exportDesignContext file-count cap', () => {

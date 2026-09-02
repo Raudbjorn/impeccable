@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -115,5 +115,31 @@ describe('design-context-import.mjs bundle file-size cap', () => {
     const res = runImport(cwd, [bundle]);
 
     assert.equal(res.status, 0, res.stderr);
+  });
+});
+
+// Regression: migrate() writes through the same managed paths
+// importDesignContext() does, and used to run before any symlink check --
+// including importDesignContext()'s own, which never gets called at all if
+// migrate() itself already wrote through a symlinked `.impeccable` ancestor.
+describe('design-context-import.mjs refuses a symlinked .impeccable before migrate() runs', () => {
+  it('refuses without ever calling migrateContextFromCues() through the link', () => {
+    const cwd = makeCwd();
+    const outsideDir = path.join(path.dirname(cwd), `outside-impeccable-${path.basename(cwd)}`);
+    mkdirSync(path.join(outsideDir, 'visual-cues'), { recursive: true });
+    // migrateContextFromCues() (called by migrate() even with no legacy
+    // dir) writes context.json from cues.json when it carries modes/context
+    // and context.json does not exist yet -- exactly the write this guard
+    // must block before it goes through a symlinked `.impeccable`.
+    writeFileSync(path.join(outsideDir, 'visual-cues', 'cues.json'), JSON.stringify({ modes: ['persuade'] }));
+    symlinkSync(outsideDir, path.join(cwd, '.impeccable'));
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.notEqual(res.status, 0);
+    assert.match(res.stderr, /is a symlink/);
+    assert.equal(existsSync(path.join(outsideDir, 'design-context', 'context.json')), false,
+      'migrate() must never have written through the symlinked ancestor');
   });
 });

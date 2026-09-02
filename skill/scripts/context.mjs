@@ -1389,11 +1389,18 @@ function appendDesignContextDirective(parts, ctx) {
     if (assetNames.length > 0) pieces.push(`${rel(store.assetsDir)}/ (staged brand material: ${assetNames.join(', ')})`);
     if (answersExist) pieces.push(`${rel(store.answersJson)} (every questionnaire decision, per surface)`);
     if (contextExists) pieces.push(`${rel(store.contextJson)} (the interview's chat half, with each staged file's kind and note under context.assets)`);
-    parts.push([
+    const directive = [
       'DESIGN_CONTEXT: the visual world on record was chosen by the user in the design interview, and the interview record is files, not only prose: ' + pieces.join('; ') + '.',
-      "Before building or comping any surface on this world, open the cue image and every staged asset; they are the world's pixel truth, and a staged logo is the project's real mark.",
-      'reference/new-work.md names where each rides (comp reference, build material, reviewer calibration).',
-    ].join(' '));
+    ];
+    // A context-only record (no cue, no staged assets -- possible now that
+    // the check above admits it) has no pixel truth to open; telling the
+    // model to open files that do not exist is an instruction it cannot
+    // follow.
+    if (cueExists || assetNames.length > 0) {
+      directive.push("Before building or comping any surface on this world, open the cue image and every staged asset; they are the world's pixel truth, and a staged logo is the project's real mark.");
+    }
+    directive.push('reference/new-work.md names where each rides (comp reference, build material, reviewer calibration).');
+    parts.push(directive.join(' '));
     return;
   }
 }

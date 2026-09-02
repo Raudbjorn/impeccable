@@ -16,7 +16,12 @@ import { existsSync, readdirSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { migrate, paths, pidAlive, readJsonSoft } from './design-context/store.mjs';
-import { importDesignContext, validateBundle, MAX_BUNDLE_FILE_BYTES } from './design-context/portability.mjs';
+import {
+  assertManagedRootsNotSymlinked,
+  importDesignContext,
+  validateBundle,
+  MAX_BUNDLE_FILE_BYTES,
+} from './design-context/portability.mjs';
 
 /* A pickerless interview seed stages a provided logo or moodboard under
    assets/ (and can carry context.json / cue.png from an earlier import)
@@ -78,6 +83,18 @@ const designAt = args.indexOf('--design');
 const design = designAt !== -1 && args[designAt + 1] ? args[designAt + 1] : 'skip';
 if (!['skip', 'write'].includes(design)) {
   console.error('--design must be skip or write');
+  process.exit(1);
+}
+
+/* migrate() (below) writes through the same managed paths
+   importDesignContext() does further down, and its own symlink rejection
+   runs too late to protect migrate(): a symlinked `.impeccable` ancestor
+   would let migrate() move legacy files or write context.json outside the
+   project before the import call ever gets a chance to refuse. */
+try {
+  await assertManagedRootsNotSymlinked(process.cwd());
+} catch (error) {
+  console.error(error.message);
   process.exit(1);
 }
 

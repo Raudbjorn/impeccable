@@ -607,6 +607,14 @@ describe('loadContext (monorepo project context)', () => {
       /(?<!apps\/dashboard\/)\.impeccable\/design-context\/answers\.json/,
       'the root\'s answers.json must not surface once the target has its own (context-only) record',
     );
+    // Regression: the directive text unconditionally told the agent to open
+    // the cue image and every staged asset, even for this context-only
+    // shape, where neither exists -- an instruction it cannot follow.
+    assert.doesNotMatch(
+      res.stdout,
+      /open the cue image and every staged asset/,
+      'a context-only record has no pixel truth to open; the directive must not claim otherwise',
+    );
   });
 
   it('asks for an app when the CLI runs from a monorepo root without selection', () => {

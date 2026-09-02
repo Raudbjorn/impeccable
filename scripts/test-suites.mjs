@@ -62,6 +62,7 @@ export const SUITES = {
           'tests/context.test.mjs',
           'tests/context-signals.test.mjs',
           'tests/critique-storage.test.mjs',
+          'tests/design-context-export.test.mjs',
           'tests/design-context-import.test.mjs',
           'tests/design-context-portability.test.mjs',
           'tests/score-evidence.test.mjs',

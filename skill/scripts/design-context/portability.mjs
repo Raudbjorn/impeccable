@@ -98,6 +98,22 @@ async function symlinkedAncestor(targetPath, cwd) {
   return null;
 }
 
+/* migrate() (design-context-import.mjs, design-context-export.mjs) writes
+   through these same four paths -- moving legacy files onto them, or
+   writing context.json from cues.json -- before either CLI ever calls
+   exportDesignContext()/importDesignContext(), whose own checks otherwise
+   catch a symlinked ancestor too late to protect migrate()'s writes. Call
+   this before migrate(), not only before the export/import call. */
+export async function assertManagedRootsNotSymlinked(cwd) {
+  const target = paths(cwd);
+  for (const managedPath of [target.answersJson, target.contextJson, target.cuesJson, target.fontsManifestJson]) {
+    const linked = await symlinkedAncestor(managedPath, cwd);
+    if (linked) {
+      throw new Error(`${path.relative(cwd, linked)} is a symlink; refusing to operate through it.`);
+    }
+  }
+}
+
 /* Buffer.from(str, 'base64') never throws: invalid characters are silently
    dropped and missing padding is tolerated, so a garbled or truncated
    payload decodes into stray bytes with no error, and a non-string payload
@@ -442,31 +458,37 @@ function renderMarkdown(bundle) {
 
 export async function exportDesignContext(cwd, { outDir, includeAssets = true, now } = {}) {
   const target = paths(cwd);
-  // collectFiles() (inside buildBundle, below) only refuses a symlinked
-  // store/workspace root once it gets to collecting assets/fonts -- by
-  // then buildBundle has already read answers.json, context.json, and the
-  // cue manifest through whatever a symlinked ancestor points at, and (when
-  // no outDir is given) the default destination further down is
-  // storeDir/exports, through the same link. Reject before any of that, and
-  // walk each managed file actually read below individually rather than
-  // only its containing directory: symlinkedAncestor() checks every path
-  // segment from cwd down to (and including) the path given, so checking
-  // the four leaf JSON files directly covers both their ancestors and
-  // themselves -- an ancestor-only check on storeDir/the workspace dir
-  // would miss answers.json (etc.) itself being the symlink.
-  for (const managedPath of [target.answersJson, target.contextJson, target.cuesJson, target.fontsManifestJson]) {
-    const linked = await symlinkedAncestor(managedPath, cwd);
-    if (linked) {
-      throw new Error(`${path.relative(cwd, linked)} is a symlink; refusing to export through it.`);
-    }
-  }
+  await assertManagedRootsNotSymlinked(cwd);
 
   const bundle = await buildBundle(cwd, { includeAssets, now });
   const destination = outDir ? path.resolve(cwd, outDir) : target.exportsDir;
+  // The managed-input checks above cover what buildBundle() reads; they say
+  // nothing about the output directory. A pre-existing symlink at the
+  // default exports/ path (or an in-project --out) would let mkdir() and
+  // both writes below follow it and place the export outside the project.
+  // symlinkedAncestor() returns null (nothing to check) for a destination
+  // outside cwd entirely, which an explicit --out may deliberately be.
+  const destinationLinked = await symlinkedAncestor(destination, cwd);
+  if (destinationLinked) {
+    throw new Error(`${path.relative(cwd, destinationLinked)} is a symlink; refusing to export through it.`);
+  }
   await mkdir(destination, { recursive: true });
 
   const markdownPath = path.join(destination, 'design-context.md');
   const bundlePath = path.join(destination, 'design-context.bundle.json');
+  // buildBundle() bounds decoded file payloads (MAX_FILE_BYTES /
+  // MAX_BUNDLE_BYTES), but designMd/answers/context/manifests are not
+  // bounded at all, so the serialized bundle can still exceed
+  // MAX_BUNDLE_FILE_BYTES -- the exact cap design-context-import.mjs checks
+  // before reading a bundle back in. Serialize once, check that size, and
+  // refuse rather than write a bundle this same release could not import.
+  // Matches writeJsonAtomic()'s own serialization exactly (2-space indent
+  // plus trailing newline) so this estimate is the real byte count, not an
+  // approximation from a more compact form.
+  const serializedSize = Buffer.byteLength(`${JSON.stringify(bundle, null, 2)}\n`);
+  if (serializedSize > MAX_BUNDLE_FILE_BYTES) {
+    throw new Error(`This export would be about ${serializedSize} bytes; bundles this release can import back in are capped at ${MAX_BUNDLE_FILE_BYTES} bytes. Try --no-assets or trim DESIGN.md/answers.`);
+  }
   await writeFile(markdownPath, renderMarkdown(bundle));
   await writeJsonAtomic(bundlePath, bundle);
   return { markdownPath, bundlePath, skipped: bundle.skipped || [] };
