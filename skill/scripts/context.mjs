@@ -1281,9 +1281,12 @@ function fileTextHasHookMarker(filePath) {
 
 // Harness project settings are discovered by walking up from the resolved
 // project root. Its hook manifest can live at an enclosing git root, so
-// checking only projectRoot/repoRoot produces a false
-// MANUAL_DETECTOR_REQUIRED directive. Starting from projectRoot also prevents
-// an explicit target from borrowing an unrelated manifest near the caller.
+// checking only projectRoot produces a false MANUAL_DETECTOR_REQUIRED
+// directive. Starting from projectRoot also prevents an explicit target from
+// borrowing an unrelated manifest near the caller. The walk itself is the
+// authority: do not append repoRoot afterward, because resolveProject can
+// retain an outer workspace root for a target inside an independent nested
+// Git repository.
 function hookManifestSearchRoots(ctx) {
   const roots = [];
   const seen = new Set();
@@ -1305,8 +1308,6 @@ function hookManifestSearchRoots(ctx) {
     current = parent;
   }
 
-  add(ctx.projectRoot);
-  add(ctx.repoRoot);
   return roots;
 }
 
