@@ -23,7 +23,7 @@ Run:
 node {{scripts_path}}/detect.mjs --json [target]
 ```
 
-Translate each finding into a detector item: each finding's `antipattern` field (the rule id, e.g. `"side-tab"`, per `cli/engine/findings.mjs`) is the lookup key into the matching `id` in `{{scripts_path}}/data/critique-evidence/detector-items.json`. Each detector hit becomes a negative evidence item with `source: "detector"`, using that entry's `impact` and `heuristic_id`.
+Translate each finding into a detector item: each finding's `antipattern` field (the rule id, e.g. `"side-tab"`, per `cli/engine/findings.mjs`) is the lookup key into the matching `id` in `{{scripts_path}}/data/critique-evidence/detector-items.json`. Each detector hit becomes a negative evidence item with `source: "detector"`, carrying that entry's `impact`, `heuristic_id`, and `impact_source` (see Coverage note below) onto the emitted item.
 
 **Per-rule cap.** A single rule can fire many times across a page (e.g. `low-contrast` hitting every text element in a failing section). Emit one detector item per occurrence, up to 3 occurrences of any single rule; each of those (up to 3) items carries the rule's full catalog `impact`. The 4th and later occurrences of that same rule are noted (e.g. in a summary count) but do not get their own item and do not contribute to the score. This bounds how much one noisy rule can dominate the pool without erasing repeated evidence entirely: a rule firing twice is worth twice its impact, a rule firing 20 times is worth the same as one firing 3 times.
 
@@ -59,7 +59,7 @@ Build `<merged-items.json>` from Stage 1's LLM items plus Stage 2's capped detec
      "impact": 3, "source": "llm",
      "citation": "Save button shows spinner while submitting, swap to checkmark on success"},
     {"heuristic_id": "amd", "item_id": "gradient-text",
-     "impact": -2, "source": "detector",
+     "impact": -2, "source": "detector", "impact_source": "authored",
      "citation": "gradient-text rule, 1 occurrence"}
   ],
   "score": {

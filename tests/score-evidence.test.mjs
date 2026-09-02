@@ -101,6 +101,14 @@ describe('score()', () => {
     assert.throws(() => score(items, { scale: -1 }), /invalid options/);
     assert.throws(() => score(items, { center: NaN }), /invalid options/);
   });
+
+  it('rejects a non-array items argument instead of coercing via .length', () => {
+    // { length: 0 } and '' both have a .length of 0; without an explicit
+    // Array.isArray check they'd silently take the zero-items branch.
+    assert.throws(() => score({ length: 0 }), /must be an array/);
+    assert.throws(() => score(''), /must be an array/);
+    assert.throws(() => score(null), /must be an array/);
+  });
 });
 
 describe('score-evidence.mjs CLI', () => {

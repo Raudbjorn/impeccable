@@ -40,6 +40,10 @@ export function score(items, { center = 50, scale = 8, densityDenom = 20 } = {})
     );
   }
 
+  if (!Array.isArray(items)) {
+    throw new Error(`items must be an array, got ${typeof items}.`);
+  }
+
   const totalItems = items.length;
 
   if (totalItems === 0) {
@@ -106,7 +110,10 @@ function breakdownBy(items, keyOf) {
   // Copy onto a plain object before returning: callers (including
   // JSON.stringify and assert.deepStrictEqual in tests) expect an ordinary
   // Object.prototype-backed map, and the null-prototype guard above is only
-  // needed during accumulation.
+  // needed during accumulation. Spread is safe here even for a "__proto__"
+  // key: {...x} copies own enumerable properties via CreateDataPropertyOrThrow,
+  // not via [[Set]], so it can't trigger the accessor that obj[key] = value
+  // or an object-literal `__proto__:` key would.
   return { ...buckets };
 }
 
