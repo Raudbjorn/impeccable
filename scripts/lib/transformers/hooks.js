@@ -241,8 +241,19 @@ function runHook(payload) {
 export default function impeccableHook(pi) {
   pi.on("tool_result", async (event, ctx) => {
     if (event.toolName !== "edit" && event.toolName !== "write") return;
-    const filePath = event.input && typeof event.input.path === "string" ? event.input.path : null;
+    const filePath =
+      (event.tool_input && typeof event.tool_input.file_path === 'string' && event.tool_input.file_path) ||
+      (event.input && typeof event.input.path === 'string' && event.input.path) ||
+      null;
     if (!filePath) return;
+    // Some tool surfaces (e.g. xd:// LSP targets) carry a scheme://-prefixed
+    // path that is not a real filesystem target. Spawning hook.mjs on them
+    // is wasted work — hook-lib.mjs downstream file-missing skip is the
+    // only thing keeping it cheap. Reject at the adapter so the spawn never
+    // happens. Anchored to the start of filePath so real paths (absolute,
+    // relative, Windows-drive) never match. RFC 3986: scheme starts with a
+    // letter, then letters/digits/+/-/., then ://.
+    if (/^[a-z][a-z0-9+.\-]*:\/\//i.test(filePath)) return;
     const text = runHook({
       hook_event_name: "PostToolUse",
       tool_name: event.toolName,

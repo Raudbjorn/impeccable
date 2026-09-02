@@ -196,6 +196,43 @@ describe('hook manifest builders', () => {
     // own is dropped as the session settles.
     assert.match(source, /return \{ continue: true, additionalContext: text \}/);
   });
+  it('oh-my-pi adapter rejects device URI tool targets before spawning hook.mjs', () => {
+    // Some tool surfaces (e.g. `xd://` LSP targets) carry a `<scheme>://` path
+    // instead of a filesystem path. The adapter previously only rejected when
+    // `event.input.path` was null, so it spawned hook.mjs on every edit and
+    // hook-lib.mjs's downstream `file-missing` skip was the only thing keeping
+    // it cheap. Reject at the adapter so the spawn never happens.
+    //
+    // Verify the guard is present, anchored at the start of `filePath`, and
+    // rejects device URIs while accepting real filesystem paths. Extracting
+    // the regex from the source lets the assertion stay honest if a future
+    // edit picks a different (but still anchored + scheme-shaped) regex body.
+    const source = buildOmpHookModule();
+    const guardLine = source
+      .split('\n')
+      .find((line) => line.includes('.test(filePath)'));
+    assert.ok(guardLine, 'adapter must carry a guard that calls .test(filePath)');
+    const literalMatch = guardLine.match(/^.*?\/(\^.*?\/)\/([gimsuy]*)\.test/);
+    assert.ok(
+      literalMatch,
+      'guard regex must be anchored at filePath start and end with `.test(filePath)`',
+    );
+    const guardRe = new RegExp(literalMatch[1], literalMatch[2]);
+    // Device URIs the adapter must reject.
+    for (const uri of ['xd://lsp/foo', 'file:///etc/hosts', 'http://example.com/x', 'https://x.test/y']) {
+      assert.ok(guardRe.test(uri), `guard must reject device URI ${uri}`);
+    }
+    // Real paths the adapter must NOT reject — absolute POSIX, relative, Windows-drive.
+    for (const p of ['/abs/path.tsx', 'rel/path.tsx', './local.tsx', 'C:/Users/me/file.tsx']) {
+      assert.ok(!guardRe.test(p), `guard must not reject real path ${p}`);
+    }
+    // The adapter must read the path from BOTH event.input.path (OMP shape)
+    // and event.tool_input.file_path (Claude Code shape), so a future edit
+    // doesn't accidentally drop the Claude Code fallback and re-introduce the
+    // bug only for that harness.
+    assert.match(source, /event\.tool_input\.file_path/);
+    assert.match(source, /event\.input\.path/);
+  });
 
   it('probes the node runtime everywhere, and notices only where a channel exists', () => {
     // Claude Code and Codex render a `systemMessage` from hook stdout, so their
