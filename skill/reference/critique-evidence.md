@@ -4,7 +4,7 @@ An opt-in, deterministic-scoring alternative to `{{command_prefix}}impeccable cr
 
 ### Why a separate command
 
-The vanilla critique blends three things into one prompt: collect observations, score each heuristic 0-4, write prose. This command splits that into three independent stages that never see each other's output:
+The vanilla critique blends three things into one prompt: collect observations, score each heuristic 0-4, write prose. This command splits that into three stages: the first two run independently and never see each other's output, and the third then consumes their merged result (see Hard rules):
 
 1. **LLM: evidence collection only.** Emits catalog item citations, never a number.
 2. **Detector: rule-based items.** Deterministic findings from the bundled anti-pattern detector, mapped to the same catalog.
@@ -23,11 +23,11 @@ Run:
 node {{scripts_path}}/detect.mjs --json [target]
 ```
 
-Translate each finding into a detector item via `{{scripts_path}}/data/critique-evidence/detector-items.json`. Each detector hit becomes a negative evidence item with `source: "detector"`, using that entry's `impact` and `heuristic_id`.
+Translate each finding into a detector item: each finding's `antipattern` field (the rule id, e.g. `"side-tab"`, per `cli/engine/findings.mjs`) is the lookup key into the matching `id` in `{{scripts_path}}/data/critique-evidence/detector-items.json`. Each detector hit becomes a negative evidence item with `source: "detector"`, using that entry's `impact` and `heuristic_id`.
 
-**Per-rule cap.** A single rule can fire many times across a page (e.g. `low-contrast` hitting every text element in a failing section). Cap occurrences of any single rule at 3 for scoring purposes; anything past the cap is noted but not scored, so one noisy rule cannot dominate the pool.
+**Per-rule cap.** A single rule can fire many times across a page (e.g. `low-contrast` hitting every text element in a failing section). Emit one detector item per occurrence, up to 3 occurrences of any single rule; each of those (up to 3) items carries the rule's full catalog `impact`. The 4th and later occurrences of that same rule are noted (e.g. in a summary count) but do not get their own item and do not contribute to the score. This bounds how much one noisy rule can dominate the pool without erasing repeated evidence entirely: a rule firing twice is worth twice its impact, a rule firing 20 times is worth the same as one firing 3 times.
 
-**Coverage note.** `detector-items.json`'s `meta.impact_source` field marks each row `"authored"` (a reviewed impact/heuristic assignment) or `"default"` (a conservative `-1`/`amd` placeholder for a rule that has not been individually calibrated yet). Both kinds score; only the confidence in the number differs. Treat a report leaning heavily on `"default"` rows as a signal that catalog is due for a real review pass, not as a reason to discard the finding.
+**Coverage note.** Each row in `detector-items.json` carries its own `impact_source` field (glossed under `meta.impact_source`), marked `"authored"` (a reviewed impact/heuristic assignment) or `"default"` (a conservative `-1`/`amd` placeholder for a rule that has not been individually calibrated yet). Both kinds score; only the confidence in the number differs. Treat a report leaning heavily on `"default"` rows as a signal that catalog is due for a real review pass, not as a reason to discard the finding.
 
 ### Stage 3 (math): apply the formula
 
@@ -40,7 +40,7 @@ The scorer applies the canonical evidence-item formula: net impact summed across
 
 Build `<merged-items.json>` from Stage 1's LLM items plus Stage 2's capped detector items before invoking the scorer; the scorer itself does no catalog lookups or capping.
 
-**Stage 1 items arrive with no `impact` field** (`{heuristic_id, item_id, citation}` only, per [reference/evidence-collection.md](reference/evidence-collection.md)). Before invoking the scorer, look up each Stage 1 item's `impact` in its catalog entry: find `item_id` under the matching `heuristic_id`'s `positive` / `negative` / `critical_negative` list in `{{scripts_path}}/data/critique-evidence/heuristic-*.json` and copy that entry's `impact` onto the item, tagging it `"source": "llm"`. An `item_id` that isn't in the catalog gets dropped here (see Hard rules), not passed through with a missing or guessed impact. The scorer rejects any item whose `impact` isn't a finite number rather than silently producing a garbage score.
+**Stage 1 items arrive with no `impact` field** (`{heuristic_id, item_id, citation}` only, per [reference/evidence-collection.md](reference/evidence-collection.md)). Before invoking the scorer, look up each Stage 1 item's `impact` in its catalog entry: catalog entries are keyed `id` (not `item_id`), so find the entry whose `id` equals the Stage 1 item's `item_id`, under the matching `heuristic_id`'s `positive` / `negative` / `critical_negative` list in `{{scripts_path}}/data/critique-evidence/heuristic-*.json`, and copy that entry's `impact` onto the item, tagging it `"source": "llm"`. A Stage 1 `item_id` with no matching catalog `id` gets dropped here (see Hard rules), not passed through with a missing or guessed impact. The scorer rejects any item whose `impact` isn't a finite number rather than silently producing a garbage score.
 
 ### Hard rules
 
@@ -60,7 +60,7 @@ Build `<merged-items.json>` from Stage 1's LLM items plus Stage 2's capped detec
      "citation": "Save button shows spinner while submitting, swap to checkmark on success"},
     {"heuristic_id": "amd", "item_id": "gradient-text",
      "impact": -2, "source": "detector",
-     "citation": "gradient-text rule, 3 occurrences (capped)"}
+     "citation": "gradient-text rule, 1 occurrence"}
   ],
   "score": {
     "final": 54, "raw": 55.66, "multiplier": 0.775,

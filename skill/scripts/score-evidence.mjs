@@ -17,9 +17,8 @@
 //   score-evidence.mjs items.json [--center 50] [--scale 8] [--density-denom 20]
 //   cat items.json | score-evidence.mjs -
 
-import { readFileSync } from 'node:fs';
+import fs from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import * as fs from 'node:fs';
 
 /**
  * Apply the evidence-item scoring formula to a list of evidence items.
@@ -36,7 +35,7 @@ export function score(items, { center = 50, scale = 8, densityDenom = 20 } = {})
     !Number.isFinite(densityDenom) || densityDenom <= 0
   ) {
     throw new Error(
-      `score-evidence: invalid options (center=${center}, scale=${scale}, densityDenom=${densityDenom}). ` +
+      `invalid options (center=${center}, scale=${scale}, densityDenom=${densityDenom}). ` +
         'center must be 0-100, scale must be non-negative, densityDenom must be a positive finite number.',
     );
   }
@@ -56,15 +55,22 @@ export function score(items, { center = 50, scale = 8, densityDenom = 20 } = {})
   }
 
   for (const item of items) {
-    if (typeof item.impact !== 'number' || !Number.isFinite(item.impact)) {
+    if (!item || typeof item !== 'object' || typeof item.impact !== 'number' || !Number.isFinite(item.impact)) {
+      const label = item && typeof item === 'object' ? JSON.stringify(item.item_id ?? item) : JSON.stringify(item);
       throw new Error(
-        `score-evidence: item ${JSON.stringify(item.item_id ?? item)} has a non-numeric impact (${JSON.stringify(item.impact)}). ` +
+        `item ${label} has a non-numeric impact (${JSON.stringify(item && typeof item === 'object' ? item.impact : undefined)}). ` +
           'Every item must carry the impact looked up from its catalog entry before scoring; Stage 1 LLM output does not include one.',
       );
     }
   }
 
   const netImpact = items.reduce((sum, item) => sum + item.impact, 0);
+  if (!Number.isFinite(netImpact)) {
+    throw new Error(
+      `net impact across ${totalItems} items is not finite (${netImpact}). ` +
+        'Individual impacts were all finite, but their sum overflowed; refusing to silently emit a null/NaN score.',
+    );
+  }
   const normalized = netImpact / Math.sqrt(totalItems);
   const raw = clamp(center + normalized * scale, 0, 100);
   const density = Math.min(1, totalItems / densityDenom);
@@ -83,14 +89,25 @@ export function score(items, { center = 50, scale = 8, densityDenom = 20 } = {})
 }
 
 function breakdownBy(items, keyOf) {
-  const buckets = {};
+  // Object.create(null) rather than {}: keyOf() returns caller-controlled
+  // strings (heuristic_id/source), and a plain-object bucket map lets a key
+  // like "__proto__" or "constructor" resolve to an inherited Object.prototype
+  // member instead of a fresh bucket -- silently dropping that item from the
+  // breakdown and, for a caller that holds score() in a long-lived process
+  // rather than a one-shot CLI invocation, writing NaN properties onto the
+  // shared global prototype.
+  const buckets = Object.create(null);
   for (const item of items) {
     const key = keyOf(item);
     if (!buckets[key]) buckets[key] = { items: 0, net_impact: 0 };
     buckets[key].items += 1;
     buckets[key].net_impact += item.impact;
   }
-  return buckets;
+  // Copy onto a plain object before returning: callers (including
+  // JSON.stringify and assert.deepStrictEqual in tests) expect an ordinary
+  // Object.prototype-backed map, and the null-prototype guard above is only
+  // needed during accumulation.
+  return { ...buckets };
 }
 
 function clamp(value, min, max) {
@@ -136,7 +153,7 @@ async function main(argv) {
   }
 
   try {
-    const raw = args.input === '-' ? await readStdin() : readFileSync(args.input, 'utf8');
+    const raw = args.input === '-' ? await readStdin() : fs.readFileSync(args.input, 'utf8');
     const data = JSON.parse(raw);
 
     let items;

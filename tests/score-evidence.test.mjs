@@ -12,10 +12,10 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { score } from '../skill/scripts/score-evidence.mjs';
+import { ANTIPATTERNS } from '../cli/engine/registry/antipatterns.mjs';
 
 const SCRIPT = fileURLToPath(new URL('../skill/scripts/score-evidence.mjs', import.meta.url));
 const DATA_DIR = fileURLToPath(new URL('../skill/scripts/data/critique-evidence/', import.meta.url));
-const REGISTRY_PATH = fileURLToPath(new URL('../cli/engine/registry/antipatterns.mjs', import.meta.url));
 
 describe('score()', () => {
   it('reproduces the ported formula\'s worked example (6 items, net +3 -> final 58)', () => {
@@ -210,10 +210,11 @@ describe('critique-evidence catalog data', () => {
   });
 
   it('detector-items.json only references rule ids that currently exist in the anti-pattern registry', () => {
-    const registrySource = readFileSync(REGISTRY_PATH, 'utf-8');
-    const currentIds = new Set(
-      [...registrySource.matchAll(/^\s*id: '([a-z0-9-]+)'/gm)].map((m) => m[1]),
-    );
+    // Import the live registry array rather than regex-scraping its source
+    // text: a scrape only tracks whatever quoting/formatting the regex was
+    // written against, so a reflow or a quote-style change could silently
+    // stop enforcing this drift guard instead of failing loudly.
+    const currentIds = new Set(ANTIPATTERNS.map((rule) => rule.id));
     const detectorItems = JSON.parse(readFileSync(join(DATA_DIR, 'detector-items.json'), 'utf-8'));
 
     const staleIds = detectorItems.items.filter((item) => !currentIds.has(item.id)).map((i) => i.id);
@@ -224,13 +225,27 @@ describe('critique-evidence catalog data', () => {
   });
 
   it('every current registry rule has a detector-item entry (authored or default)', () => {
-    const registrySource = readFileSync(REGISTRY_PATH, 'utf-8');
-    const currentIds = [...registrySource.matchAll(/^\s*id: '([a-z0-9-]+)'/gm)].map((m) => m[1]);
+    const currentIds = ANTIPATTERNS.map((rule) => rule.id);
     const detectorItems = JSON.parse(readFileSync(join(DATA_DIR, 'detector-items.json'), 'utf-8'));
     const coveredIds = new Set(detectorItems.items.map((item) => item.id));
 
     const missing = currentIds.filter((id) => !coveredIds.has(id));
     assert.deepEqual(missing, [], 'registry rules missing from detector-items.json');
+  });
+
+  it('every catalog item\'s impact sign matches its positive/negative/critical_negative bucket', () => {
+    for (const file of heuristicFiles) {
+      const data = JSON.parse(readFileSync(join(DATA_DIR, file), 'utf-8'));
+      for (const item of data.catalog.positive) {
+        assert.ok(item.impact > 0, `${file}: positive item ${item.id} has non-positive impact ${item.impact}`);
+      }
+      for (const item of data.catalog.negative) {
+        assert.ok(item.impact < 0, `${file}: negative item ${item.id} has non-negative impact ${item.impact}`);
+      }
+      for (const item of data.catalog.critical_negative) {
+        assert.ok(item.impact < 0, `${file}: critical_negative item ${item.id} has non-negative impact ${item.impact}`);
+      }
+    }
   });
 
   it('every heuristic_id used by detector-items.json and the heuristic catalogs matches a real catalog code', () => {
