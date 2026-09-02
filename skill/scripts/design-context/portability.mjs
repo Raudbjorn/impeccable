@@ -426,8 +426,26 @@ function renderMarkdown(bundle) {
 }
 
 export async function exportDesignContext(cwd, { outDir, includeAssets = true, now } = {}) {
+  const target = paths(cwd);
+  // collectFiles() (inside buildBundle, below) only refuses a symlinked
+  // store/workspace root once it gets to collecting assets/fonts -- by
+  // then buildBundle has already read answers.json, context.json, and the
+  // cue manifest through whatever a symlinked `.impeccable` points at, and
+  // (when no outDir is given) the default destination further down is
+  // storeDir/exports, through the same link. Reject before any of that:
+  // before the first managed-store read and before the destination is even
+  // chosen.
+  const storeLinked = await symlinkedAncestor(target.storeDir, cwd);
+  if (storeLinked) {
+    throw new Error(`${path.relative(cwd, storeLinked)} is a symlink; refusing to export through it.`);
+  }
+  const workspaceLinked = await symlinkedAncestor(path.dirname(target.cuesJson), cwd);
+  if (workspaceLinked) {
+    throw new Error(`${path.relative(cwd, workspaceLinked)} is a symlink; refusing to export through it.`);
+  }
+
   const bundle = await buildBundle(cwd, { includeAssets, now });
-  const destination = outDir ? path.resolve(cwd, outDir) : paths(cwd).exportsDir;
+  const destination = outDir ? path.resolve(cwd, outDir) : target.exportsDir;
   await mkdir(destination, { recursive: true });
 
   const markdownPath = path.join(destination, 'design-context.md');
@@ -498,26 +516,29 @@ export async function importDesignContext(cwd, bundle, { design = 'skip', force 
   for (const file of rawFiles) {
     const relative = String(file?.path || '');
     if (!ALLOWED_FILE.test(relative)) continue;
-    // Buffer.from(..., 'base64') is lenient: a non-string coerced by String()
-    // or a garbled/truncated payload both decode into *something* instead of
-    // throwing, so import would report success while writing empty or wrong
-    // bytes. Require an actual string that round-trips through its own
-    // decode, before any mutation.
-    if (!isCanonicalBase64(file?.base64)) {
+    const raw = file?.base64;
+    if (typeof raw !== 'string') {
       throw new Error(`Bundle entry ${relative} does not carry a valid base64 payload.`);
     }
-    const raw = file.base64;
-    // isCanonicalBase64 already confirmed raw round-trips, so its decoded
-    // length is computable exactly rather than merely estimated -- an
-    // estimate that ignores padding overcounts by up to two bytes (a file
-    // at exactly MAX_FILE_BYTES commonly encodes with one "=", and
-    // raw.length * 3 / 4 alone counts that padding byte as data), which
-    // rejected a file at the documented cap that export itself permits.
-    // Computed before decoding so an oversized payload is never fully
-    // allocated just to be thrown away.
+    // The decoded length is computable exactly from the string's own
+    // length and trailing "=" padding, with no decode required -- checked
+    // before isCanonicalBase64() below, not after, because that call
+    // itself decodes via Buffer.from() to verify the round-trip. Deferring
+    // the size check past it would fully allocate an oversized payload
+    // (this cap exists to avoid) before ever rejecting it. A file at
+    // exactly MAX_FILE_BYTES commonly encodes with one "=", and
+    // raw.length * 3 / 4 alone counts that padding byte as data, so the
+    // padding is subtracted rather than estimated away.
     const padding = raw.endsWith('==') ? 2 : raw.endsWith('=') ? 1 : 0;
     if (Math.floor((raw.length * 3) / 4) - padding > MAX_FILE_BYTES) {
       throw new Error(`Bundle entry ${relative} is larger than this release accepts.`);
+    }
+    // Buffer.from(..., 'base64') is lenient: a garbled or truncated payload
+    // decodes into *something* instead of throwing, so import would report
+    // success while writing wrong bytes. Require it to round-trip through
+    // its own decode, before any mutation.
+    if (!isCanonicalBase64(raw)) {
+      throw new Error(`Bundle entry ${relative} does not carry a valid base64 payload.`);
     }
     const bytes = Buffer.from(raw, 'base64');
     totalBytes += bytes.length;
@@ -611,6 +632,15 @@ export async function importDesignContext(cwd, bundle, { design = 'skip', force 
     }
     if (existing?.isSymbolicLink()) {
       process.stderr.write(`Skipped ${relative}: a pre-existing symlink at the destination would be followed\n`);
+      continue;
+    }
+    if (existing && !existing.isFile()) {
+      // A directory at this path (an allowed one is enough: a user-created
+      // `assets/logo.svg/`, say) makes writeFile() below throw EISDIR,
+      // uncaught, aborting the import after the forced rm()s and any
+      // earlier file in this loop already landed -- a partially replaced
+      // store. The stat above already answers this; skip rather than crash.
+      process.stderr.write(`Skipped ${relative}: the destination is not a regular file\n`);
       continue;
     }
     await mkdir(path.dirname(absolute), { recursive: true });

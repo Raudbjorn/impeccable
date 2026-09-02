@@ -108,31 +108,38 @@ async function curlJson(url, { method = "GET", headers = {}, body } = {}) {
   // file, never argv: an argv header is visible to any same-user process
   // via /proc/<pid>/cmdline or ps while curl runs, and to command telemetry
   // that logs argv. -K reads one "header = ..." line per header.
+  // Declared outside the try so `finally` can always see them, and the
+  // try starts before the first write below: `flag: "wx"` (see the header
+  // file's own comment) is meant to handle exactly the case where a
+  // pre-created path collides and the write throws, and a try/finally that
+  // only wrapped the curl call would leak the header file on that exact
+  // failure -- the temp file that already landed, holding the provider API
+  // key, never gets cleaned up.
   let headerFile;
-  if (Object.keys(headers).length) {
-    headerFile = path.join(os.tmpdir(), `image-gen-headers-${process.pid}-${Date.now()}.txt`);
-    const lines = Object.entries(headers).map(([k, v]) => `header = "${k}: ${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`);
-    // `mode: 0o600` only takes effect on a fresh create; on a shared,
-    // predictable tmpdir path, another local user could pre-create a
-    // symlink (or a plain file) there, and a plain writeFileSync would
-    // follow the link or truncate the existing file without ever touching
-    // its mode. `flag: "wx"` (O_CREAT|O_EXCL) refuses to write unless this
-    // call creates the file itself.
-    fs.writeFileSync(headerFile, lines.join("\n") + "\n", { mode: 0o600, flag: "wx" });
-    args.push("-K", headerFile);
-  }
   let bodyFile;
-  if (body !== undefined) {
-    bodyFile = path.join(os.tmpdir(), `image-gen-body-${process.pid}-${Date.now()}.json`);
-    // Same reasoning as the header file above: the body can carry the full
-    // prompt and a base64 reference image, and a shared tmpdir under a
-    // normal 022 umask would otherwise leave it world-readable for curl's
-    // timeout window.
-    fs.writeFileSync(bodyFile, body, { mode: 0o600, flag: "wx" });
-    args.push("-d", `@${bodyFile}`);
-  }
-  args.push(url);
   try {
+    if (Object.keys(headers).length) {
+      headerFile = path.join(os.tmpdir(), `image-gen-headers-${process.pid}-${Date.now()}.txt`);
+      const lines = Object.entries(headers).map(([k, v]) => `header = "${k}: ${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`);
+      // `mode: 0o600` only takes effect on a fresh create; on a shared,
+      // predictable tmpdir path, another local user could pre-create a
+      // symlink (or a plain file) there, and a plain writeFileSync would
+      // follow the link or truncate the existing file without ever touching
+      // its mode. `flag: "wx"` (O_CREAT|O_EXCL) refuses to write unless this
+      // call creates the file itself.
+      fs.writeFileSync(headerFile, lines.join("\n") + "\n", { mode: 0o600, flag: "wx" });
+      args.push("-K", headerFile);
+    }
+    if (body !== undefined) {
+      bodyFile = path.join(os.tmpdir(), `image-gen-body-${process.pid}-${Date.now()}.json`);
+      // Same reasoning as the header file above: the body can carry the full
+      // prompt and a base64 reference image, and a shared tmpdir under a
+      // normal 022 umask would otherwise leave it world-readable for curl's
+      // timeout window.
+      fs.writeFileSync(bodyFile, body, { mode: 0o600, flag: "wx" });
+      args.push("-d", `@${bodyFile}`);
+    }
+    args.push(url);
     const out = execFileSync("curl", args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
     const nl = out.lastIndexOf("\n");
     const status = parseInt(out.slice(nl + 1), 10);

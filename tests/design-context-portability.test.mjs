@@ -67,7 +67,13 @@ describe('importDesignContext file entries', () => {
     const result = await importDesignContext(cwd, bundle);
 
     assert.equal(result.written, 0);
-    await assert.rejects(stat(path.resolve(cwd, '../outside.txt')));
+    // storeDir is <cwd>/.impeccable/design-context, so 'assets/../../outside.txt'
+    // resolves to <cwd>/.impeccable/outside.txt -- still inside cwd, just outside
+    // storeDir. Assert on the path the entry actually resolves to; checking
+    // one cwd level up (outside cwd entirely) passed even with the
+    // containment check removed, and could fail on an unrelated file another
+    // process left in the shared tmpdir.
+    await assert.rejects(stat(path.resolve(cwd, '.impeccable/outside.txt')));
   });
 
   it('rejects a Windows-separator escape that the forward-slash-only regex alone would accept', async () => {
@@ -266,6 +272,27 @@ describe('importDesignContext symlink rejection', () => {
     assert.equal(result.written, 0, 'a symlinked destination must not be followed');
     // The link target still holds the original secret, not the bundle bytes.
     assert.equal(await readFile(realOutside, 'utf8'), 'do not leak me');
+  });
+
+  // Regression: a pre-existing directory at an allowed destination (a user
+  // could create `assets/logo.svg/` themselves) made writeFile() throw
+  // EISDIR, uncaught, aborting the import after the forced rm()s and any
+  // earlier file in this loop had already landed -- a partially replaced
+  // store.
+  it('skips a pre-existing directory at the destination instead of crashing with EISDIR', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(path.join(target.assetsDir, 'logo.svg'), { recursive: true }); // a directory, not a file, at the destination
+
+    const bundle = bundleWithFiles([
+      { path: 'assets/logo.svg', base64: Buffer.from('payload').toString('base64') },
+    ]);
+    const result = await importDesignContext(cwd, bundle);
+
+    assert.equal(result.written, 0, 'the directory must not be treated as written');
+    assert.ok((await stat(path.join(target.assetsDir, 'logo.svg'))).isDirectory(), 'the directory must survive untouched');
+    // The rest of the import still completed instead of throwing partway through.
+    assert.equal(await readAnswers(cwd).then((a) => a['palette-primary']), '#B8422E');
   });
 
   // Regression: the per-file destination checks above (and the store/
@@ -510,21 +537,21 @@ describe('exportDesignContext symlink handling', () => {
     assert.doesNotMatch(markdown, /do not export me/);
   });
 
-  it('exports nothing when an ancestor of the store (not assets/fonts itself) is a symlink', async () => {
+  it('refuses to export outright when an ancestor of the store is a symlink, before any managed-store read', async () => {
     const cwd = await makeCwd();
     const target = paths(cwd);
     const outsideDir = path.join(path.dirname(cwd), `outside-store-${path.basename(cwd)}`);
     const { symlink } = await import('node:fs/promises');
     await mkdirP(outsideDir, { recursive: true });
-    await writeFileP(path.join(outsideDir, 'DESIGN.md'), '# Not this project\n');
+    // A different project's own answers.json, sitting at the link's target.
+    // If buildBundle() read through the link before this check ran, its
+    // content would leak into the exported bundle.
+    await mkdirP(path.join(outsideDir, 'design-context'), { recursive: true });
+    await writeFileP(path.join(outsideDir, 'design-context', 'answers.json'), JSON.stringify({ 'palette-primary': '#NOTOURS' }));
     await symlink(outsideDir, path.dirname(target.storeDir));
     await writeFileP(path.resolve(cwd, 'DESIGN.md'), '# Seed\n');
 
-    const result = await exportDesignContext(cwd);
-    const bundle = JSON.parse(await readFile(result.bundlePath, 'utf8'));
-
-    assert.equal(bundle.files.length, 0);
-    assert.ok(bundle.skipped?.some((s) => /symlink/.test(s.reason)));
+    await assert.rejects(exportDesignContext(cwd), /symlink/);
   });
 });
 
