@@ -110,6 +110,22 @@ describe('importDesignContext file entries', () => {
     assert.equal(await stat(target.storeDir).then(() => true, () => false), false);
   });
 
+  it('accepts a file at exactly the per-file cap (regression: the padding-blind estimate rejected it as one byte over)', async () => {
+    const cwd = await makeCwd();
+    // Exactly MAX_FILE_BYTES (8 MiB) encodes with one "=" of padding; the
+    // estimate `floor(raw.length * 3 / 4)` counted that padding byte as
+    // data and evaluated to MAX_FILE_BYTES + 1, rejecting a file export
+    // itself permits.
+    const exact = Buffer.alloc(8 * 1024 * 1024, 'a');
+    const base64 = exact.toString('base64');
+    assert.ok(base64.endsWith('=') && !base64.endsWith('=='), 'fixture must exercise the single-padding-byte case');
+    const bundle = bundleWithFiles([{ path: 'assets/exact.png', base64 }]);
+
+    const result = await importDesignContext(cwd, bundle);
+
+    assert.equal(result.written, 1, 'a file at exactly the documented cap must import');
+  });
+
   it('rejects a bundle naming more files than an export ever produces', async () => {
     const cwd = await makeCwd();
     const files = Array.from({ length: 513 }, (_, i) => ({
@@ -496,5 +512,57 @@ describe('exportDesignContext file-count cap', () => {
     assert.equal(bundle.files.length, 512, 'export must not produce more files than an import will accept');
     assert.equal(bundle.skipped?.length, 1);
     assert.match(bundle.skipped[0].reason, /512-file maximum/);
+  });
+});
+
+describe('DESIGN.md symlink handling', () => {
+  it('export skips a symlinked DESIGN.md instead of embedding whatever it points at', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(target.assetsDir, { recursive: true });
+    await writeFileP(path.join(target.assetsDir, 'logo.svg'), '<svg></svg>');
+    const secretFile = path.join(path.dirname(cwd), `secret-design-${path.basename(cwd)}.md`);
+    await writeFileP(secretFile, '# Not this project\n\nSensitive content.\n');
+    const { symlink } = await import('node:fs/promises');
+    await symlink(secretFile, path.resolve(cwd, 'DESIGN.md'));
+
+    const result = await exportDesignContext(cwd);
+    const bundle = JSON.parse(await readFile(result.bundlePath, 'utf8'));
+
+    assert.equal(bundle.designMd, null, 'the linked file\'s content must never be embedded');
+    assert.ok(bundle.skipped?.some((s) => s.path === 'DESIGN.md' && /symlink/.test(s.reason)));
+    const markdown = await readFile(result.markdownPath, 'utf8');
+    assert.doesNotMatch(markdown, /Sensitive content/);
+  });
+
+  it('import with design: "write" refuses a pre-existing symlink at DESIGN.md instead of following it', async () => {
+    const cwd = await makeCwd();
+    const secretFile = path.join(path.dirname(cwd), `secret-design-import-${path.basename(cwd)}.md`);
+    await writeFileP(secretFile, 'do not overwrite me');
+    const { symlink } = await import('node:fs/promises');
+    await symlink(secretFile, path.resolve(cwd, 'DESIGN.md'));
+
+    const bundle = { ...bundleWithFiles([]), designMd: '# Imported\n\nNew direction.\n' };
+    const result = await importDesignContext(cwd, bundle, { design: 'write' });
+
+    assert.equal(result.designWritten, false, 'writing through the symlink must be refused');
+    assert.equal(await readFile(secretFile, 'utf8'), 'do not overwrite me', 'the link target must be untouched');
+  });
+
+  it('import with design: "write" refuses a dangling symlink at DESIGN.md (regression: readFile()-as-existence-check missed this)', async () => {
+    const cwd = await makeCwd();
+    const danglingTarget = path.join(path.dirname(cwd), `dangling-design-${path.basename(cwd)}.md`);
+    const { symlink } = await import('node:fs/promises');
+    // The link's target does not exist, so a readFile()-based existence
+    // probe fails the same way a missing DESIGN.md does, and the old code
+    // then wrote through the link, creating the target at an
+    // attacker-chosen path outside the project.
+    await symlink(danglingTarget, path.resolve(cwd, 'DESIGN.md'));
+
+    const bundle = { ...bundleWithFiles([]), designMd: '# Imported\n\nNew direction.\n' };
+    const result = await importDesignContext(cwd, bundle, { design: 'write' });
+
+    assert.equal(result.designWritten, false, 'writing through a dangling symlink must be refused');
+    assert.equal(await stat(danglingTarget).then(() => true, () => false), false, 'nothing may be created at the link target');
   });
 });

@@ -112,7 +112,13 @@ async function curlJson(url, { method = "GET", headers = {}, body } = {}) {
   if (Object.keys(headers).length) {
     headerFile = path.join(os.tmpdir(), `image-gen-headers-${process.pid}-${Date.now()}.txt`);
     const lines = Object.entries(headers).map(([k, v]) => `header = "${k}: ${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`);
-    fs.writeFileSync(headerFile, lines.join("\n") + "\n", { mode: 0o600 });
+    // `mode: 0o600` only takes effect on a fresh create; on a shared,
+    // predictable tmpdir path, another local user could pre-create a
+    // symlink (or a plain file) there, and a plain writeFileSync would
+    // follow the link or truncate the existing file without ever touching
+    // its mode. `flag: "wx"` (O_CREAT|O_EXCL) refuses to write unless this
+    // call creates the file itself.
+    fs.writeFileSync(headerFile, lines.join("\n") + "\n", { mode: 0o600, flag: "wx" });
     args.push("-K", headerFile);
   }
   let bodyFile;
@@ -122,7 +128,7 @@ async function curlJson(url, { method = "GET", headers = {}, body } = {}) {
     // prompt and a base64 reference image, and a shared tmpdir under a
     // normal 022 umask would otherwise leave it world-readable for curl's
     // timeout window.
-    fs.writeFileSync(bodyFile, body, { mode: 0o600 });
+    fs.writeFileSync(bodyFile, body, { mode: 0o600, flag: "wx" });
     args.push("-d", `@${bodyFile}`);
   }
   args.push(url);
@@ -346,7 +352,9 @@ function writeAsPng(buf, out) {
     return;
   }
   const tmp = path.join(os.tmpdir(), `image-gen-raw-${process.pid}-${Date.now()}.img`);
-  fs.writeFileSync(tmp, buf, { mode: 0o600 });
+  // See curlJson's header/body temp files above: exclusive create closes
+  // the same predictable-shared-path symlink/overwrite gap.
+  fs.writeFileSync(tmp, buf, { mode: 0o600, flag: "wx" });
   const converters = [
     ["sips", ["-s", "format", "png", tmp, "--out", out]],
     ["magick", [tmp, `png:${out}`]],

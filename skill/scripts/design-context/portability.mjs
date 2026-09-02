@@ -227,8 +227,18 @@ async function buildBundle(cwd, { includeAssets = true, now = new Date() } = {})
 
   const { files, skipped } = await collectFiles(cwd, { includeAssets });
   let designMd = null;
+  const designMdPath = path.resolve(cwd, 'DESIGN.md');
   try {
-    designMd = await readFile(path.resolve(cwd, 'DESIGN.md'), 'utf8');
+    const designMdStat = await lstat(designMdPath);
+    if (designMdStat.isSymbolicLink()) {
+      // readFile() follows a symlink same as any other file; a cloned repo
+      // whose DESIGN.md is a link to somewhere outside the project would
+      // otherwise have that external file's bytes embedded verbatim in a
+      // bundle meant to be handed to someone else.
+      skipped.push({ path: 'DESIGN.md', bytes: 0, reason: 'symlink, not exported' });
+    } else {
+      designMd = await readFile(designMdPath, 'utf8');
+    }
   } catch {
     /* Not written yet, which an import is told about rather than guessing. */
   }
@@ -497,9 +507,16 @@ export async function importDesignContext(cwd, bundle, { design = 'skip', force 
       throw new Error(`Bundle entry ${relative} does not carry a valid base64 payload.`);
     }
     const raw = file.base64;
-    // Base64 expands the source by ~4/3; reject the estimate before
-    // allocating the full decoded buffer for a payload already too large.
-    if (Math.floor((raw.length * 3) / 4) > MAX_FILE_BYTES) {
+    // isCanonicalBase64 already confirmed raw round-trips, so its decoded
+    // length is computable exactly rather than merely estimated -- an
+    // estimate that ignores padding overcounts by up to two bytes (a file
+    // at exactly MAX_FILE_BYTES commonly encodes with one "=", and
+    // raw.length * 3 / 4 alone counts that padding byte as data), which
+    // rejected a file at the documented cap that export itself permits.
+    // Computed before decoding so an oversized payload is never fully
+    // allocated just to be thrown away.
+    const padding = raw.endsWith('==') ? 2 : raw.endsWith('=') ? 1 : 0;
+    if (Math.floor((raw.length * 3) / 4) - padding > MAX_FILE_BYTES) {
       throw new Error(`Bundle entry ${relative} is larger than this release accepts.`);
     }
     const bytes = Buffer.from(raw, 'base64');
@@ -618,9 +635,18 @@ export async function importDesignContext(cwd, bundle, { design = 'skip', force 
   let designWritten = false;
   if (design === 'write' && typeof bundle.designMd === 'string' && bundle.designMd.trim()) {
     const designPath = path.resolve(cwd, 'DESIGN.md');
-    if (!(await readFile(designPath, 'utf8').then(() => true).catch(() => false))) {
+    // lstat() instead of the readFile()-as-existence-probe this replaced:
+    // a *dangling* symlink at DESIGN.md (pointing at a path that does not
+    // yet exist) made readFile() fail the same way a missing file does, so
+    // the write below went ahead and followed the link, creating the
+    // bundle's content at whatever arbitrary path the link named. lstat()
+    // sees the link itself regardless of whether its target exists.
+    const existingDesign = await lstat(designPath).catch(() => null);
+    if (!existingDesign) {
       await writeFile(designPath, bundle.designMd);
       designWritten = true;
+    } else if (existingDesign.isSymbolicLink()) {
+      process.stderr.write('Skipped writing DESIGN.md: a pre-existing symlink there would be followed\n');
     }
   }
 
