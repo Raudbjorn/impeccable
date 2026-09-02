@@ -27,6 +27,9 @@
  */
 
 import crypto from 'node:crypto';
+import { realpathSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 // Seeds are inlined (129 entries, hand-curated via a tinder review of
 // ~400 candidates from ColorHunt + synthesis + Radix/brand/Pantone anchors).
@@ -494,21 +497,26 @@ function hueWord(H) {
 
 // ---------------------------------------------------------------
 
-const args = parseArgs(process.argv.slice(2));
-const seed = pickSeed(SEEDS, args);
-const [L, C, H] = seed.oklch;
+// Exported for callers that want the raw seed list; the CLI tail below only
+// runs when this file is the entry point, so importing it has no side effects.
+export { SEEDS };
 
-// The mood + strategy on each seed were derived by the model that
-// originally judged it. We surface them as *hints*, not commands —
-// the brief should still drive what the seed becomes.
-const moodHint = seed.mood ? ` (one read: "${seed.mood}")` : '';
-const strategyHint = seed.strategy ? `\n  - one example strategy: ${seed.strategy}` : '';
+function main() {
+  const args = parseArgs(process.argv.slice(2));
+  const seed = pickSeed(SEEDS, args);
+  const [L, C, H] = seed.oklch;
 
-// ---------------------------------------------------------------
-// Fat tool-exit response — what the model sees on stdout.
-// ---------------------------------------------------------------
+  // The mood + strategy on each seed were derived by the model that
+  // originally judged it. We surface them as *hints*, not commands —
+  // the brief should still drive what the seed becomes.
+  const moodHint = seed.mood ? ` (one read: "${seed.mood}")` : '';
+  const strategyHint = seed.strategy ? `\n  - one example strategy: ${seed.strategy}` : '';
 
-process.stdout.write(`BRAND SEED · ${seed.id}
+  // ---------------------------------------------------------------
+  // Fat tool-exit response — what the model sees on stdout.
+  // ---------------------------------------------------------------
+
+  process.stdout.write(`BRAND SEED · ${seed.id}
 
 Seed color (anchor for your primary brand color):
   ${fmtOklch(seed.oklch)} — ${hueWord(H)}${moodHint}
@@ -626,3 +634,11 @@ Dark text is correct only on PALE fills (L > 0.85) or PURE-NEUTRAL fills
 Return your composed palette in CSS custom properties using OKLCH, then
 build with it. The seed is the start, not the recipe.
 `);
+}
+
+// argv[1] must be realpath'd: a skill installed via symlink makes argv[1]
+// the symlink path, which never equality-matches import.meta.url's realpath,
+// so the CLI would silently never run (same guard as visual-cues.mjs).
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(resolve(process.argv[1]))).href) {
+  main();
+}

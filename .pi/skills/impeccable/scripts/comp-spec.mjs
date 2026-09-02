@@ -244,6 +244,14 @@ export function measureRegions(comp, regionsInput, compPath) {
   const pageGround = medianGray(comp);
   for (const raw of regionsInput.regions || []) {
     if (!raw.id) throw new Error('every region needs an id');
+    // The id becomes a filename (the plate path here, a region-crop name in
+    // comp-diff.mjs) with no further encoding, so it has to be safe as one
+    // on its own: a "/" or ".." segment would write outside PLATES_DIR.
+    // RegExp#test coerces its argument to a string, so a numeric id like `1`
+    // would otherwise pass the allowlist and collide in the filesystem with
+    // a same-looking string id "1" while `seen` (SameValueZero) treats them
+    // as distinct.
+    if (typeof raw.id !== 'string' || !/^[A-Za-z0-9_-]+$/.test(raw.id)) throw new Error(`region id "${raw.id}" must be letters, digits, "_", or "-" only: it becomes a filename`);
     if (seen.has(raw.id)) throw new Error(`duplicate region id ${raw.id}`);
     seen.add(raw.id);
     const kind = raw.kind && KINDS.has(raw.kind) ? raw.kind : 'band';

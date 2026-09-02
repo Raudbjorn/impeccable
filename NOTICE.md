@@ -9,3 +9,4 @@ The `skill/reference/android.md` platform reference file is distilled from ehmo'
 **Original work:** https://github.com/ehmo/platform-design-skills
 **Original license:** MIT
 **Author:** ehmo
+

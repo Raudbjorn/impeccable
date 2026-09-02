@@ -1032,7 +1032,15 @@ ${buildPath?.toggle ? `<div id="bp-confirm" role="dialog" aria-modal="true" aria
     // is in flight would overwrite the answer being collected.
     document.querySelectorAll('.reroll-btn, #canon').forEach(b => b.setAttribute('disabled', ''));
     try {
-      await fetch('/answer' + keyQ, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ optionId, steer: steer() }) });
+      // fetch() only rejects on a transport failure; a 401/403 (a page kept
+      // open across a server restart, which regenerates the key) resolves
+      // normally, so a status check is the only way to tell "the server
+      // refused this" from "the server accepted this".
+      const res = await fetch('/answer' + keyQ, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ optionId, steer: steer() }) });
+      if (!res.ok) {
+        document.body.innerHTML = '<div class="done">This page is out of date (the server restarted since it loaded) and the choice was not recorded.<br>Reload this tab and try again.</div>';
+        return;
+      }
     } catch {
       document.body.innerHTML = '<div class="done">The question server went away before this choice could land.<br>Tell the agent your pick in the chat instead.</div>';
       return;
@@ -1304,10 +1312,32 @@ ${buildPath?.toggle ? `<div id="bp-confirm" role="dialog" aria-modal="true" aria
         else if (!front.querySelector('.media')) front.classList.add('text-only');
       });
     };
+    // Fire-and-forget used to mean a rejected request (a page kept open
+    // across a server restart, which regenerates the key) left the visual
+    // flip in place with the server never told: the build never saw the
+    // request, and nothing on screen said so. This can't safely unwind
+    // enterComp()'s generation kickoff, so it surfaces the failure instead
+    // of pretending the flip landed. Kept as its own async helper, called
+    // without awaiting: apply() itself stays synchronous so a throw from
+    // set()/enterComp()/exitComp() still reaches the click handler directly
+    // instead of becoming an unhandled rejection nothing is listening for.
+    const postBuildPath = async (value) => {
+      let res;
+      try { res = await fetch('/build-path' + keyQ, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ value }) }); }
+      catch { res = null; }
+      if ((!res || !res.ok) && !document.getElementById('bp-stale-warn')) {
+        const warn = document.createElement('div');
+        warn.id = 'bp-stale-warn';
+        warn.setAttribute('role', 'alert');
+        warn.textContent = 'This page is out of date and the build path change was not recorded. Reload this tab.';
+        warn.style.cssText = 'position:fixed;left:0;right:0;bottom:0;padding:10px 16px;background:#3a1414;color:#f5b8b8;font:14px system-ui;text-align:center;z-index:999';
+        document.body.appendChild(warn);
+      }
+    };
     const apply = (value) => {
       set(value);
-      fetch('/build-path' + keyQ, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ value }) });
       if (value === 'comp') enterComp(); else exitComp();
+      postBuildPath(value);
     };
     // Flipping to comp starts real generation, so it confirms first; the
     // flip back is free and applies immediately.
@@ -1474,7 +1504,11 @@ ${buildPath?.toggle ? `<div id="bp-confirm" role="dialog" aria-modal="true" aria
     // re-roll and renewed the delivery deadline.
     document.querySelectorAll('.reroll-btn, #canon').forEach(b => b.setAttribute('disabled', ''));
     try {
-      await fetch('/answer' + keyQ, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ optionId: 'reroll', steer: steer(), ...(register ? { register } : {}) }) });
+      const res = await fetch('/answer' + keyQ, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ optionId: 'reroll', steer: steer(), ...(register ? { register } : {}) }) });
+      if (!res.ok) {
+        document.body.innerHTML = '<div class="done">This page is out of date (the server restarted since it loaded) and the re-roll was not recorded.<br>Reload this tab and try again.</div>';
+        return;
+      }
     } catch {
       document.body.innerHTML = '<div class="done">The question server went away before this choice could land.<br>Tell the agent your pick in the chat instead.</div>';
       return;

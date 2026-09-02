@@ -142,7 +142,7 @@ For each issue, tag with **P0-P3 severity** (see [Issue Severity below](#issue-s
 - **[P?] What**: Name the problem clearly
 - **Why it matters**: How this hurts users or undermines goals
 - **Fix**: What to do about it (be concrete)
-- **Suggested command**: Which command could address this (from: /skill:impeccable adapt, /skill:impeccable animate, /skill:impeccable audit, /skill:impeccable bolder, /skill:impeccable clarify, /skill:impeccable colorize, /skill:impeccable critique, /skill:impeccable delight, /skill:impeccable distill, /skill:impeccable document, /skill:impeccable harden, /skill:impeccable layout, /skill:impeccable onboard, /skill:impeccable optimize, /skill:impeccable overdrive, /skill:impeccable polish, /skill:impeccable quieter, /skill:impeccable shape, /skill:impeccable typeset)
+- **Suggested command**: Which command could address this (from: /skill:impeccable adapt, /skill:impeccable animate, /skill:impeccable audit, /skill:impeccable bolder, /skill:impeccable clarify, /skill:impeccable colorize, /skill:impeccable critique, /skill:impeccable delight, /skill:impeccable design-context, /skill:impeccable distill, /skill:impeccable document, /skill:impeccable harden, /skill:impeccable layout, /skill:impeccable onboard, /skill:impeccable optimize, /skill:impeccable overdrive, /skill:impeccable polish, /skill:impeccable quieter, /skill:impeccable shape, /skill:impeccable typeset)
 
 #### Persona Red Flags
 > *Consult the [Personas reference](#persona-based-design-testing) below.*
@@ -257,7 +257,7 @@ List recommended commands in priority order, based on the user's answers:
 ...
 
 **Rules for recommendations**:
-- Only recommend commands from: /skill:impeccable adapt, /skill:impeccable animate, /skill:impeccable audit, /skill:impeccable bolder, /skill:impeccable clarify, /skill:impeccable colorize, /skill:impeccable critique, /skill:impeccable delight, /skill:impeccable distill, /skill:impeccable document, /skill:impeccable harden, /skill:impeccable layout, /skill:impeccable onboard, /skill:impeccable optimize, /skill:impeccable overdrive, /skill:impeccable polish, /skill:impeccable quieter, /skill:impeccable shape, /skill:impeccable typeset
+- Only recommend commands from: /skill:impeccable adapt, /skill:impeccable animate, /skill:impeccable audit, /skill:impeccable bolder, /skill:impeccable clarify, /skill:impeccable colorize, /skill:impeccable critique, /skill:impeccable delight, /skill:impeccable design-context, /skill:impeccable distill, /skill:impeccable document, /skill:impeccable harden, /skill:impeccable layout, /skill:impeccable onboard, /skill:impeccable optimize, /skill:impeccable overdrive, /skill:impeccable polish, /skill:impeccable quieter, /skill:impeccable shape, /skill:impeccable typeset
 - Order by the user's stated priorities first, then by impact
 - Each item's description should carry enough context that the command knows what to focus on
 - Map each Priority Issue to the appropriate command
