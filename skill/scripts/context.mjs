@@ -1318,6 +1318,9 @@ function automaticHookMode(ctx) {
   if (!hookEnabledAt(activeRoot)) return 'none';
   const manifests = HOOK_MANIFESTS_BY_PROVIDER[IMPECCABLE_PROVIDER_ID] || [];
   for (const root of hookManifestSearchRoots(ctx)) {
+    // A manifest can live above the resolved product. Honor the hook lifecycle
+    // config beside that manifest before treating it as active coverage.
+    if (!hookEnabledAt(root)) continue;
     for (const rel of manifests) {
       const abs = path.join(root, rel);
       let wired;
