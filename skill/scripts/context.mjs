@@ -1376,7 +1376,12 @@ function appendDesignContextDirective(parts, ctx) {
     try {
       assetNames = fs.readdirSync(store.assetsDir).filter((name) => !name.startsWith('.'));
     } catch {}
-    if (!cueExists && !answersExist && assetNames.length === 0) continue;
+    // A root imported from an `answers: null` bundle (the pickerless-seed
+    // signal) can carry only context.json -- no cue, no answers, no staged
+    // assets -- and still be the real managed record for this root. Missing
+    // it here fell through to the next root, reporting the wrong project's
+    // design context (or none at all) instead.
+    if (!cueExists && !answersExist && !contextExists && assetNames.length === 0) continue;
 
     const rel = (target) => path.relative(process.cwd(), target) || target;
     const pieces = [];

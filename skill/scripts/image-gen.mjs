@@ -117,6 +117,13 @@ async function curlJson(url, { method = "GET", headers = {}, body } = {}) {
   // key, never gets cleaned up.
   let headerFile;
   let bodyFile;
+  // Set only after each write actually succeeds: on an exclusive-create
+  // collision, headerFile/bodyFile already names a file this call did not
+  // create, and cleanup must never remove a path it didn't write -- that
+  // would delete the very pre-existing file or symlink `wx` was meant to
+  // leave untouched.
+  let headerCreated = false;
+  let bodyCreated = false;
   try {
     if (Object.keys(headers).length) {
       headerFile = path.join(os.tmpdir(), `image-gen-headers-${process.pid}-${Date.now()}.txt`);
@@ -128,6 +135,7 @@ async function curlJson(url, { method = "GET", headers = {}, body } = {}) {
       // its mode. `flag: "wx"` (O_CREAT|O_EXCL) refuses to write unless this
       // call creates the file itself.
       fs.writeFileSync(headerFile, lines.join("\n") + "\n", { mode: 0o600, flag: "wx" });
+      headerCreated = true;
       args.push("-K", headerFile);
     }
     if (body !== undefined) {
@@ -137,6 +145,7 @@ async function curlJson(url, { method = "GET", headers = {}, body } = {}) {
       // normal 022 umask would otherwise leave it world-readable for curl's
       // timeout window.
       fs.writeFileSync(bodyFile, body, { mode: 0o600, flag: "wx" });
+      bodyCreated = true;
       args.push("-d", `@${bodyFile}`);
     }
     args.push(url);
@@ -152,8 +161,8 @@ async function curlJson(url, { method = "GET", headers = {}, body } = {}) {
     }
     return { status, json, text };
   } finally {
-    if (headerFile) fs.rmSync(headerFile, { force: true });
-    if (bodyFile) fs.rmSync(bodyFile, { force: true });
+    if (headerCreated) fs.rmSync(headerFile, { force: true });
+    if (bodyCreated) fs.rmSync(bodyFile, { force: true });
   }
 }
 

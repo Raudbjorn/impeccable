@@ -349,6 +349,25 @@ describe('exportDesignContext with no questionnaire record', () => {
     const cwd = await makeCwd();
     await assert.rejects(exportDesignContext(cwd), /No design interview found/);
   });
+
+  // Regression: hasManagedState() (design-context-import.mjs) already
+  // treats an on-disk context.json alone as a real managed record -- the
+  // shape left behind by importing an `answers: null` bundle with no files
+  // and an unwritten DESIGN.md -- and blocks a plain re-import of such a
+  // project. Without a matching allowance here, export disagreed and
+  // refused to round-trip exactly that state back out.
+  it('exports a project whose only retained state is context.json', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(target.storeDir, { recursive: true });
+    await writeFileP(target.contextJson, JSON.stringify({ schemaVersion: 1, context: { product: { name: 'Retained' } } }));
+
+    const result = await exportDesignContext(cwd);
+
+    const bundle = JSON.parse(await readFile(result.bundlePath, 'utf8'));
+    assert.equal(bundle.answers, null);
+    assert.equal(bundle.context.context.product.name, 'Retained');
+  });
 });
 
 // Regression for PR #15 review thread: importing a bundle whose answers are
@@ -549,6 +568,23 @@ describe('exportDesignContext symlink handling', () => {
     await mkdirP(path.join(outsideDir, 'design-context'), { recursive: true });
     await writeFileP(path.join(outsideDir, 'design-context', 'answers.json'), JSON.stringify({ 'palette-primary': '#NOTOURS' }));
     await symlink(outsideDir, path.dirname(target.storeDir));
+    await writeFileP(path.resolve(cwd, 'DESIGN.md'), '# Seed\n');
+
+    await assert.rejects(exportDesignContext(cwd), /symlink/);
+  });
+
+  // Regression: the ancestor-only check above walks storeDir/the workspace
+  // dir, which does not cover a managed JSON file *itself* being a symlink
+  // when its containing directory is a genuine directory. readAnswers()
+  // would follow such a link the same as any other read.
+  it('refuses to export outright when answers.json itself (not its directory) is a symlink', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(target.storeDir, { recursive: true });
+    const secretFile = path.join(path.dirname(cwd), `secret-answers-${path.basename(cwd)}.json`);
+    await writeFileP(secretFile, JSON.stringify({ 'palette-primary': '#NOTOURS' }));
+    const { symlink } = await import('node:fs/promises');
+    await symlink(secretFile, target.answersJson);
     await writeFileP(path.resolve(cwd, 'DESIGN.md'), '# Seed\n');
 
     await assert.rejects(exportDesignContext(cwd), /symlink/);

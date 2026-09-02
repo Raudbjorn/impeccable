@@ -13,10 +13,10 @@
  */
 
 import { existsSync, readdirSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { migrate, paths, pidAlive, readJsonSoft } from './design-context/store.mjs';
-import { importDesignContext, validateBundle } from './design-context/portability.mjs';
+import { importDesignContext, validateBundle, MAX_BUNDLE_FILE_BYTES } from './design-context/portability.mjs';
 
 /* A pickerless interview seed stages a provided logo or moodboard under
    assets/ (and can carry context.json / cue.png from an earlier import)
@@ -108,7 +108,17 @@ if (!args.includes('--force') && hasManagedState(process.cwd())) {
 
 let bundle;
 try {
-  bundle = validateBundle(JSON.parse(await readFile(path.resolve(process.cwd(), source), 'utf8')));
+  const bundlePath = path.resolve(process.cwd(), source);
+  // The per-entry checks inside importDesignContext bound decoded file
+  // payloads; they say nothing about the serialized bundle itself, which
+  // readFile() below would otherwise load whole into memory (then JSON.parse
+  // the whole thing) before any of those checks ever run. Reject an
+  // oversized file by its own size, before reading or parsing it at all.
+  const bundleStat = await stat(bundlePath);
+  if (bundleStat.size > MAX_BUNDLE_FILE_BYTES) {
+    throw new Error(`This bundle is ${bundleStat.size} bytes; this release reads bundles up to ${MAX_BUNDLE_FILE_BYTES} bytes.`);
+  }
+  bundle = validateBundle(JSON.parse(await readFile(bundlePath, 'utf8')));
 } catch (error) {
   console.error(error.message);
   process.exit(1);

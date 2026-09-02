@@ -34,6 +34,14 @@ const MAX_BUNDLE_BYTES = 20 * 1024 * 1024;
 /* An export never produces more than assets + fonts + cue.png, so a bundle
    naming more than this is not something this toolchain wrote. */
 const MAX_BUNDLE_FILES = 512;
+/* The decoded-byte checks below only bound file payloads at allowed paths;
+   they say nothing about the serialized bundle as a whole -- base64 alone
+   inflates MAX_BUNDLE_BYTES by ~4/3, and designMd/answers/context are not
+   bounded at all. A caller reading a bundle from disk (design-context-
+   import.mjs) checks the file's own size against this before reading or
+   parsing it, so an untrusted bundle cannot exhaust memory before any of
+   the per-entry checks below ever run. */
+export const MAX_BUNDLE_FILE_BYTES = 32 * 1024 * 1024;
 
 const MIME = new Map([
   ['.svg', 'image/svg+xml'], ['.png', 'image/png'], ['.jpg', 'image/jpeg'],
@@ -218,7 +226,8 @@ async function buildBundle(cwd, { includeAssets = true, now = new Date() } = {})
      an empty object would install a record that reads as fully answered. */
   const answers = await readAnswers(cwd);
 
-  const stored = (await readContext(cwd)) || { schemaVersion: SCHEMA_VERSION };
+  const storedOnDisk = await readContext(cwd);
+  const stored = storedOnDisk || { schemaVersion: SCHEMA_VERSION };
   const cues = await readJsonSoft(target.cuesJson);
   const source = typeof answers?.['palette-source'] === 'string' ? answers['palette-source'] : '';
   /* A seed or custom palette names no cue, so there is no image and no dealt
@@ -243,7 +252,13 @@ async function buildBundle(cwd, { includeAssets = true, now = new Date() } = {})
     /* Not written yet, which an import is told about rather than guessing. */
   }
 
-  if (!answers && !files.length && !designMd) {
+  // hasManagedState() (design-context-import.mjs) already treats an
+  // on-disk context.json alone as a real managed record -- it can be the
+  // only retained state after importing an `answers: null` bundle with no
+  // files and an unwritten DESIGN.md -- and blocks a plain re-import of
+  // such a project. Without storedOnDisk here, export disagreed and
+  // refused to round-trip exactly that state back out.
+  if (!answers && !files.length && !designMd && !storedOnDisk) {
     throw new Error('No design interview found. Run /impeccable document to create one.');
   }
 
@@ -430,18 +445,20 @@ export async function exportDesignContext(cwd, { outDir, includeAssets = true, n
   // collectFiles() (inside buildBundle, below) only refuses a symlinked
   // store/workspace root once it gets to collecting assets/fonts -- by
   // then buildBundle has already read answers.json, context.json, and the
-  // cue manifest through whatever a symlinked `.impeccable` points at, and
-  // (when no outDir is given) the default destination further down is
-  // storeDir/exports, through the same link. Reject before any of that:
-  // before the first managed-store read and before the destination is even
-  // chosen.
-  const storeLinked = await symlinkedAncestor(target.storeDir, cwd);
-  if (storeLinked) {
-    throw new Error(`${path.relative(cwd, storeLinked)} is a symlink; refusing to export through it.`);
-  }
-  const workspaceLinked = await symlinkedAncestor(path.dirname(target.cuesJson), cwd);
-  if (workspaceLinked) {
-    throw new Error(`${path.relative(cwd, workspaceLinked)} is a symlink; refusing to export through it.`);
+  // cue manifest through whatever a symlinked ancestor points at, and (when
+  // no outDir is given) the default destination further down is
+  // storeDir/exports, through the same link. Reject before any of that, and
+  // walk each managed file actually read below individually rather than
+  // only its containing directory: symlinkedAncestor() checks every path
+  // segment from cwd down to (and including) the path given, so checking
+  // the four leaf JSON files directly covers both their ancestors and
+  // themselves -- an ancestor-only check on storeDir/the workspace dir
+  // would miss answers.json (etc.) itself being the symlink.
+  for (const managedPath of [target.answersJson, target.contextJson, target.cuesJson, target.fontsManifestJson]) {
+    const linked = await symlinkedAncestor(managedPath, cwd);
+    if (linked) {
+      throw new Error(`${path.relative(cwd, linked)} is a symlink; refusing to export through it.`);
+    }
   }
 
   const bundle = await buildBundle(cwd, { includeAssets, now });

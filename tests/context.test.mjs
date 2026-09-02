@@ -582,6 +582,33 @@ describe('loadContext (monorepo project context)', () => {
     );
   });
 
+  it('reports the target\'s own context.json-only record instead of falling through to the root\'s answers', () => {
+    // Regression: the eligibility check that decides a root has nothing to
+    // report only tested cueExists/answersExist/assetNames -- not
+    // contextExists -- so a target whose only managed state is context.json
+    // (the shape an imported `answers: null` bundle with no files and an
+    // unwritten DESIGN.md leaves behind) read as empty and fell through to
+    // the next root, reporting the invoking root's own answers instead.
+    writeMonorepo();
+    write('apps/dashboard/PRODUCT.md', '# Dashboard product\n');
+    write('.impeccable/design-context/answers.json', JSON.stringify({ 'palette-primary': '#ROOT000' }));
+    write('apps/dashboard/.impeccable/design-context/context.json', JSON.stringify({ schemaVersion: 1 }));
+
+    const res = spawnSync(process.execPath, [SCRIPT_PATH, '--target', 'apps/dashboard/src/App.jsx'], {
+      cwd: scratch,
+      encoding: 'utf8',
+      env: { ...process.env, IMPECCABLE_NO_UPDATE_CHECK: '1', IMPECCABLE_NO_STALENESS_CHECK: '1' },
+    });
+    assert.equal(res.status, 0);
+    assert.match(res.stdout, /DESIGN_CONTEXT:/);
+    assert.match(res.stdout, /apps\/dashboard\/\.impeccable\/design-context\/context\.json/);
+    assert.doesNotMatch(
+      res.stdout,
+      /(?<!apps\/dashboard\/)\.impeccable\/design-context\/answers\.json/,
+      'the root\'s answers.json must not surface once the target has its own (context-only) record',
+    );
+  });
+
   it('asks for an app when the CLI runs from a monorepo root without selection', () => {
     writeMonorepo();
     const res = spawnSync(process.execPath, [SCRIPT_PATH], {

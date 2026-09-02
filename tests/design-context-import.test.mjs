@@ -88,3 +88,32 @@ describe('design-context-import.mjs already-has-a-context guard', () => {
     assert.equal(res.status, 0, res.stderr);
   });
 });
+
+// Regression: portability.mjs's per-entry decoded-byte checks only bound
+// file payloads at allowed paths inside the loop importDesignContext runs;
+// they say nothing about the serialized bundle as a whole, which this CLI
+// read into memory whole and JSON.parse()d before that loop ever started.
+// An untrusted bundle with a huge designMd/answers field, or huge payloads
+// on paths the loop would skip anyway, bypassed every internal cap.
+describe('design-context-import.mjs bundle file-size cap', () => {
+  it('refuses a bundle file larger than the documented cap, before reading or parsing it', () => {
+    const cwd = makeCwd();
+    const file = path.join(cwd, 'huge-bundle.json');
+    // Content need not be valid JSON: the size check runs via stat(),
+    // before readFile()/JSON.parse() ever touch the file.
+    writeFileSync(file, Buffer.alloc(33 * 1024 * 1024, 'x'));
+
+    const res = runImport(cwd, ['huge-bundle.json']);
+
+    assert.notEqual(res.status, 0);
+    assert.match(res.stderr, /this release reads bundles up to/);
+  });
+
+  it('still allows a bundle file well under the cap', () => {
+    const cwd = makeCwd();
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.equal(res.status, 0, res.stderr);
+  });
+});
