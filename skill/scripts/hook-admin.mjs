@@ -985,10 +985,18 @@ function clearLocalScope(cwd, { hookKeys = [], detectorKeys = [] } = {}) {
   if (!existingRaw || typeof existingRaw !== 'object' || Array.isArray(existingRaw)) return;
   let changed = false;
   const next = { ...existingRaw };
+  // hookKeys (enabled) live only under `hook`; detectorKeys can live there
+  // too -- a config written before the hook/detector split stored
+  // ignoreRules/ignoreFiles/ignoreValues directly under `hook`, and
+  // readConfig()'s applyDetectorConfigSource() still reads that shape for
+  // back-compat (applyConfigSource() folds the whole hook section into it).
+  // Clearing only the canonical `detector` section below would leave a
+  // legacy local override in place, merged straight back in on every read.
   const existingHook = hookSection(existingRaw);
-  if (hookKeys.length && existingHook) {
+  const hookScopedKeys = [...hookKeys, ...detectorKeys];
+  if (hookScopedKeys.length && existingHook) {
     const hook = { ...existingHook };
-    for (const key of hookKeys) {
+    for (const key of hookScopedKeys) {
       if (key in hook) {
         delete hook[key];
         changed = true;
@@ -1038,14 +1046,25 @@ function applyUiState(cwd) {
     ignoreFiles: cleanStringList(payload.ignoreFiles, 'ignoreFiles'),
     ignoreValues: cleanIgnoreValues(payload.ignoreValues),
   };
-  if (typeof payload.enabled === 'boolean' && payload.enabled !== uiState(cwd).enabled) {
-    setEnabled(cwd, payload.enabled);
+  if (typeof payload.enabled === 'boolean') {
+    // Compare against shared's own value, not uiState()'s merged one: a
+    // local override can be masking a shared value that already differs
+    // from what the user asked for, and skipping the shared write because
+    // the merged read happened to match would leave shared wrong once the
+    // local override is cleared below.
+    const sharedEnabled = mergeHookConfig(readRawHookConfig(cwd)).enabled;
+    if (payload.enabled !== sharedEnabled) setEnabled(cwd, payload.enabled);
+    // Only reconcile the local override when the payload actually asked to
+    // change `enabled`; an apply that only touches the ignore lists must
+    // not silently delete a local override the user never asked to change.
+    clearLocalScope(cwd, { hookKeys: ['enabled'] });
   }
   setDetectorExact(cwd, desired);
-  clearLocalScope(cwd, {
-    hookKeys: ['enabled'],
-    detectorKeys: ['ignoreRules', 'ignoreFiles', 'ignoreValues'],
-  });
+  // Unlike `enabled`, the ignore lists are always a full-state write (a
+  // key missing from the payload is a removal, not "leave unchanged" --
+  // see the comment above this section), so clearing their local scope
+  // stays unconditional.
+  clearLocalScope(cwd, { detectorKeys: ['ignoreRules', 'ignoreFiles', 'ignoreValues'] });
   return JSON.stringify(uiState(cwd));
 }
 

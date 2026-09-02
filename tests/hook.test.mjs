@@ -1578,6 +1578,75 @@ describe('hook-admin.mjs', () => {
 
       assert.deepEqual(JSON.parse(runAdmin(['state'])).ignoreRules, [], 'a fresh merged read confirms the removal held');
     });
+
+    // Regression for a round-2 PR #15 review thread on the fix above: the
+    // first version cleared the local `enabled` override unconditionally,
+    // even when the payload never mentioned `enabled` at all.
+    it('apply that omits enabled leaves a local enabled override untouched', () => {
+      fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
+      fs.writeFileSync(getLocalConfigPath(cwd), JSON.stringify({ hook: { enabled: false } }));
+
+      execFileSync(process.execPath, [script, 'apply'], {
+        cwd,
+        input: JSON.stringify({ ignoreRules: ['side-tab'], ignoreFiles: [], ignoreValues: [] }),
+        encoding: 'utf-8',
+      });
+
+      const local = JSON.parse(fs.readFileSync(getLocalConfigPath(cwd), 'utf-8'));
+      assert.equal(local.hook.enabled, false, 'an apply that never mentioned `enabled` must not delete this machine\'s override');
+      assert.equal(JSON.parse(runAdmin(['state'])).enabled, false, 'the merged state must still reflect the untouched local override');
+    });
+
+    // Regression for the same thread: comparing the requested value against
+    // uiState()'s *merged* value (rather than shared's own) skipped
+    // setEnabled() whenever the local override already made the merged read
+    // match what was requested -- even when shared itself held the opposite
+    // value. Clearing the masking local override then flipped the effective
+    // state to shared's stale value, the opposite of what was just applied.
+    it('apply resolves an opposing shared/local enabled pair to the requested value, not the value the clear exposes', () => {
+      fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
+      fs.writeFileSync(getConfigPath(cwd), JSON.stringify({ hook: { enabled: false } }));
+      fs.writeFileSync(getLocalConfigPath(cwd), JSON.stringify({ hook: { enabled: true } }));
+      // Merged (local wins) already reads as "on", matching the apply below.
+      assert.equal(JSON.parse(runAdmin(['state'])).enabled, true);
+
+      const applied = JSON.parse(
+        execFileSync(process.execPath, [script, 'apply'], {
+          cwd,
+          input: JSON.stringify({ enabled: true, ignoreRules: [], ignoreFiles: [], ignoreValues: [] }),
+          encoding: 'utf-8',
+        }),
+      );
+      assert.equal(applied.enabled, true, 'the requested "on" must hold after this apply, not flip once the local override clears');
+
+      const shared = JSON.parse(fs.readFileSync(getConfigPath(cwd), 'utf-8'));
+      assert.equal(shared.hook.enabled, true, 'shared must be brought in line with the request, since the local override that will be cleared was the only thing making it look right');
+      assert.equal(JSON.parse(runAdmin(['state'])).enabled, true, 'a fresh merged read confirms it stayed on');
+    });
+
+    // Regression for a round-2 PR #15 review thread: readConfig() reads
+    // detector keys (ignoreRules/ignoreFiles/ignoreValues) from a config's
+    // `hook` section too, for back-compat with configs written before the
+    // hook/detector split. Clearing only the canonical `detector` section
+    // left a legacy local override in place, merged straight back in.
+    it('apply removing an ignore entry also clears a legacy copy stored under local hook (not detector)', () => {
+      fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
+      fs.writeFileSync(getLocalConfigPath(cwd), JSON.stringify({ hook: { ignoreRules: ['overused-font'] } }));
+      assert.deepEqual(JSON.parse(runAdmin(['state'])).ignoreRules, ['overused-font']);
+
+      const applied = JSON.parse(
+        execFileSync(process.execPath, [script, 'apply'], {
+          cwd,
+          input: JSON.stringify({ ignoreRules: [], ignoreFiles: [], ignoreValues: [] }),
+          encoding: 'utf-8',
+        }),
+      );
+      assert.deepEqual(applied.ignoreRules, [], 'the removal must be reflected immediately');
+
+      const local = JSON.parse(fs.readFileSync(getLocalConfigPath(cwd), 'utf-8'));
+      assert.equal(local.hook?.ignoreRules?.length ?? 0, 0, 'the legacy hook-scoped entry must be cleared too');
+      assert.deepEqual(JSON.parse(runAdmin(['state'])).ignoreRules, [], 'a fresh merged read confirms the removal held');
+    });
   });
 });
 
