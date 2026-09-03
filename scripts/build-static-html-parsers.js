@@ -6,6 +6,10 @@
  *
  * Run: node scripts/build-static-html-parsers.js
  * Check: node scripts/build-static-html-parsers.js --check
+ * List bundled packages (JSON): node scripts/build-static-html-parsers.js --list-packages
+ *
+ * --output <path> overrides the committed bundle path for --check, so tests
+ * can point it at a disposable copy instead of tampering with the real file.
  */
 
 import { createHash } from 'node:crypto';
@@ -23,27 +27,59 @@ const OUT_DIR = path.join(ROOT, 'cli/engine/vendor');
 const OUTPUT = path.join(OUT_DIR, 'static-html-parsers.mjs');
 const HEADER_END = '*/\n';
 
-// Builds the bundle body fresh via `bun build`, which resolves and inlines
-// the full dependency graph (including transitive packages like
+// bun's bundler prefixes each concatenated module with a comment naming its
+// path relative to wherever node_modules physically resolves to (through
+// symlinks, if any) -- not relative to --outfile. That makes the raw output
+// depend on the checkout's location and layout: the same source, built from
+// two different directories (or through a symlinked node_modules), produces
+// byte-different files. Every such line is exactly a bare path comment (no
+// other `//`-line shape appears in this bundle), so strip them outright --
+// they carry no functional meaning, and removing them is what makes the
+// committed output reproducible across machines and CI checkouts.
+const MODULE_PATH_COMMENT_RE = /^\/\/ (?:\.\.\/)*\S+\.(?:mjs|cjs|jsx?|tsx?|json)\n/gm;
+
+function stripModulePathComments(body) {
+  return body.replace(MODULE_PATH_COMMENT_RE, '');
+}
+
+// Builds the bundle to `outfile` fresh via `bun build`, which resolves and
+// inlines the full dependency graph (including transitive packages like
 // source-map-js) from the current lockfile -- so this reflects any change
 // anywhere in that graph, not just the direct packages' own versions.
-function buildBody() {
+function rawBuild(outfile) {
+  const result = spawnSync(
+    'bun',
+    ['build', ENTRY, '--outfile', outfile, '--target', 'node', '--format', 'esm'],
+    { cwd: ROOT, encoding: 'utf8' },
+  );
+  if (result.status !== 0) {
+    process.stderr.write(result.stderr || result.stdout || 'bun build failed\n');
+    process.exit(result.status ?? 1);
+  }
+  return fs.readFileSync(outfile, 'utf8');
+}
+
+function withTempBuild(fn) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-static-html-parsers-'));
-  const tmpFile = path.join(tmpDir, 'bundle.mjs');
   try {
-    const result = spawnSync(
-      'bun',
-      ['build', ENTRY, '--outfile', tmpFile, '--target', 'node', '--format', 'esm'],
-      { cwd: ROOT, encoding: 'utf8' },
-    );
-    if (result.status !== 0) {
-      process.stderr.write(result.stderr || result.stdout || 'bun build failed\n');
-      process.exit(result.status ?? 1);
-    }
-    return fs.readFileSync(tmpFile, 'utf8');
+    return fn(rawBuild(path.join(tmpDir, 'bundle.mjs')));
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
+}
+
+function buildBody() {
+  return withTempBuild(stripModulePathComments);
+}
+
+// The module-path comments this script strips from the shipped bundle are
+// also the only place that names every package (direct and transitive) bun
+// actually inlined -- read them from a throwaway, unstripped build instead
+// of re-deriving the dependency graph another way.
+function listBundledPackages() {
+  return withTempBuild((raw) => [
+    ...new Set([...raw.matchAll(/node_modules\/((?:@[^/]+\/)?[^/]+)\//g)].map((m) => m[1])),
+  ].sort());
 }
 
 function digestOf(body) {
@@ -62,18 +98,29 @@ function header(digest) {
 `;
 }
 
-function splitHeader(content) {
+function splitHeader(content, sourcePath) {
   const end = content.indexOf(HEADER_END);
-  if (end === -1) throw new Error(`${path.relative(ROOT, OUTPUT)} is missing its generated header`);
+  if (end === -1) throw new Error(`${path.relative(ROOT, sourcePath)} is missing its generated header`);
   return content.slice(end + HEADER_END.length);
 }
 
+function outputOverride() {
+  const flagIndex = process.argv.indexOf('--output');
+  return flagIndex === -1 ? OUTPUT : process.argv[flagIndex + 1];
+}
+
+if (process.argv.includes('--list-packages')) {
+  console.log(JSON.stringify(listBundledPackages()));
+  process.exit(0);
+}
+
 if (process.argv.includes('--check')) {
-  const committedBody = splitHeader(fs.readFileSync(OUTPUT, 'utf8'));
+  const target = outputOverride();
+  const committedBody = splitHeader(fs.readFileSync(target, 'utf8'), target);
   const freshBody = buildBody();
   if (freshBody !== committedBody) {
     process.stderr.write(
-      'cli/engine/vendor/static-html-parsers.mjs is stale (a fresh rebuild differs byte-for-byte). Run: node scripts/build-static-html-parsers.js\n',
+      `${path.relative(ROOT, target)} is stale (a fresh rebuild differs byte-for-byte). Run: node scripts/build-static-html-parsers.js\n`,
     );
     process.exit(1);
   }
