@@ -1047,13 +1047,22 @@ function applyUiState(cwd) {
     ignoreValues: cleanIgnoreValues(payload.ignoreValues),
   };
   if (typeof payload.enabled === 'boolean') {
-    // Compare against shared's own value, not uiState()'s merged one: a
+    // Compare against shared's own value, not only uiState()'s merged one: a
     // local override can be masking a shared value that already differs
     // from what the user asked for, and skipping the shared write because
     // the merged read happened to match would leave shared wrong once the
     // local override is cleared below.
     const sharedEnabled = mergeHookConfig(readRawHookConfig(cwd)).enabled;
-    if (payload.enabled !== sharedEnabled) setEnabled(cwd, payload.enabled);
+    // But shared alone is not enough either: a local override can also mask
+    // a shared value that already matches what the user asked for, while
+    // the *effective* (merged, local-winning) state the user actually sees
+    // and experiences is the opposite. Read that before either write below
+    // changes it. Skipping setEnabled() in that case skips its side effects
+    // too (recording local consent, repairing hook manifests on enable), so
+    // a project could report "enabled" (once the local override is cleared)
+    // without the hook actually being installed anywhere.
+    const previouslyEffective = uiState(cwd).enabled;
+    if (payload.enabled !== sharedEnabled || payload.enabled !== previouslyEffective) setEnabled(cwd, payload.enabled);
     // Only reconcile the local override when the payload actually asked to
     // change `enabled`; an apply that only touches the ignore lists must
     // not silently delete a local override the user never asked to change.

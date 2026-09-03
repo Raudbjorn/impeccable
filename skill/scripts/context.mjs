@@ -1395,9 +1395,15 @@ function appendDesignContextDirective(parts, ctx) {
     // A context-only record (no cue, no staged assets -- possible now that
     // the check above admits it) has no pixel truth to open; telling the
     // model to open files that do not exist is an instruction it cannot
-    // follow.
-    if (cueExists || assetNames.length > 0) {
+    // follow. An asset-only record (staged logo/moodboard, no cue.png --
+    // the pickerless interview never touches cue.png) needs its own wording
+    // too: the cue-image clause above named a file that would not exist.
+    if (cueExists && assetNames.length > 0) {
       directive.push("Before building or comping any surface on this world, open the cue image and every staged asset; they are the world's pixel truth, and a staged logo is the project's real mark.");
+    } else if (cueExists) {
+      directive.push("Before building or comping any surface on this world, open the cue image; it is the world's pixel truth.");
+    } else if (assetNames.length > 0) {
+      directive.push("Before building or comping any surface on this world, open every staged asset; they are the world's pixel truth, and a staged logo is the project's real mark.");
     }
     directive.push('reference/new-work.md names where each rides (comp reference, build material, reviewer calibration).');
     parts.push(directive.join(' '));

@@ -617,6 +617,26 @@ describe('loadContext (monorepo project context)', () => {
     );
   });
 
+  it('tells the agent to open staged assets, not a nonexistent cue image, for an asset-only pickerless seed', () => {
+    // Regression: the directive's pixel-truth clause fired on
+    // `cueExists || assetNames.length > 0`, so an asset-only record (a
+    // staged logo with no cue.png -- the pickerless interview never writes
+    // one) still told the agent to open "the cue image", a file that does
+    // not exist on this record.
+    write('PRODUCT.md', '# Root product\n');
+    write('.impeccable/design-context/assets/logo.svg', '<svg></svg>');
+
+    const res = spawnSync(process.execPath, [SCRIPT_PATH], {
+      cwd: scratch,
+      encoding: 'utf8',
+      env: { ...process.env, IMPECCABLE_NO_UPDATE_CHECK: '1', IMPECCABLE_NO_STALENESS_CHECK: '1' },
+    });
+    assert.equal(res.status, 0);
+    assert.match(res.stdout, /DESIGN_CONTEXT:/);
+    assert.match(res.stdout, /open every staged asset/);
+    assert.doesNotMatch(res.stdout, /open the cue image/, 'no cue.png exists on this record; the directive must not claim there is one to open');
+  });
+
   it('asks for an app when the CLI runs from a monorepo root without selection', () => {
     writeMonorepo();
     const res = spawnSync(process.execPath, [SCRIPT_PATH], {

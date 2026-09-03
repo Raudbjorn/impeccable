@@ -1241,11 +1241,26 @@ function relativize(filePath, cwd) {
 const APPLY_PATCH_FILE_RE = /^\*\*\* (?:Update|Add) File: (.+)$/gm;
 
 // RFC 3986: scheme starts with a letter, then letters/digits/+/-/., then
-// "://". Anchored at the string start, same as the OMP adapter's own
-// device-URI guard, so a real filesystem path that merely contains "://"
-// somewhere past the start (a snapshot file named after a URL, say) is
-// never mistaken for one -- a bare .includes('://') check rejects that too.
-const URI_SCHEME_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
+// ":". Anchored at the string start, same as the OMP adapter's own
+// device-URI guard, so a real filesystem path that merely contains a colon
+// somewhere past the start is never mistaken for one. Deliberately matches
+// just the "scheme:" prefix, not "scheme://": plenty of real editor/LSP
+// virtual documents have no authority part at all (`untitled:Untitled-1`,
+// `vscode-notebook-cell:/path/to/notebook.ipynb#cell`), and requiring "//"
+// let those through as if they were real filesystem paths.
+const URI_SCHEME_RE = /^([a-z][a-z0-9+.-]*):/i;
+
+// A Windows drive letter ("C:\...", "D:/...") matches the same "letter
+// followed by a colon" syntax a URI scheme does, but is always exactly one
+// letter and always followed immediately by a path separator; no real
+// scheme in practice is that shape, so this is enough to tell them apart
+// without a fixed allowlist of drive letters.
+function hasUriScheme(value) {
+  const match = URI_SCHEME_RE.exec(value);
+  if (!match) return false;
+  if (match[1].length === 1 && /^[\\/]/.test(value.slice(match[0].length))) return false;
+  return true;
+}
 
 export function parseApplyPatchPaths(command, projectCwd) {
   if (!command || typeof command !== 'string') return [];
@@ -1257,8 +1272,8 @@ export function parseApplyPatchPaths(command, projectCwd) {
     // collapses "://" to a single "/" ("xd://probe.tsx" becomes
     // "<cwd>/xd:/probe.tsx"), so resolveTargetFiles()'s own URI-scheme guard
     // -- which only ever sees this caller's already-resolved output -- never
-    // gets the chance to see the "://" it is looking for.
-    if (URI_SCHEME_RE.test(p)) continue;
+    // gets the chance to see the scheme prefix it is looking for.
+    if (hasUriScheme(p)) continue;
     if (!path.isAbsolute(p)) p = path.resolve(projectCwd, p);
     out.push(p);
   }
@@ -1270,7 +1285,7 @@ export function resolveTargetFiles(event, projectCwd) {
   const out = [];
   const add = (filePath) => {
     if (typeof filePath !== 'string' || !filePath) return;
-    if (URI_SCHEME_RE.test(filePath)) return; // reject non-filesystem URI schemes before path resolution
+    if (hasUriScheme(filePath)) return; // reject non-filesystem URI schemes before path resolution
     if (!out.includes(filePath)) out.push(filePath);
   };
 

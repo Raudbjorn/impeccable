@@ -238,6 +238,20 @@ function runHook(payload) {
   }
 }
 
+// RFC 3986: scheme starts with a letter, then letters/digits/+/-/., then
+// ":". Matches just the "scheme:" prefix, not "scheme://": plenty of real
+// tool surfaces carry a scheme with no authority part at all (e.g.
+// untitled:Untitled-1, vscode-notebook-cell:/path), not only xd://-style
+// LSP targets. A Windows drive letter (a single letter, colon, then a path
+// separator) matches the same "letter followed by a colon" syntax but is
+// always exactly one letter; no real scheme is that shape.
+function hasUriScheme(value) {
+  const match = /^([a-z][a-z0-9+.-]*):/i.exec(value);
+  if (!match) return false;
+  if (match[1].length === 1 && /^[\\\\/]/.test(value.slice(match[0].length))) return false;
+  return true;
+}
+
 export default function impeccableHook(pi) {
   pi.on("tool_result", async (event, ctx) => {
     if (event.toolName !== "edit" && event.toolName !== "write") return;
@@ -246,14 +260,11 @@ export default function impeccableHook(pi) {
       (event.input && typeof event.input.path === 'string' && event.input.path) ||
       null;
     if (!filePath) return;
-    // Some tool surfaces (e.g. xd:// LSP targets) carry a scheme://-prefixed
-    // path that is not a real filesystem target. Spawning hook.mjs on them
-    // is wasted work — hook-lib.mjs downstream file-missing skip is the
-    // only thing keeping it cheap. Reject at the adapter so the spawn never
-    // happens. Anchored to the start of filePath so real paths (absolute,
-    // relative, Windows-drive) never match. RFC 3986: scheme starts with a
-    // letter, then letters/digits/+/-/., then ://.
-    if (/^[a-z][a-z0-9+.-]*:\\/\\//i.test(filePath)) return;
+    // Some tool surfaces carry a scheme-prefixed identifier that is not a
+    // real filesystem target. Spawning hook.mjs on them is wasted work —
+    // hook-lib.mjs downstream file-missing skip is the only thing keeping
+    // it cheap. Reject at the adapter so the spawn never happens.
+    if (hasUriScheme(filePath)) return;
     const text = runHook({
       hook_event_name: "PostToolUse",
       tool_name: event.toolName,

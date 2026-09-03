@@ -202,37 +202,44 @@ describe('hook manifest builders', () => {
       source.includes('pi.on("tool_result"') && source.includes('pi.on("session_stop"'),
       'module must register tool_result and session_stop handlers',
     );
-    assert.ok(/\.test\(filePath\)/.test(source), 'module must guard filePath');
+    assert.ok(/hasUriScheme\(filePath\)/.test(source), 'module must guard filePath');
   });
   it('oh-my-pi adapter rejects device URI tool targets before spawning hook.mjs', () => {
-    // Some tool surfaces (e.g. `xd://` LSP targets) carry a `<scheme>://` path
-    // instead of a filesystem path. The adapter previously only rejected when
-    // `event.input.path` was null, so it spawned hook.mjs on every edit and
-    // hook-lib.mjs's downstream `file-missing` skip was the only thing keeping
-    // it cheap. Reject at the adapter so the spawn never happens.
+    // Some tool surfaces (e.g. `xd://` LSP targets, or scheme-only virtual
+    // documents like `untitled:Untitled-1` with no authority part at all)
+    // carry a scheme-prefixed identifier instead of a filesystem path. The
+    // adapter previously only rejected when `event.input.path` was null, so
+    // it spawned hook.mjs on every edit and hook-lib.mjs's downstream
+    // `file-missing` skip was the only thing keeping it cheap. Reject at the
+    // adapter so the spawn never happens.
     //
-    // Verify the guard is present, anchored at the start of `filePath`, and
-    // rejects device URIs while accepting real filesystem paths. Extracting
-    // the regex from the source lets the assertion stay honest if a future
-    // edit picks a different (but still anchored + scheme-shaped) regex body.
+    // Verify the guard is present and rejects device/scheme URIs while
+    // accepting real filesystem paths (including a Windows drive letter,
+    // which matches the same "letter, colon" syntax a scheme does but is
+    // never one in practice). Extracting the guard function from the source
+    // and running it directly lets the assertion stay honest if a future
+    // edit changes its internals, as long as the call site is still named
+    // `hasUriScheme`.
     const source = buildOmpHookModule();
-    const guardLine = source
-      .split('\n')
-      .find((line) => line.includes('.test(filePath)'));
-    assert.ok(guardLine, 'adapter must carry a guard that calls .test(filePath)');
-    const literalMatch = guardLine.match(/^\s*if\s*\(\/(.*)\/([gimsuy]*)\.test/);
-    assert.ok(
-      literalMatch,
-      'guard regex must be anchored at filePath start and end with `.test(filePath)`',
-    );
-    const guardRe = new RegExp(literalMatch[1], literalMatch[2]);
-    // Device URIs the adapter must reject.
-    for (const uri of ['xd://lsp/foo', 'file:///etc/hosts', 'http://example.com/x', 'https://x.test/y']) {
-      assert.ok(guardRe.test(uri), `guard must reject device URI ${uri}`);
+    assert.ok(source.includes('hasUriScheme(filePath)'), 'adapter must carry a guard that calls hasUriScheme(filePath)');
+    const fnMatch = source.match(/function hasUriScheme\(value\) \{[\s\S]*?\n\}/);
+    assert.ok(fnMatch, 'module must define a hasUriScheme() guard function');
+    const hasUriScheme = new Function(`${fnMatch[0]}\nreturn hasUriScheme;`)();
+
+    // Device/scheme URIs the adapter must reject.
+    for (const uri of [
+      'xd://lsp/foo',
+      'file:///etc/hosts',
+      'http://example.com/x',
+      'https://x.test/y',
+      'untitled:Untitled-1',
+      'vscode-notebook-cell:/path/to/notebook.ipynb#cell',
+    ]) {
+      assert.ok(hasUriScheme(uri), `guard must reject device URI ${uri}`);
     }
     // Real paths the adapter must NOT reject — absolute POSIX, relative, Windows-drive.
-    for (const p of ['/abs/path.tsx', 'rel/path.tsx', './local.tsx', 'C:/Users/me/file.tsx']) {
-      assert.ok(!guardRe.test(p), `guard must not reject real path ${p}`);
+    for (const p of ['/abs/path.tsx', 'rel/path.tsx', './local.tsx', 'C:/Users/me/file.tsx', 'D:\\Users\\me\\file.tsx']) {
+      assert.ok(!hasUriScheme(p), `guard must not reject real path ${p}`);
     }
     // The adapter must read the path from BOTH event.input.path (OMP shape)
     // and event.tool_input.file_path (Claude Code shape), so a future edit

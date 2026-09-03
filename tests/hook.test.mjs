@@ -1624,6 +1624,42 @@ describe('hook-admin.mjs', () => {
       assert.equal(JSON.parse(runAdmin(['state'])).enabled, true, 'a fresh merged read confirms it stayed on');
     });
 
+    // Regression: the mirror image of the case above. Comparing only
+    // against shared's own value skipped setEnabled() whenever shared
+    // already matched the request, even when a local override was masking
+    // shared and making the *effective* (merged) state the opposite of what
+    // was requested. Skipping setEnabled() here skips its side effects too
+    // (recording local consent, repairing hook manifests), so the project
+    // ends up reporting "enabled" once the masking override clears, without
+    // the hook ever actually having been installed.
+    it('apply still runs setEnabled\'s side effects when shared already matches the request but a local override was masking it', () => {
+      fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
+      fs.writeFileSync(getConfigPath(cwd), JSON.stringify({ hook: { enabled: true } }));
+      fs.writeFileSync(getLocalConfigPath(cwd), JSON.stringify({ hook: { enabled: false } }));
+      // Merged (local wins) reads as "off", the opposite of shared and of
+      // the request about to be applied.
+      assert.equal(JSON.parse(runAdmin(['state'])).enabled, false);
+
+      const applied = JSON.parse(
+        execFileSync(process.execPath, [script, 'apply'], {
+          cwd,
+          input: JSON.stringify({ enabled: true, ignoreRules: [], ignoreFiles: [], ignoreValues: [] }),
+          encoding: 'utf-8',
+        }),
+      );
+      assert.equal(applied.enabled, true, 'the requested turn-on must be reflected immediately');
+
+      const local = JSON.parse(fs.readFileSync(getLocalConfigPath(cwd), 'utf-8'));
+      assert.equal(local.hook.enabled, undefined, 'the stale local override must be cleared');
+      assert.equal(
+        local.hook.consent,
+        'accepted',
+        'setEnabled(true)\'s consent recording must have run, proving the enable actually executed rather than being skipped because shared already matched',
+      );
+
+      assert.equal(JSON.parse(runAdmin(['state'])).enabled, true, 'a fresh merged read confirms the hook is actually on');
+    });
+
     // Regression for a round-2 PR #15 review thread: readConfig() reads
     // detector keys (ignoreRules/ignoreFiles/ignoreValues) from a config's
     // `hook` section too, for back-compat with configs written before the
@@ -3288,6 +3324,29 @@ describe('resolveTargetFiles()', () => {
 
   it('still rejects a URI-shaped tool_input.file_path', () => {
     assert.deepEqual(resolveTargetFiles({ tool_input: { file_path: 'xd://probe.tsx' } }, '/proj'), []);
+  });
+
+  // Regression: the guard used to require "scheme://" (an authority part),
+  // so a scheme-prefixed virtual document with no "//" at all sailed
+  // through as if it were a real filesystem path. Plenty of common editor
+  // targets are exactly this shape.
+  it('rejects scheme-prefixed virtual documents that have no "//" authority part', () => {
+    assert.deepEqual(resolveTargetFiles({ tool_input: { file_path: 'untitled:Untitled-1' } }, '/proj'), []);
+    assert.deepEqual(
+      resolveTargetFiles({ tool_input: { file_path: 'vscode-notebook-cell:/path/to/notebook.ipynb#cell' } }, '/proj'),
+      [],
+    );
+  });
+
+  // Regression guard for the fix above: a Windows drive letter ("C:\..." or
+  // "D:/...") matches the same "single letter, colon" syntax a one-letter
+  // URI scheme would, but is never a scheme in practice. Matching scheme
+  // prefixes generally (not just "scheme://") makes this the one case that
+  // needs an explicit exemption rather than falling out of the "://" check
+  // for free.
+  it('does not mistake a Windows drive letter for a URI scheme', () => {
+    assert.deepEqual(resolveTargetFiles({ tool_input: { file_path: 'C:/Users/dev/App.tsx' } }, '/proj'), ['C:/Users/dev/App.tsx']);
+    assert.deepEqual(resolveTargetFiles({ tool_input: { file_path: 'D:\\Users\\dev\\App.tsx' } }, '/proj'), ['D:\\Users\\dev\\App.tsx']);
   });
 });
 
