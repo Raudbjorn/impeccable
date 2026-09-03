@@ -91,10 +91,8 @@ const NEXT_PROXY_FILES = new Set([
 const NEXT_CONFIG_FILES = [
   'next.config.js',
   'next.config.mjs',
-  'next.config.cjs',
   'next.config.ts',
   'next.config.mts',
-  'next.config.cts',
 ];
 const MIDDLEWARE_HINT = /headers\.set\(\s*["']Content-Security-Policy["']/i;
 const META_TAG_HINT = /http-equiv\s*=\s*["']Content-Security-Policy["']/i;

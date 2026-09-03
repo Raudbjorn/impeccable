@@ -298,6 +298,11 @@ describe('detectCsp — Next.js proxy placement', () => {
       ['apps/store/proxy.ts', 'middleware', ['apps/store/package.json']],
       ['lib/network/proxy.ts', null],
       ['apps/web/lib/proxy.ts', null, ['apps/web/app']],
+      // next.config.cjs/.cts are not Next.js config filenames; a nested
+      // proxy.ts next to one is not a Next.js project and must not be
+      // classified as middleware.
+      ['apps/legacy/proxy.ts', null, ['apps/legacy/next.config.cjs']],
+      ['apps/legacy-ts/proxy.ts', null, ['apps/legacy-ts/next.config.cts']],
     ]) {
       const tmp = mkdtempSync(join(tmpdir(), 'impeccable-proxy-placement-'));
       try {
@@ -306,6 +311,9 @@ describe('detectCsp — Next.js proxy placement', () => {
           if (marker.endsWith('package.json')) {
             mkdirSync(dirname(join(tmp, marker)), { recursive: true });
             writeFileSync(join(tmp, marker), JSON.stringify({ dependencies: { next: '^16.0.0' } }));
+          } else if (marker.endsWith('.cjs') || marker.endsWith('.cts')) {
+            mkdirSync(dirname(join(tmp, marker)), { recursive: true });
+            writeFileSync(join(tmp, marker), 'module.exports = {};\n');
           } else {
             mkdirSync(join(tmp, marker), { recursive: true });
           }
