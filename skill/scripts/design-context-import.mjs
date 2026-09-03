@@ -82,6 +82,46 @@ function isSeedDesignMd(designPath) {
   }
 }
 
+/* fstat().size is a snapshot from the instant it ran: for a regular file at
+   a fixed inode (O_NOFOLLOW already pinned that), the bytes behind it can
+   still grow after the stat -- a concurrent writer, or the same file kept
+   open and appended to -- so a size check taken once and a separate
+   handle.readFile() taken after it leaves the same gap the open-once
+   O_NOFOLLOW fix above closes for identity, just for size instead.
+   Reading at most `limit` bytes through this handle -- never more than
+   statSizeHint + 1, itself never more than maxBytes + 1 -- makes the read
+   itself bound memory regardless of how large the file has grown to by the
+   time this runs, rather than trusting the stat that preceded it. A file
+   that grew past its own stat size is still caught: the loop stops at
+   `limit` with real bytes left unread, so what comes back is a prefix that
+   either fails to parse as JSON (safe: nothing past `limit` was ever
+   touched) or, if `statSizeHint` itself already sat at the cap, trips the
+   oversized check below. This is deliberately sized from `statSizeHint`
+   rather than always allocating maxBytes + 1: the caller already knows the
+   file's stat size and it is almost always far below the cap, so the
+   common case (a normal-sized bundle) does not pay for the worst case's
+   buffer. handle.read() can return short reads even for a regular file, so
+   this loops until either `limit` is reached or read() reports EOF
+   (bytesRead === 0). */
+async function readBoundedUtf8(handle, statSizeHint, maxBytes) {
+  const limit = Math.min(statSizeHint + 1, maxBytes + 1);
+  const buffer = Buffer.allocUnsafe(limit);
+  let total = 0;
+  while (total < limit) {
+    const { bytesRead } = await handle.read(buffer, total, limit - total, null);
+    if (bytesRead === 0) break;
+    total += bytesRead;
+  }
+  // total === limit means more was available and unread past that point:
+  // either genuinely oversized (limit was capped by maxBytes + 1) or a
+  // truncated read of a file that grew past statSizeHint (limit was capped
+  // by that instead) -- in the second case JSON.parse on the resulting
+  // prefix is expected to fail on its own, which is a safe outcome, not
+  // one this function needs to distinguish from the first.
+  if (total >= limit && total > maxBytes) return { oversized: true, text: undefined };
+  return { oversized: false, text: buffer.toString('utf8', 0, total) };
+}
+
 function hasManagedState(cwd) {
   const target = paths(cwd);
   if (
@@ -173,10 +213,18 @@ try {
     if (!bundleStat.isFile()) {
       throw new Error(`${bundlePath} is not a regular file.`);
     }
+    // Cheap fast path only: an obviously oversized file is rejected here
+    // without ever allocating the bounded-read buffer below. It is not the
+    // enforcement -- the file can still grow past this snapshot before the
+    // read that follows, which is what readBoundedUtf8() actually guards.
     if (bundleStat.size > MAX_BUNDLE_FILE_BYTES) {
       throw new Error(`This bundle is ${bundleStat.size} bytes; this release reads bundles up to ${MAX_BUNDLE_FILE_BYTES} bytes.`);
     }
-    bundle = validateBundle(JSON.parse(await handle.readFile('utf8')));
+    const { oversized, text } = await readBoundedUtf8(handle, bundleStat.size, MAX_BUNDLE_FILE_BYTES);
+    if (oversized) {
+      throw new Error(`This bundle grew larger than this release reads bundles up to (${MAX_BUNDLE_FILE_BYTES} bytes).`);
+    }
+    bundle = validateBundle(JSON.parse(text));
     decodeBundleFiles(bundle);
   } finally {
     await handle.close();

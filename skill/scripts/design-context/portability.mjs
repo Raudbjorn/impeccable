@@ -274,7 +274,35 @@ async function collectFiles(cwd, { includeAssets = true } = {}) {
   const skipped = [];
   let total = 0;
 
-  const take = async (absolute, relative) => {
+  const take = async (absolute, relative, dirIdentity = null) => {
+    // dirIdentity pins the (dev, ino) of assetsDir/fontsDir captured right
+    // after the lstat-based symlink check below ran, before readdir() named
+    // this file. Node's fs/promises has no openat-style "enumerate and open
+    // relative to an already-open directory fd", so readdir() and this
+    // file's own open both re-resolve the directory's path independently --
+    // if assets/ or fonts/ is swapped for a symlink (or a different real
+    // directory) after that check but before this call, readdir() and the
+    // open below would both silently follow the swap. Re-checking identity
+    // here, once per file rather than once for the whole directory, does
+    // not close that window (portable Node has no primitive that can), but
+    // it shrinks it from "the entire directory walk" to "this one file",
+    // and a swap is caught on the very next file regardless of when it
+    // happened. cue.png calls take() with no dirIdentity: it is not
+    // enumerated from a directory this loop already validated, so there is
+    // nothing to pin it against.
+    if (dirIdentity) {
+      let currentDirStat;
+      try {
+        currentDirStat = await lstat(path.dirname(absolute));
+      } catch {
+        skipped.push({ path: relative, bytes: 0, reason: 'containing directory changed during export' });
+        return;
+      }
+      if (currentDirStat.dev !== dirIdentity.dev || currentDirStat.ino !== dirIdentity.ino) {
+        skipped.push({ path: relative, bytes: 0, reason: 'containing directory changed during export' });
+        return;
+      }
+    }
     // A symlink under the store could point anywhere on disk (a cloned
     // repo can carry one pointing at a local credential); reading it would
     // embed whatever it points at, and the export bundle is meant to be
@@ -349,13 +377,14 @@ async function collectFiles(cwd, { includeAssets = true } = {}) {
       skipped.push({ path: prefix, bytes: 0, reason: 'symlink, not a real directory' });
       continue;
     }
+    const dirIdentity = { dev: dirStat.dev, ino: dirStat.ino };
     let names = [];
     try {
       names = await readdir(dir);
     } catch {
       continue;
     }
-    for (const name of names.sort()) await take(path.join(dir, name), `${prefix}/${name}`);
+    for (const name of names.sort()) await take(path.join(dir, name), `${prefix}/${name}`, dirIdentity);
   }
   await take(target.cuePng, 'cue.png');
   return { files, skipped };
