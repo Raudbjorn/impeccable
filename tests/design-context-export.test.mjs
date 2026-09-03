@@ -1,7 +1,7 @@
-import { describe, it } from 'node:test';
+import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,8 +9,17 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCRIPT = path.join(ROOT, 'skill', 'scripts', 'design-context-export.mjs');
 
+// Every project makeCwd() creates, plus every sibling "outside-*" directory
+// this suite plants next to it, used to land directly under the shared OS
+// temp directory with nothing ever removing them. Nesting everything one
+// level under a single sandbox root means a project's siblings land inside
+// that root too (dirname(cwd) is the root, not the shared OS temp dir), so
+// one recursive removal after the whole suite catches all of it.
+const sandboxRoot = mkdtempSync(path.join(tmpdir(), 'design-context-export-sandbox-'));
+after(() => rmSync(sandboxRoot, { recursive: true, force: true }));
+
 function makeCwd() {
-  return mkdtempSync(path.join(tmpdir(), 'design-context-export-'));
+  return mkdtempSync(path.join(sandboxRoot, 'project-'));
 }
 
 function runExport(cwd, args = []) {

@@ -29,7 +29,15 @@ import {
    that seed as an empty store. A plain import then installed another
    project's answers on top while leaving the seed's own staged assets and
    manifests in place -- a mixed context, despite the refusal below existing
-   specifically to require --force before anything gets replaced. */
+   specifically to require --force before anything gets replaced.
+
+   A seed can also carry nothing under the store at all: DESIGN.md alone, at
+   the project root, is itself a valid record (design-context.md's own
+   no-argument status routing treats it that way). Without this check, a
+   plain import onto that project overlays another bundle's answers/context
+   on top of an existing, unrelated design world, and DESIGN.md itself is
+   left in place -- --design defaults to "skip", so nothing here even offers
+   to reconcile the mismatch. */
 function hasManagedState(cwd) {
   const target = paths(cwd);
   if (
@@ -37,7 +45,8 @@ function hasManagedState(cwd) {
     existsSync(target.contextJson) ||
     existsSync(target.cuePng) ||
     existsSync(target.cuesJson) ||
-    existsSync(target.fontsManifestJson)
+    existsSync(target.fontsManifestJson) ||
+    existsSync(path.resolve(cwd, 'DESIGN.md'))
   ) {
     return true;
   }
@@ -134,6 +143,14 @@ try {
   // the whole thing) before any of those checks ever run. Reject an
   // oversized file by its own size, before reading or parsing it at all.
   const bundleStat = await stat(bundlePath);
+  // The size check above is only meaningful for a regular file: a FIFO or
+  // character device commonly reports size 0 regardless of what actually
+  // flows through it, so one named `bundle.json` would sail past that check
+  // and then block (or stream unbounded data) in the readFile() below,
+  // which has no cap of its own.
+  if (!bundleStat.isFile()) {
+    throw new Error(`${bundlePath} is not a regular file.`);
+  }
   if (bundleStat.size > MAX_BUNDLE_FILE_BYTES) {
     throw new Error(`This bundle is ${bundleStat.size} bytes; this release reads bundles up to ${MAX_BUNDLE_FILE_BYTES} bytes.`);
   }

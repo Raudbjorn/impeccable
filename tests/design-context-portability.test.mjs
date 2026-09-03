@@ -1,6 +1,6 @@
-import { describe, it } from 'node:test';
+import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readdir, stat, readFile, writeFile as writeFileP, mkdir as mkdirP } from 'node:fs/promises';
+import { mkdtemp, readdir, stat, readFile, writeFile as writeFileP, mkdir as mkdirP, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
@@ -9,8 +9,20 @@ import path from 'node:path';
 import { importDesignContext, exportDesignContext } from '../skill/scripts/design-context/portability.mjs';
 import { paths, readAnswers, writeJsonAtomic } from '../skill/scripts/design-context/store.mjs';
 
+// Every project makeCwd() creates, plus every sibling "outside-*"
+// directory or file the tests below plant next to it (path.join(path.
+// dirname(cwd), ...)), used to land directly under the shared OS temp
+// directory with nothing ever removing them -- across this suite's fixtures
+// (including the 8-33 MiB size-cap ones), a run leaked tens of megabytes
+// and hundreds of files. Nesting everything one level under a single
+// sandbox root means a project's siblings land inside that same root too
+// (dirname(cwd) is the root, not the shared OS temp dir), so one recursive
+// removal after the whole suite catches all of it.
+const sandboxRoot = await mkdtemp(path.join(tmpdir(), 'design-context-portability-sandbox-'));
+after(() => rm(sandboxRoot, { recursive: true, force: true }));
+
 async function makeCwd() {
-  return mkdtemp(path.join(tmpdir(), 'design-context-portability-'));
+  return mkdtemp(path.join(sandboxRoot, 'project-'));
 }
 
 function bundleWithFiles(files) {
@@ -361,6 +373,29 @@ describe('importDesignContext symlink rejection', () => {
 
     assert.equal(result.written, 0, 'the directory must not be treated as written');
     assert.ok((await stat(path.join(target.assetsDir, 'logo.svg'))).isDirectory(), 'the directory must survive untouched');
+    // The rest of the import still completed instead of throwing partway through.
+    assert.equal(await readAnswers(cwd).then((a) => a['palette-primary']), '#B8422E');
+  });
+
+  // Regression: mkdir(path.dirname(absolute), {recursive:true}) ran outside
+  // the write loop's try/catch. When assets/ (or fonts/) is itself a plain
+  // file rather than a directory -- a shape hasManagedState() does not
+  // detect, so a plain, non-forced import can reach this loop -- mkdir()
+  // throws ENOTDIR uncaught, aborting the import after answers.json and
+  // context.json for this same import have already landed.
+  it('skips the whole assets/ entry instead of crashing with ENOTDIR when assets/ is a plain file', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(target.storeDir, { recursive: true });
+    await writeFileP(target.assetsDir, 'not a directory'); // assets/ itself is a regular file
+
+    const bundle = bundleWithFiles([
+      { path: 'assets/logo.svg', base64: Buffer.from('payload').toString('base64') },
+    ]);
+    const result = await importDesignContext(cwd, bundle);
+
+    assert.equal(result.written, 0, 'the entry under the blocked path must not be treated as written');
+    assert.equal(await readFile(target.assetsDir, 'utf8'), 'not a directory', 'the file at assets/ must survive untouched');
     // The rest of the import still completed instead of throwing partway through.
     assert.equal(await readAnswers(cwd).then((a) => a['palette-primary']), '#B8422E');
   });
@@ -839,6 +874,25 @@ describe('DESIGN.md symlink handling', () => {
     assert.equal(result.designWritten, false, 'writing through a dangling symlink must be refused');
     assert.equal(await stat(danglingTarget).then(() => true, () => false), false, 'nothing may be created at the link target');
   });
+
+  // Regression: the lstat()-then-writeFile() this replaced left a gap
+  // between the check and the write for another process to create or swap
+  // in a symlink at DESIGN.md in between; writeFile() would then follow it.
+  // The exclusive open('wx') makes the create itself the check, so there is
+  // no separate window to race -- but that also means an ordinary,
+  // already-there DESIGN.md (the common case: a project that already has
+  // one) must still be left untouched rather than EEXIST turning into an
+  // uncaught throw.
+  it('leaves an ordinary pre-existing DESIGN.md untouched instead of throwing on EEXIST', async () => {
+    const cwd = await makeCwd();
+    await writeFileP(path.resolve(cwd, 'DESIGN.md'), '# Original\n\nKeep me.\n');
+
+    const bundle = { ...bundleWithFiles([]), designMd: '# Imported\n\nNew direction.\n' };
+    const result = await importDesignContext(cwd, bundle, { design: 'write' });
+
+    assert.equal(result.designWritten, false, 'an existing DESIGN.md must not be overwritten by import');
+    assert.equal(await readFile(path.resolve(cwd, 'DESIGN.md'), 'utf8'), '# Original\n\nKeep me.\n');
+  });
 });
 
 describe('writeJsonAtomic', () => {
@@ -879,7 +933,7 @@ describe('writeJsonAtomic', () => {
   // to lower its own after starting.
   it('cleans up its temp file when the write itself fails (EFBIG under ulimit -f), not only when rename() fails', async () => {
     if (process.platform === 'win32') return; // ulimit -f is POSIX-only
-    const dir = await mkdtemp(path.join(tmpdir(), 'design-context-efbig-'));
+    const dir = await mkdtemp(path.join(sandboxRoot, 'efbig-'));
     const storeModuleUrl = pathToFileURL(path.resolve('skill/scripts/design-context/store.mjs')).href;
     const scriptPath = path.join(dir, 'probe.mjs');
     await writeFileP(scriptPath, [

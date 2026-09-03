@@ -1,7 +1,7 @@
-import { describe, it } from 'node:test';
+import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,8 +9,17 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCRIPT = path.join(ROOT, 'skill', 'scripts', 'design-context-import.mjs');
 
+// Every project makeCwd() creates, plus every sibling "outside-*" directory
+// this suite plants next to it, used to land directly under the shared OS
+// temp directory with nothing ever removing them. Nesting everything one
+// level under a single sandbox root means a project's siblings land inside
+// that root too (dirname(cwd) is the root, not the shared OS temp dir), so
+// one recursive removal after the whole suite catches all of it.
+const sandboxRoot = mkdtempSync(path.join(tmpdir(), 'design-context-import-sandbox-'));
+after(() => rmSync(sandboxRoot, { recursive: true, force: true }));
+
 function makeCwd() {
-  return mkdtempSync(path.join(tmpdir(), 'design-context-import-'));
+  return mkdtempSync(path.join(sandboxRoot, 'project-'));
 }
 
 function bundleFile(cwd, answers = { 'palette-primary': '#B8422E' }) {
@@ -23,8 +32,8 @@ function bundleFile(cwd, answers = { 'palette-primary': '#B8422E' }) {
   return 'bundle.json';
 }
 
-function runImport(cwd, args) {
-  return spawnSync(process.execPath, [SCRIPT, ...args], { cwd, encoding: 'utf8' });
+function runImport(cwd, args, opts = {}) {
+  return spawnSync(process.execPath, [SCRIPT, ...args], { cwd, encoding: 'utf8', ...opts });
 }
 
 describe('design-context-import.mjs already-has-a-context guard', () => {
@@ -86,6 +95,44 @@ describe('design-context-import.mjs already-has-a-context guard', () => {
     const res = runImport(cwd, [bundle, '--force']);
 
     assert.equal(res.status, 0, res.stderr);
+  });
+
+  // Regression: a pickerless seed can consist of DESIGN.md alone, at the
+  // project root, with nothing under .impeccable/ at all -- design-context.md's
+  // own no-argument status routing already treats that as a real record. A
+  // plain import used to overlay another bundle's answers/context onto that
+  // world without requiring --force, and left the existing DESIGN.md in
+  // place (--design defaults to "skip"), leaving a mixed context.
+  it('refuses a plain import into a project carrying only a root DESIGN.md', () => {
+    const cwd = makeCwd();
+    writeFileSync(path.join(cwd, 'DESIGN.md'), '# Seed\n\nSome direction.\n');
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.notEqual(res.status, 0, 'a project with only DESIGN.md must not read as empty');
+    assert.match(res.stderr, /already has a design context/);
+  });
+});
+
+// Regression: the bundle size check above stat()s the path and compares
+// only its `size`, which is meaningful for a regular file but not for a
+// FIFO or character device (commonly 0 regardless of what actually flows
+// through it, or unbounded). A bundle path pointing at one of those would
+// pass the size check and then reach readFile(), which has no cap of its
+// own and can block or read unbounded data.
+describe('design-context-import.mjs bundle non-regular-file guard', () => {
+  it('refuses a bundle path that is a FIFO instead of reading it', async () => {
+    if (process.platform === 'win32') return; // mkfifo is POSIX-only
+    const cwd = makeCwd();
+    const fifoPath = path.join(cwd, 'bundle.json');
+    const mkfifo = spawnSync('mkfifo', [fifoPath]);
+    if (mkfifo.error || mkfifo.status !== 0) return; // mkfifo unavailable in this environment
+
+    const res = runImport(cwd, ['bundle.json'], { timeout: 5000 });
+
+    assert.notEqual(res.status, 0, 'a FIFO must be refused, not read');
+    assert.match(res.stderr, /not a regular file/);
   });
 });
 
@@ -198,5 +245,28 @@ describe('design-context-import.mjs refuses a symlinked .impeccable before migra
 
     assert.notEqual(res.status, 0);
     assert.match(res.stderr, /is a symlink/);
+  });
+
+  // Regression: the move-source/destination paths above (assets/, fonts/,
+  // journal, and every legacy.* path) were checked unconditionally, even
+  // though migrate() only ever touches them when a legacy store
+  // (.impeccable/design-interview) actually exists on disk -- with none,
+  // migrate() returns after calling only migrateContextFromCues(), which
+  // never goes near target.assetsDir/target.fontsDir. A symlinked
+  // current-store assets/ on a project that was never migrated hard-failed
+  // the whole import even though exportDesignContext() itself tolerates
+  // that same symlink and continues past it.
+  it('still imports when the current-store assets/ is a symlink but no legacy store exists to migrate', () => {
+    const cwd = makeCwd();
+    const outsideDir = path.join(path.dirname(cwd), `outside-current-assets-${path.basename(cwd)}`);
+    mkdirSync(outsideDir, { recursive: true });
+    mkdirSync(path.join(cwd, '.impeccable', 'design-context'), { recursive: true });
+    symlinkSync(outsideDir, path.join(cwd, '.impeccable', 'design-context', 'assets'));
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.equal(res.status, 0, res.stderr);
+    assert.match(res.stdout, /IMPORTED \d+ files/);
   });
 });

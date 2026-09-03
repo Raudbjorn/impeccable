@@ -11,7 +11,7 @@
  * rewriting what it sent.
  */
 
-import { readFile, mkdir, readdir, rm, writeFile, lstat } from 'node:fs/promises';
+import { readFile, mkdir, readdir, rm, lstat, stat, open } from 'node:fs/promises';
 import path from 'node:path';
 import {
   paths,
@@ -138,15 +138,28 @@ export async function assertManagedRootsNotSymlinked(cwd) {
    legacy `.impeccable/design-interview` paths as move sources -- a
    symlinked source would let migrate() read or move content from outside
    the project into the store, the mirror image of a symlinked destination
-   moving content out. */
+   moving content out.
+
+   The move sources/destinations only exist to check when migrate() is
+   actually about to move something: with no legacy store on disk, migrate()
+   returns after calling only migrateContextFromCues() (contextJson/cuesJson),
+   the same call it makes again at the end of the legacy-move branch. Checking
+   the move paths unconditionally hard-fails a project with a symlinked
+   assets/ or fonts/ that was never migrated at all, even though
+   exportDesignContext() itself deliberately tolerates that same symlink and
+   continues. */
 export async function assertMigrationSourcesNotSymlinked(cwd) {
   const target = paths(cwd);
   const legacy = legacyPaths(cwd);
+  await assertNoneSymlinked(cwd, [target.contextJson, target.cuesJson]);
+  // stat() (follows symlinks), not lstat(): mirrors migrate()'s own gate,
+  // fs.existsSync(legacyDir), which reports false for a dangling symlink
+  // too. A legacy dir migrate() itself would silently skip past should not
+  // hard-refuse here either.
+  const legacyExists = await stat(legacy.legacyDir).then(() => true).catch(() => false);
+  if (!legacyExists) return;
   await assertNoneSymlinked(cwd, [
     target.answersJson,
-    target.contextJson,
-    target.cuesJson,
-    target.fontsManifestJson,
     target.journalJsonl,
     target.assetsDir,
     target.fontsDir,
@@ -740,9 +753,14 @@ export async function importDesignContext(cwd, bundle, { design = 'skip', force 
        rename() can't land on is an existing directory (an allowed one is
        enough: a user-created `assets/logo.svg/`, say); catch that rather
        than let it abort the import after earlier files in this loop, and
-       any forced rm()s before it, already landed. */
-    await mkdir(path.dirname(absolute), { recursive: true });
+       any forced rm()s before it, already landed. mkdir() belongs inside
+       this same try: `assets/` or `fonts/` as a plain file (not a
+       directory) -- a shape hasManagedState() does not detect either, so a
+       plain, non-forced import can reach here -- makes mkdir() throw
+       ENOTDIR just as uncaught as a bad rename() would, after answers.json
+       and context.json have already been written for this same import. */
     try {
+      await mkdir(path.dirname(absolute), { recursive: true });
       await writeFileAtomic(absolute, decoded.get(relative));
       written += 1;
     } catch (error) {
@@ -767,18 +785,24 @@ export async function importDesignContext(cwd, bundle, { design = 'skip', force 
   let designWritten = false;
   if (design === 'write' && typeof bundle.designMd === 'string' && bundle.designMd.trim()) {
     const designPath = path.resolve(cwd, 'DESIGN.md');
-    // lstat() instead of the readFile()-as-existence-probe this replaced:
-    // a *dangling* symlink at DESIGN.md (pointing at a path that does not
-    // yet exist) made readFile() fail the same way a missing file does, so
-    // the write below went ahead and followed the link, creating the
-    // bundle's content at whatever arbitrary path the link named. lstat()
-    // sees the link itself regardless of whether its target exists.
-    const existingDesign = await lstat(designPath).catch(() => null);
-    if (!existingDesign) {
-      await writeFile(designPath, bundle.designMd);
-      designWritten = true;
-    } else if (existingDesign.isSymbolicLink()) {
-      process.stderr.write('Skipped writing DESIGN.md: a pre-existing symlink there would be followed\n');
+    // An lstat()-then-writeFile() check (what this replaced) still leaves a
+    // gap between the check and the write for another process to create or
+    // swap in a symlink at designPath in between; writeFile() would then
+    // follow it. 'wx' (O_CREAT|O_EXCL) makes the open itself the create, so
+    // there is no separate check to race: it fails with EEXIST the instant
+    // anything -- file, symlink, or directory -- already occupies the path,
+    // which is exactly the case to skip rather than write through.
+    try {
+      const handle = await open(designPath, 'wx');
+      try {
+        await handle.writeFile(bundle.designMd);
+        designWritten = true;
+      } finally {
+        await handle.close();
+      }
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      process.stderr.write('Skipped writing DESIGN.md: something already exists there\n');
     }
   }
 
