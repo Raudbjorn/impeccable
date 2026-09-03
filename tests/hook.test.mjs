@@ -1205,6 +1205,34 @@ describe('hook-admin.mjs', () => {
     assert.equal(fs.existsSync(path.join(cwd, '.omp', 'hooks', 'post', 'impeccable.js')), false);
   });
 
+  it('hooks on backs up an unowned oh-my-pi hook module before replacing it', () => {
+    fs.mkdirSync(path.join(cwd, '.omp', 'skills', 'impeccable', 'scripts'), { recursive: true });
+    const dest = path.join(cwd, '.omp', 'hooks', 'post', 'impeccable.js');
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, 'export default function someoneElsesHook(pi) {}\n');
+
+    const out = runAdmin(['on']);
+    assert.match(out, /Backed up malformed manifest\(s\):.*impeccable\.js\.bak/);
+
+    assert.equal(
+      fs.readFileSync(`${dest}.bak`, 'utf-8'),
+      'export default function someoneElsesHook(pi) {}\n',
+    );
+    assert.match(fs.readFileSync(dest, 'utf-8'), /export default function impeccableHook\(pi\)/);
+  });
+
+  it('hooks on replaces its own outdated oh-my-pi hook module without a backup', () => {
+    fs.mkdirSync(path.join(cwd, '.omp', 'skills', 'impeccable', 'scripts'), { recursive: true });
+    const dest = path.join(cwd, '.omp', 'hooks', 'post', 'impeccable.js');
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, 'export default function impeccableHook(pi) { /* an older build */ }\n');
+
+    const out = runAdmin(['on']);
+    assert.doesNotMatch(out, /Backed up/);
+    assert.equal(fs.existsSync(`${dest}.bak`), false);
+    assert.match(fs.readFileSync(dest, 'utf-8'), /export default function impeccableHook\(pi\)/);
+  });
+
   it('ignore-rule overused-font requires explicit broad suppression', () => {
     assert.throws(
       () => runAdmin(['ignore-rule', 'overused-font']),

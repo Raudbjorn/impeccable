@@ -462,6 +462,14 @@ function repairHookManifests(cwd) {
         result.already.push(target.provider);
         continue;
       }
+      // A foreign file at this path (no Impeccable marker) is a user-managed
+      // hook, not ours to overwrite silently — back it up first, the same
+      // treatment the JSON branch above gives a manifest it can't parse.
+      if (current !== null && !current.includes(OMP_HOOK_MODULE_MARKER)) {
+        const backup = `${dest}.bak`;
+        fs.copyFileSync(dest, backup);
+        result.backups.push(backup);
+      }
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.writeFileSync(dest, content);
       result.written.push(target.provider);
