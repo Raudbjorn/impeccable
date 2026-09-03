@@ -381,4 +381,61 @@ describe('design-context-import.mjs validates the bundle before migrate() runs',
       'the legacy asset must still be at its original path: migrate() must never have run before the bundle was rejected',
     );
   });
+
+  // Regression: validateBundle() only checks the bundle's envelope (kind,
+  // schemaVersion, answers shape). The deeper per-file checks -- entry
+  // count, decoded size, canonical base64 -- lived only inside
+  // importDesignContext(), called after migrate(); a bundle that failed one
+  // of those still let migrate() run first. decodeBundleFiles() (the same
+  // function importDesignContext() itself now calls) runs here too, so
+  // these are caught before migrate() has a chance to move anything.
+  it('does not migrate a legacy store when the named bundle names too many files', () => {
+    const cwd = makeCwd();
+    const legacyDir = path.join(cwd, '.impeccable', 'design-interview');
+    mkdirSync(path.join(legacyDir, 'assets'), { recursive: true });
+    writeFileSync(path.join(legacyDir, 'assets', 'logo.svg'), '<svg></svg>');
+    const files = Array.from({ length: 513 }, (_, i) => ({
+      path: `assets/file-${i}.png`,
+      base64: Buffer.from('x').toString('base64'),
+    }));
+    writeFileSync(path.join(cwd, 'bundle.json'), JSON.stringify({
+      kind: 'impeccable-design-context',
+      schemaVersion: 1,
+      answers: null,
+      files,
+    }));
+
+    const res = runImport(cwd, ['bundle.json']);
+
+    assert.notEqual(res.status, 0, 'a bundle naming too many files must be refused');
+    assert.match(res.stderr, /imports at most/);
+    assert.equal(
+      existsSync(path.join(legacyDir, 'assets', 'logo.svg')),
+      true,
+      'the legacy asset must still be at its original path: migrate() must never have run before the bundle was rejected',
+    );
+  });
+
+  it('does not migrate a legacy store when the named bundle carries invalid base64', () => {
+    const cwd = makeCwd();
+    const legacyDir = path.join(cwd, '.impeccable', 'design-interview');
+    mkdirSync(path.join(legacyDir, 'assets'), { recursive: true });
+    writeFileSync(path.join(legacyDir, 'assets', 'logo.svg'), '<svg></svg>');
+    writeFileSync(path.join(cwd, 'bundle.json'), JSON.stringify({
+      kind: 'impeccable-design-context',
+      schemaVersion: 1,
+      answers: null,
+      files: [{ path: 'assets/logo.svg', base64: 'not-!!valid-base64!!' }],
+    }));
+
+    const res = runImport(cwd, ['bundle.json']);
+
+    assert.notEqual(res.status, 0, 'a bundle with invalid base64 must be refused');
+    assert.match(res.stderr, /valid base64/);
+    assert.equal(
+      existsSync(path.join(legacyDir, 'assets', 'logo.svg')),
+      true,
+      'the legacy asset must still be at its original path: migrate() must never have run before the bundle was rejected',
+    );
+  });
 });

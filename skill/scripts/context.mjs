@@ -1369,6 +1369,10 @@ async function appendCompRoundOpenDirective(parts, ctx) {
 // error. Same reason `.impeccable/config.json` is spelled out below. If the
 // store ever moves, this list moves with it.
 const DESIGN_CONTEXT_DIR = '.impeccable/design-context';
+// The cue/font-pairing manifests live in a separate workspace dir, not
+// under DESIGN_CONTEXT_DIR: see the same split in store.mjs (STORE_DIR vs
+// WORKSPACE_DIR).
+const DESIGN_WORKSPACE_DIR = '.impeccable/visual-cues';
 
 function appendDesignContextDirective(parts, ctx) {
   // The resolved project decides first, same precedence every other root
@@ -1387,44 +1391,64 @@ function appendDesignContextDirective(parts, ctx) {
       answersJson: path.join(root, DESIGN_CONTEXT_DIR, 'answers.json'),
       contextJson: path.join(root, DESIGN_CONTEXT_DIR, 'context.json'),
       assetsDir: path.join(root, DESIGN_CONTEXT_DIR, 'assets'),
+      fontsDir: path.join(root, DESIGN_CONTEXT_DIR, 'fonts'),
+      cuesJson: path.join(root, DESIGN_WORKSPACE_DIR, 'cues.json'),
+      fontsManifestJson: path.join(root, DESIGN_WORKSPACE_DIR, 'fonts.json'),
     };
     let cueExists = false;
     let answersExist = false;
     let contextExists = false;
+    let cuesJsonExists = false;
+    let fontsManifestExists = false;
     let assetNames = [];
+    let fontNames = [];
     try { cueExists = fs.existsSync(store.cuePng); } catch {}
     try { answersExist = fs.existsSync(store.answersJson); } catch {}
     try { contextExists = fs.existsSync(store.contextJson); } catch {}
+    try { cuesJsonExists = fs.existsSync(store.cuesJson); } catch {}
+    try { fontsManifestExists = fs.existsSync(store.fontsManifestJson); } catch {}
     try {
       assetNames = fs.readdirSync(store.assetsDir).filter((name) => !name.startsWith('.'));
     } catch {}
+    try {
+      fontNames = fs.readdirSync(store.fontsDir).filter((name) => !name.startsWith('.'));
+    } catch {}
     // A root imported from an `answers: null` bundle (the pickerless-seed
     // signal) can carry only context.json -- no cue, no answers, no staged
-    // assets -- and still be the real managed record for this root. Missing
-    // it here fell through to the next root, reporting the wrong project's
-    // design context (or none at all) instead.
-    if (!cueExists && !answersExist && !contextExists && assetNames.length === 0) continue;
+    // assets -- and still be the real managed record for this root. hasManagedState()
+    // (design-context-import.mjs) and buildBundle() (portability.mjs) both also
+    // treat a cue manifest or font manifest alone as real managed state; missing
+    // any of these here fell through to the next root, reporting the wrong
+    // project's design context (or none at all) instead.
+    const hasStagedMaterial = assetNames.length > 0 || fontNames.length > 0;
+    if (!cueExists && !answersExist && !contextExists && !cuesJsonExists && !fontsManifestExists && !hasStagedMaterial) continue;
 
     const rel = (target) => path.relative(process.cwd(), target) || target;
     const pieces = [];
     if (cueExists) pieces.push(`${rel(store.cuePng)} (the image the user picked the palette from)`);
     if (assetNames.length > 0) pieces.push(`${rel(store.assetsDir)}/ (staged brand material: ${assetNames.join(', ')})`);
+    if (fontNames.length > 0) pieces.push(`${rel(store.fontsDir)}/ (staged font files: ${fontNames.join(', ')})`);
     if (answersExist) pieces.push(`${rel(store.answersJson)} (every questionnaire decision, per surface)`);
     if (contextExists) pieces.push(`${rel(store.contextJson)} (the interview's chat half, with each staged file's kind and note under context.assets)`);
+    if (cuesJsonExists) pieces.push(`${rel(store.cuesJson)} (the generated cue/palette manifest)`);
+    if (fontsManifestExists) pieces.push(`${rel(store.fontsManifestJson)} (the chosen font pairing)`);
     const directive = [
       'DESIGN_CONTEXT: the visual world on record was chosen by the user in the design interview, and the interview record is files, not only prose: ' + pieces.join('; ') + '.',
     ];
-    // A context-only record (no cue, no staged assets -- possible now that
-    // the check above admits it) has no pixel truth to open; telling the
-    // model to open files that do not exist is an instruction it cannot
-    // follow. An asset-only record (staged logo/moodboard, no cue.png --
-    // the pickerless interview never touches cue.png) needs its own wording
-    // too: the cue-image clause above named a file that would not exist.
-    if (cueExists && assetNames.length > 0) {
+    // A context-only or manifest-only record (no cue, no staged assets --
+    // possible now that the check above admits it) has no pixel truth to
+    // open; telling the model to open files that do not exist is an
+    // instruction it cannot follow. An asset-only record (staged
+    // logo/moodboard, no cue.png -- the pickerless interview never touches
+    // cue.png) needs its own wording too: the cue-image clause above named
+    // a file that would not exist. Staged font files count as staged
+    // material the same way staged assets do; the cue/font-pairing
+    // manifests do not -- they are metadata, not something to look at.
+    if (cueExists && hasStagedMaterial) {
       directive.push("Before building or comping any surface on this world, open the cue image and every staged asset; they are the world's pixel truth, and a staged logo is the project's real mark.");
     } else if (cueExists) {
       directive.push("Before building or comping any surface on this world, open the cue image; it is the world's pixel truth.");
-    } else if (assetNames.length > 0) {
+    } else if (hasStagedMaterial) {
       directive.push("Before building or comping any surface on this world, open every staged asset; they are the world's pixel truth, and a staged logo is the project's real mark.");
     }
     directive.push('reference/new-work.md names where each rides (comp reference, build material, reviewer calibration).');

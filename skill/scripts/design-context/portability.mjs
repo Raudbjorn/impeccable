@@ -404,6 +404,14 @@ async function buildBundle(cwd, { includeAssets = true, now = new Date() } = {})
     context: stored,
     answers,
     fonts,
+    // Whole, like fonts above: `chosenCue` alone (derived from
+    // cues.palette[answers['palette-source']]) carries only the one
+    // dealt cue an answered questionnaire actually picked, so a project
+    // whose only retained state is this manifest -- no answers, hence no
+    // palette-source to derive chosenCue from -- exported a bundle that
+    // could not reconstruct it: import fell back to writing an empty
+    // { cues: [], palette: {} }, discarding whatever was really on disk.
+    cues,
     chosenCue: chosenCuePalette ? { slug: source, palette: chosenCuePalette } : null,
     designMd,
     files,
@@ -634,38 +642,15 @@ export function validateBundle(bundle) {
   return bundle;
 }
 
-export async function importDesignContext(cwd, bundle, { design = 'skip', force = false } = {}) {
-  validateBundle(bundle);
-  const target = paths(cwd);
-
-  /* hasManagedState() (design-context-import.mjs) only probes specific files
-     inside the store; an empty store root that is itself a symlink to
-     somewhere outside the project passes that guard with nothing to find
-     there. Every write below -- the forced rm()s, writeAnswers, writeContext,
-     and the per-file writes -- resolves through target.storeDir, so a
-     symlinked root would carry all of them outside the project before the
-     per-file containment walk further down ever runs. Checking only
-     target.storeDir itself is not enough either: an ancestor such as
-     `.impeccable` can be the symlink, in which case target.storeDir may not
-     even exist yet under it, and a symlinked `.impeccable/visual-cues`
-     carries the cue/font manifest writes further down outside the project
-     while sitting entirely outside storeDir. Walk every existing ancestor of
-     both managed roots before any mutation, not after the first one. */
-  const storeLinked = await symlinkedAncestor(target.storeDir, cwd);
-  if (storeLinked) {
-    throw new Error(`${path.relative(cwd, storeLinked)} is a symlink; refusing to import through it.`);
-  }
-  const workspaceLinked = await symlinkedAncestor(path.dirname(target.cuesJson), cwd);
-  if (workspaceLinked) {
-    throw new Error(`${path.relative(cwd, workspaceLinked)} is a symlink; refusing to import through it.`);
-  }
-
-  /* Decode and size-check every file entry before any mutation below. The
-     export side enforces MAX_FILE_BYTES / MAX_BUNDLE_BYTES on the way out;
-     the import side owes the same bound on the way in, plus an entry-count
-     cap no real export ever produces, and it has to happen before a forced
-     import destroys the target's existing store -- not partway through the
-     per-file write loop that used to be the first place size was checked. */
+/* Decodes and size-checks every file entry a bundle carries, entirely from
+   the bundle object itself -- no cwd, no filesystem read or write. Pulled
+   out of importDesignContext() so a caller that wants the complete
+   non-mutating bundle preflight (envelope shape via validateBundle() above,
+   plus this) can run all of it before migrate() gets a chance to move
+   anything on disk, not just the envelope check. importDesignContext()
+   below still calls this itself; recomputing it a second time for an
+   already-preflighted bundle costs nothing a one-shot CLI import notices. */
+export function decodeBundleFiles(bundle) {
   const rawFiles = Array.isArray(bundle.files) ? bundle.files : [];
   if (rawFiles.length > MAX_BUNDLE_FILES) {
     throw new Error(`This bundle names ${rawFiles.length} files; this release imports at most ${MAX_BUNDLE_FILES}.`);
@@ -705,16 +690,53 @@ export async function importDesignContext(cwd, bundle, { design = 'skip', force 
       throw new Error(`Bundle entry ${relative} is larger than this release accepts.`);
     }
     // A duplicate path collapses silently in this map (last payload wins),
-    // but the write loop below still iterates rawFiles itself and would
-    // write that one payload once per occurrence, reporting `written` one
+    // but a write loop iterating the bundle's own raw file list would write
+    // that one payload once per occurrence, reporting a written count one
     // higher per duplicate than the number of files that actually exist on
-    // disk. Reject before any mutation below, rather than let the count and
-    // the bundle's own semantics quietly disagree.
+    // disk. Reject before any caller can mutate anything, rather than let
+    // the count and the bundle's own semantics quietly disagree.
     if (decoded.has(relative)) {
       throw new Error(`Bundle entry ${relative} is named more than once.`);
     }
     decoded.set(relative, bytes);
   }
+  return decoded;
+}
+
+export async function importDesignContext(cwd, bundle, { design = 'skip', force = false } = {}) {
+  validateBundle(bundle);
+  const target = paths(cwd);
+
+  /* hasManagedState() (design-context-import.mjs) only probes specific files
+     inside the store; an empty store root that is itself a symlink to
+     somewhere outside the project passes that guard with nothing to find
+     there. Every write below -- the forced rm()s, writeAnswers, writeContext,
+     and the per-file writes -- resolves through target.storeDir, so a
+     symlinked root would carry all of them outside the project before the
+     per-file containment walk further down ever runs. Checking only
+     target.storeDir itself is not enough either: an ancestor such as
+     `.impeccable` can be the symlink, in which case target.storeDir may not
+     even exist yet under it, and a symlinked `.impeccable/visual-cues`
+     carries the cue/font manifest writes further down outside the project
+     while sitting entirely outside storeDir. Walk every existing ancestor of
+     both managed roots before any mutation, not after the first one. */
+  const storeLinked = await symlinkedAncestor(target.storeDir, cwd);
+  if (storeLinked) {
+    throw new Error(`${path.relative(cwd, storeLinked)} is a symlink; refusing to import through it.`);
+  }
+  const workspaceLinked = await symlinkedAncestor(path.dirname(target.cuesJson), cwd);
+  if (workspaceLinked) {
+    throw new Error(`${path.relative(cwd, workspaceLinked)} is a symlink; refusing to import through it.`);
+  }
+
+  /* Decode and size-check every file entry before any mutation below (the
+     export side enforces MAX_FILE_BYTES / MAX_BUNDLE_BYTES on the way out;
+     the import side owes the same bound on the way in, plus an entry-count
+     cap no real export ever produces), and it has to happen before a forced
+     import destroys the target's existing store -- not partway through the
+     per-file write loop that used to be the first place size was checked. */
+  const rawFiles = Array.isArray(bundle.files) ? bundle.files : [];
+  const decoded = decodeBundleFiles(bundle);
 
   /* A forced import replaces the store; a plain one only ever runs against an
      empty one (design-context-import.mjs refuses otherwise). Without this,
@@ -818,10 +840,15 @@ export async function importDesignContext(cwd, bundle, { design = 'skip', force 
 
   /* The questionnaire cannot run without a cue manifest: its palette screen
      loads the deck and the built-in seeds together, and neither arrives if the
-     file is missing. An imported project gets a valid one either way, carrying
-     the chosen cue's dealt values when the bundle brought them. */
+     file is missing. An imported project gets a valid one either way. A
+     whole `bundle.cues` (carried since this release; an older bundle predating
+     it, or one that genuinely had no cues.json to export, has none) restores
+     the source project's manifest exactly, the deck included. Without one,
+     fall back to reconstructing just the chosen cue's dealt values, the same
+     narrower shape older bundles carried. */
   if (!(await readJsonSoft(target.cuesJson))) {
-    await writeJsonAtomic(target.cuesJson, {
+    const wholeCues = bundle.cues && typeof bundle.cues === 'object' && !Array.isArray(bundle.cues) ? bundle.cues : null;
+    await writeJsonAtomic(target.cuesJson, wholeCues || {
       cues: [],
       ...(bundle.chosenCue?.slug ? { palette: { [bundle.chosenCue.slug]: bundle.chosenCue.palette } } : { palette: {} }),
     });

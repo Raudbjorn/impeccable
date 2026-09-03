@@ -505,12 +505,44 @@ describe('exportDesignContext with no questionnaire record', () => {
     const cwd = await makeCwd();
     const target = paths(cwd);
     await mkdirP(path.dirname(target.cuesJson), { recursive: true });
-    await writeFileP(target.cuesJson, JSON.stringify({ cues: [], palette: {} }));
+    const cuesManifest = { cues: ['warm-terracotta', 'cool-slate'], palette: { 'warm-terracotta': { primary: '#B8422E' } } };
+    await writeFileP(target.cuesJson, JSON.stringify(cuesManifest));
 
     const result = await exportDesignContext(cwd);
 
     const bundle = JSON.parse(await readFile(result.bundlePath, 'utf8'));
     assert.equal(bundle.answers, null);
+    // Regression: buildBundle() used to carry only `chosenCue` (derived from
+    // cues.palette[answers['palette-source']]), which is null with no
+    // answers -- exactly this shape -- so the export could not actually
+    // reconstruct the manifest it claimed to have captured. The whole
+    // manifest must ride along, not just the one dealt entry an answered
+    // questionnaire would have picked.
+    assert.deepEqual(bundle.cues, cuesManifest, 'the whole cues.json manifest must be carried, not just chosenCue');
+  });
+
+  it('round-trips the full cue manifest (deck included) through export and import into a fresh project', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(path.dirname(target.cuesJson), { recursive: true });
+    const cuesManifest = {
+      cues: ['warm-terracotta', 'cool-slate', 'sun-ochre'],
+      palette: {
+        'warm-terracotta': { primary: '#B8422E' },
+        'cool-slate': { primary: '#3E4C5E' },
+      },
+    };
+    await writeFileP(target.cuesJson, JSON.stringify(cuesManifest));
+
+    const result = await exportDesignContext(cwd);
+    const bundle = JSON.parse(await readFile(result.bundlePath, 'utf8'));
+
+    const otherCwd = await makeCwd();
+    await importDesignContext(otherCwd, bundle);
+
+    const otherTarget = paths(otherCwd);
+    const importedCues = JSON.parse(await readFile(otherTarget.cuesJson, 'utf8'));
+    assert.deepEqual(importedCues, cuesManifest, 'the imported project must end up with the exact source manifest, deck included, not the empty default');
   });
 
   it('exports a project whose only retained state is the font manifest (fonts.json)', async () => {

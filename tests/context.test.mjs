@@ -617,6 +617,38 @@ describe('loadContext (monorepo project context)', () => {
     );
   });
 
+  it('reports the target\'s own font-manifest-only record instead of falling through to the root\'s answers', () => {
+    // Regression: the eligibility check never tested fontsDir, cuesJson, or
+    // fontsManifestJson at all, even though hasManagedState()
+    // (design-context-import.mjs) and buildBundle() (portability.mjs) both
+    // treat any of those alone as real managed state. A monorepo target
+    // whose only retained state was one of them read as empty here and fell
+    // through to the next root, reporting the invoking root's own answers.
+    writeMonorepo();
+    write('apps/dashboard/PRODUCT.md', '# Dashboard product\n');
+    write('.impeccable/design-context/answers.json', JSON.stringify({ 'palette-primary': '#ROOT000' }));
+    write('apps/dashboard/.impeccable/visual-cues/fonts.json', JSON.stringify({ heading: 'Inter', body: 'Inter' }));
+
+    const res = spawnSync(process.execPath, [SCRIPT_PATH, '--target', 'apps/dashboard/src/App.jsx'], {
+      cwd: scratch,
+      encoding: 'utf8',
+      env: { ...process.env, IMPECCABLE_NO_UPDATE_CHECK: '1', IMPECCABLE_NO_STALENESS_CHECK: '1' },
+    });
+    assert.equal(res.status, 0);
+    assert.match(res.stdout, /DESIGN_CONTEXT:/);
+    assert.match(res.stdout, /apps\/dashboard\/\.impeccable\/visual-cues\/fonts\.json/);
+    assert.doesNotMatch(
+      res.stdout,
+      /(?<!apps\/dashboard\/)\.impeccable\/design-context\/answers\.json/,
+      'the root\'s answers.json must not surface once the target has its own (font-manifest-only) record',
+    );
+    assert.doesNotMatch(
+      res.stdout,
+      /open the cue image|open every staged asset/,
+      'a manifest-only record has no pixel truth to open; the directive must not claim otherwise',
+    );
+  });
+
   it('tells the agent to open staged assets, not a nonexistent cue image, for an asset-only pickerless seed', () => {
     // Regression: the directive's pixel-truth clause fired on
     // `cueExists || assetNames.length > 0`, so an asset-only record (a
