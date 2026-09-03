@@ -1434,6 +1434,19 @@ function rewriteOmpHookModuleForSkillRoot(content, { skillRoot, absolute }) {
   );
 }
 
+// A fixed `${path}.bak` would clobber a backup left by a previous forced
+// replacement, silently losing whatever foreign content it held. Walk
+// `.bak`, `.bak.2`, `.bak.3`, ... to the first name not already taken.
+function nextAvailableBackupPath(path) {
+  let candidate = `${path}.bak`;
+  let n = 2;
+  while (existsSync(candidate)) {
+    candidate = `${path}.bak.${n}`;
+    n++;
+  }
+  return candidate;
+}
+
 // The file paths the CLI writes hook manifests to (the local override target,
 // e.g. settings.local.json — not the shared sibling).
 function expectedHookDests(root, providers) {
@@ -1628,7 +1641,7 @@ function copyProviderHooks(bundleDir, root, providers, { force = false, skillRoo
             if (!force) {
               throw new Error(`Existing hook module is not an Impeccable hook: ${dest}. Re-run with --force to replace it.`);
             }
-            writeFileSync(`${dest}.bak`, existing);
+            writeFileSync(nextAvailableBackupPath(dest), existing);
           }
         }
         mkdirSync(dirname(dest), { recursive: true });

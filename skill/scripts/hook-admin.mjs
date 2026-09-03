@@ -466,7 +466,7 @@ function repairHookManifests(cwd) {
       // hook, not ours to overwrite silently — back it up first, the same
       // treatment the JSON branch above gives a manifest it can't parse.
       if (current !== null && !current.includes(OMP_HOOK_MODULE_MARKER)) {
-        const backup = `${dest}.bak`;
+        const backup = nextAvailableBackupPath(dest);
         fs.copyFileSync(dest, backup);
         result.backups.push(backup);
       }
@@ -845,6 +845,19 @@ function manifestIsUnreadableButWired(manifestPath) {
   } catch {
     return true;
   }
+}
+
+// A fixed `${path}.bak` would clobber a backup left by a previous repair,
+// silently losing whatever foreign content it held. Walk `.bak`, `.bak.2`,
+// `.bak.3`, ... to the first name not already taken.
+function nextAvailableBackupPath(filePath) {
+  let candidate = `${filePath}.bak`;
+  let n = 2;
+  while (fs.existsSync(candidate)) {
+    candidate = `${filePath}.bak.${n}`;
+    n++;
+  }
+  return candidate;
 }
 
 /** Module-file twin of fileHasImpeccableHookMarker: a plain text scan, never JSON. */

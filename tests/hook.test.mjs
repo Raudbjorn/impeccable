@@ -1221,6 +1221,33 @@ describe('hook-admin.mjs', () => {
     assert.match(fs.readFileSync(dest, 'utf-8'), /export default function impeccableHook\(pi\)/);
   });
 
+  it('hooks on does not clobber an existing .bak when backing up a second unowned hook module', () => {
+    fs.mkdirSync(path.join(cwd, '.omp', 'skills', 'impeccable', 'scripts'), { recursive: true });
+    const dest = path.join(cwd, '.omp', 'hooks', 'post', 'impeccable.js');
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, 'export default function firstForeignHook(pi) {}\n');
+
+    runAdmin(['on']);
+    assert.equal(
+      fs.readFileSync(`${dest}.bak`, 'utf-8'),
+      'export default function firstForeignHook(pi) {}\n',
+    );
+
+    // A second foreign hook lands at the same path; repairing again must not
+    // overwrite the first backup.
+    fs.writeFileSync(dest, 'export default function secondForeignHook(pi) {}\n');
+    runAdmin(['on']);
+
+    assert.equal(
+      fs.readFileSync(`${dest}.bak`, 'utf-8'),
+      'export default function firstForeignHook(pi) {}\n',
+    );
+    assert.equal(
+      fs.readFileSync(`${dest}.bak.2`, 'utf-8'),
+      'export default function secondForeignHook(pi) {}\n',
+    );
+  });
+
   it('hooks on replaces its own outdated oh-my-pi hook module without a backup', () => {
     fs.mkdirSync(path.join(cwd, '.omp', 'skills', 'impeccable', 'scripts'), { recursive: true });
     const dest = path.join(cwd, '.omp', 'hooks', 'post', 'impeccable.js');

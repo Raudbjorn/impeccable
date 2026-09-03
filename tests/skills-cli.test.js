@@ -1973,6 +1973,26 @@ describe('copyProviderHooks: oh-my-pi module hook (not a JSON manifest)', () => 
     rmSync(tmp, { recursive: true, force: true });
   });
 
+  test('does not clobber an existing .bak when forcing a second unowned replacement', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'imp-hook-omp-force-twice-'));
+    const bundleDir = createOmpBundle(tmp);
+    const dest = join(tmp, '.omp', 'hooks', 'post', 'impeccable.js');
+    mkdirSync(dirname(dest), { recursive: true });
+    writeFileSync(dest, 'export default function firstForeignHook(pi) {}\n');
+
+    copyProviderHooks(bundleDir, tmp, ['.omp'], { skillRoot: tmp, force: true });
+    expect(readFileSync(`${dest}.bak`, 'utf8')).toBe('export default function firstForeignHook(pi) {}\n');
+
+    // A second foreign hook lands at the same path; forcing again must not
+    // overwrite the first backup.
+    writeFileSync(dest, 'export default function secondForeignHook(pi) {}\n');
+    copyProviderHooks(bundleDir, tmp, ['.omp'], { skillRoot: tmp, force: true });
+
+    expect(readFileSync(`${dest}.bak`, 'utf8')).toBe('export default function firstForeignHook(pi) {}\n');
+    expect(readFileSync(`${dest}.bak.2`, 'utf8')).toBe('export default function secondForeignHook(pi) {}\n');
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
   test('replaces our own outdated hook module without needing --force', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'imp-hook-omp-ours-'));
     const bundleDir = createOmpBundle(tmp);
