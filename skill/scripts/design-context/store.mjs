@@ -19,7 +19,7 @@
  */
 
 import fs from 'node:fs';
-import { readFile, mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { readFile, mkdir, open, rename, rm } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 
@@ -88,20 +88,38 @@ export async function writeFileAtomic(filePath, content) {
   // A predictable `${filePath}.tmp` name let a pre-placed symlink there
   // redirect this write outside the project. An unguessable suffix means
   // no symlink can be pre-placed at the exact path this call will use, and
-  // `wx` (O_CREAT|O_EXCL) refuses to write through one on the rare chance
-  // a name collides anyway.
+  // the exclusive open below refuses one on the rare chance a name
+  // collides anyway.
   const temporary = `${filePath}.${randomBytes(8).toString('hex')}.tmp`;
-  await writeFile(temporary, content, { flag: 'wx' });
+  // The exclusive open ('wx': O_CREAT|O_EXCL) is what actually creates
+  // `temporary`, so ownership is established the instant it resolves --
+  // before the write below. Writing via writeFile(temporary, content,
+  // {flag:'wx'}) instead (as this used to) folds the create and the write
+  // into one call: a failure partway through the write (ENOSPC, say) still
+  // leaves the file it already created on disk, but with no distinct point
+  // between "created" and "written" to hang cleanup off of, so that file
+  // leaked. Opening first separates the two, so cleanup below covers a
+  // failure at either step, not only a failed rename().
+  const handle = await open(temporary, 'wx');
+  let renamed = false;
   try {
+    await handle.writeFile(content);
+    await handle.close();
     await rename(temporary, filePath);
-  } catch (error) {
-    // Unlike the old fixed `${filePath}.tmp` name, a random suffix means a
-    // failed rename() (filePath is a directory, cross-device, permissions)
-    // leaves behind a temp file no later call will ever collide with or
-    // reuse -- repeated failures would otherwise accumulate a new orphan
-    // every time instead of the single stray file the old name bounded.
-    await rm(temporary, { force: true }).catch(() => {});
-    throw error;
+    renamed = true;
+  } finally {
+    if (!renamed) {
+      // Reaches here whether the write, the close, or the rename failed;
+      // closing again when the write path already closed successfully is
+      // harmless (Node rejects a double close, swallowed here).
+      await handle.close().catch(() => {});
+      // Unlike the old fixed `${filePath}.tmp` name, a random suffix means
+      // a failure here leaves behind a temp file no later call will ever
+      // collide with or reuse -- repeated failures would otherwise
+      // accumulate a new orphan every time instead of the single stray
+      // file the old name bounded.
+      await rm(temporary, { force: true }).catch(() => {});
+    }
   }
 }
 

@@ -2,6 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readdir, stat, readFile, writeFile as writeFileP, mkdir as mkdirP } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 import { importDesignContext, exportDesignContext } from '../skill/scripts/design-context/portability.mjs';
@@ -288,24 +290,58 @@ describe('importDesignContext symlink rejection', () => {
     assert.equal(outsideContents.length, 0, 'cues.json/fonts.json must never be written through the symlinked workspace dir');
   });
 
-  it('refuses to write when the destination file itself is a pre-existing symlink', async () => {
+  it('replaces a pre-existing symlink at the destination instead of following it', async () => {
     const cwd = await makeCwd();
     const target = paths(cwd);
     await mkdirP(target.assetsDir, { recursive: true });
     // Pre-existing link at the exact destination the bundle wants to write.
     const realOutside = path.join(cwd, '..', `secret-${path.basename(cwd)}.txt`);
     await writeFileP(realOutside, 'do not leak me');
-    const { symlink } = await import('node:fs/promises');
-    await symlink(realOutside, path.join(target.assetsDir, 'logo.svg'));
+    const { symlink, lstat } = await import('node:fs/promises');
+    const destination = path.join(target.assetsDir, 'logo.svg');
+    await symlink(realOutside, destination);
 
     const bundle = bundleWithFiles([
       { path: 'assets/logo.svg', base64: Buffer.from('payload').toString('base64') },
     ]);
     const result = await importDesignContext(cwd, bundle);
 
-    assert.equal(result.written, 0, 'a symlinked destination must not be followed');
-    // The link target still holds the original secret, not the bundle bytes.
+    // writeFileAtomic()'s rename() replaces the destination directory entry
+    // rather than following it: the link is gone and the bundle bytes landed
+    // at the leaf path itself.
+    assert.equal(result.written, 1, 'the atomic write must replace the symlink, not skip past it');
+    assert.equal((await lstat(destination)).isSymbolicLink(), false, 'the destination must no longer be a symlink');
+    assert.equal(await readFile(destination, 'utf8'), 'payload');
+    // The link's old target still holds the original secret, untouched.
     assert.equal(await readFile(realOutside, 'utf8'), 'do not leak me');
+  });
+
+  // Regression: a plain writeFile() truncates and rewrites the destination's
+  // existing inode in place. If that inode also has another hard link
+  // elsewhere in the filesystem, the bundle's bytes land there too -- an
+  // attacker who can hard-link into assets/ before the import runs gets
+  // their own file silently overwritten with whatever the bundle contains.
+  // The atomic write must instead create a fresh inode and rename it over
+  // the destination's directory entry, leaving every other link to the old
+  // inode holding the old content.
+  it('does not corrupt other hard links to the destination file', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(target.assetsDir, { recursive: true });
+    const destination = path.join(target.assetsDir, 'logo.svg');
+    const linkedElsewhere = path.join(path.dirname(cwd), `hardlinked-${path.basename(cwd)}.svg`);
+    await writeFileP(destination, 'original shared content');
+    const { link } = await import('node:fs/promises');
+    await link(destination, linkedElsewhere);
+
+    const bundle = bundleWithFiles([
+      { path: 'assets/logo.svg', base64: Buffer.from('payload').toString('base64') },
+    ]);
+    const result = await importDesignContext(cwd, bundle);
+
+    assert.equal(result.written, 1, 'the destination itself must still be written');
+    assert.equal(await readFile(destination, 'utf8'), 'payload');
+    assert.equal(await readFile(linkedElsewhere, 'utf8'), 'original shared content', 'the other hard link must not see the bundle bytes');
   });
 
   // Regression: a pre-existing directory at an allowed destination (a user
@@ -657,6 +693,28 @@ describe('exportDesignContext symlink handling', () => {
     await assert.rejects(exportDesignContext(cwd, { outDir: 'custom-out' }), /symlink/);
   });
 
+  // Regression: symlinkedAncestor() used a bare `relative.startsWith('..')`
+  // to decide a resolved path lies outside cwd (and so skip the walk
+  // entirely). That also matches an in-project name that merely begins with
+  // two dots -- "..sneaky" resolves inside cwd, same as "sneaky" would --
+  // wrongly waving through the one destination a pre-existing symlink named
+  // that way most needs checked.
+  it('refuses to export outright when an explicit --out named with a leading ".." (but still inside the project) is a symlink', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(target.storeDir, { recursive: true });
+    await writeFileP(target.answersJson, JSON.stringify({ 'palette-primary': '#B8422E' }));
+    const outsideDir = path.join(path.dirname(cwd), `outside-dotdot-out-${path.basename(cwd)}`);
+    const { symlink } = await import('node:fs/promises');
+    await mkdirP(outsideDir, { recursive: true });
+    await symlink(outsideDir, path.join(cwd, '..sneaky'));
+
+    await assert.rejects(exportDesignContext(cwd, { outDir: '..sneaky' }), /symlink/);
+
+    const outsideContents = await readdir(outsideDir).catch(() => []);
+    assert.equal(outsideContents.length, 0, 'nothing must have been written through the symlinked ..-prefixed name');
+  });
+
   // Regression: the destination check above only covers directory
   // components; a pre-existing design-context.md symlink at the leaf was
   // still followed by a plain writeFile(), overwriting its external target.
@@ -798,5 +856,54 @@ describe('writeJsonAtomic', () => {
 
     const leftover = (await readdir(cwd)).filter((name) => name !== path.basename(target));
     assert.deepEqual(leftover, [], 'no temp file may remain after a failed rename');
+  });
+
+  // Regression: writeFile(temporary, content, {flag:'wx'}) folds creating
+  // the temp file and writing its content into one call, wrapped in no
+  // try/catch of its own -- only the later rename() had one. A failure
+  // partway through that write (the file already exists on disk; content
+  // is still only partly flushed) propagated with no cleanup attempted at
+  // all. open(temporary, 'wx') separates creation from the write: ownership
+  // is established the instant open() resolves, before the write is
+  // attempted, so a write-time failure (not just a later rename() failure)
+  // now gets cleaned up too.
+  //
+  // A thrown-content-type error doesn't reach this: Node validates the
+  // `data` argument before touching the filesystem, for both the old
+  // single-call form and the new open()-then-write() form alike, so
+  // nothing is ever created to leak in that case. Forcing a real write-time
+  // failure needs a real OS limit: `ulimit -f` caps the process's max file
+  // size, so writing content past it fails with EFBIG only after the file
+  // already exists -- exactly the gap the old code left uncovered. Run as a
+  // child process because the limit is set per-process and Node has no API
+  // to lower its own after starting.
+  it('cleans up its temp file when the write itself fails (EFBIG under ulimit -f), not only when rename() fails', async () => {
+    if (process.platform === 'win32') return; // ulimit -f is POSIX-only
+    const dir = await mkdtemp(path.join(tmpdir(), 'design-context-efbig-'));
+    const storeModuleUrl = pathToFileURL(path.resolve('skill/scripts/design-context/store.mjs')).href;
+    const scriptPath = path.join(dir, 'probe.mjs');
+    await writeFileP(scriptPath, [
+      `import { writeFileAtomic } from '${storeModuleUrl}';`,
+      `import fs from 'node:fs';`,
+      `import path from 'node:path';`,
+      `const dir = process.env.TARGET_DIR;`,
+      `const target = path.join(dir, 'out.json');`,
+      `try {`,
+      `  await writeFileAtomic(target, 'x'.repeat(5 * 1024 * 1024));`,
+      `  console.log('WROTE');`,
+      `} catch (error) {`,
+      `  console.log('THREW:' + (error.code || error.message));`,
+      `}`,
+      `console.log('LEFTOVER:' + JSON.stringify(fs.readdirSync(dir).filter((name) => name.includes('.tmp'))));`,
+    ].join('\n'));
+
+    const result = spawnSync('bash', ['-c', `ulimit -f 1; node ${scriptPath}`], {
+      encoding: 'utf8',
+      env: { ...process.env, TARGET_DIR: dir },
+    });
+    if (result.error) return; // bash/ulimit unavailable in this environment; nothing to assert
+
+    assert.match(result.stdout, /THREW:EFBIG/, `expected an EFBIG failure mid-write; got stdout=${result.stdout} stderr=${result.stderr}`);
+    assert.match(result.stdout, /LEFTOVER:\[\]/, 'no temp file may remain after a write that fails partway through');
   });
 });

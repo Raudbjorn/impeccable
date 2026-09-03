@@ -85,7 +85,14 @@ async function symlinkedAncestor(targetPath, cwd) {
   const boundary = path.resolve(cwd);
   const resolved = path.resolve(targetPath);
   const relative = path.relative(boundary, resolved);
-  if (!relative || relative.startsWith('..')) return null;
+  // A bare `.startsWith('..')` also matches an in-project name that merely
+  // begins with those two characters ("..exports" resolves inside cwd,
+  // same as "exports" would), wrongly treating it as outside the boundary
+  // and skipping the walk below entirely -- exactly the case a pre-existing
+  // symlink named that way needs checked, not waved through. Only an exact
+  // ".." (targetPath is cwd's parent) or a "../" prefix (a genuine
+  // traversal segment) means resolved actually lies outside cwd.
+  if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`)) return null;
   let cursor = boundary;
   for (const segment of relative.split(path.sep).filter(Boolean)) {
     cursor = path.join(cursor, segment);
@@ -724,28 +731,23 @@ export async function importDesignContext(cwd, bundle, { design = 'skip', force 
       }
     }
     if (blocked) continue;
-    let existing;
-    try {
-      existing = await lstat(absolute);
-    } catch {
-      existing = null;
-    }
-    if (existing?.isSymbolicLink()) {
-      process.stderr.write(`Skipped ${relative}: a pre-existing symlink at the destination would be followed\n`);
-      continue;
-    }
-    if (existing && !existing.isFile()) {
-      // A directory at this path (an allowed one is enough: a user-created
-      // `assets/logo.svg/`, say) makes writeFile() below throw EISDIR,
-      // uncaught, aborting the import after the forced rm()s and any
-      // earlier file in this loop already landed -- a partially replaced
-      // store. The stat above already answers this; skip rather than crash.
-      process.stderr.write(`Skipped ${relative}: the destination is not a regular file\n`);
-      continue;
-    }
+    /* No lstat-and-branch here: a check-then-write gap is exactly what let a
+       pre-existing hard link or leaf symlink at `absolute` survive to the
+       write. writeFileAtomic() replaces the destination directory entry via
+       rename(), which neither follows a symlink there nor writes through a
+       hard link's shared inode -- so the write itself is the safety
+       boundary, not a stat taken moments earlier. The one destination shape
+       rename() can't land on is an existing directory (an allowed one is
+       enough: a user-created `assets/logo.svg/`, say); catch that rather
+       than let it abort the import after earlier files in this loop, and
+       any forced rm()s before it, already landed. */
     await mkdir(path.dirname(absolute), { recursive: true });
-    await writeFile(absolute, decoded.get(relative));
-    written += 1;
+    try {
+      await writeFileAtomic(absolute, decoded.get(relative));
+      written += 1;
+    } catch (error) {
+      process.stderr.write(`Skipped ${relative}: could not write the destination (${error.code || error.message})\n`);
+    }
   }
 
   /* The questionnaire cannot run without a cue manifest: its palette screen
