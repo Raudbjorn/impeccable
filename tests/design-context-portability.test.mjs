@@ -674,6 +674,33 @@ describe('exportDesignContext symlink handling', () => {
     assert.doesNotMatch(markdown, /do not export me/, 'the link target\'s bytes must never reach the readable export');
   });
 
+  // Coverage for openRegularFileNoFollow()'s replacement of a separate
+  // lstat(path)-then-readFile(path) pair (which left a window for a symlink
+  // swapped in between the two to be followed regardless of what the lstat
+  // saw -- not itself reproducible in a deterministic test, since it needs
+  // an exact race between two syscalls with no exposed yield point).
+  // Collecting files now opens with O_NOFOLLOW and reads through that same
+  // handle. A dangling symlink (target does not exist) confirms the new
+  // path handles that shape too: O_NOFOLLOW refuses to open a symlink
+  // outright (ELOOP) regardless of whether its target exists, so this
+  // passes on both the old lstat-based check and the new one -- it is not
+  // a regression test for the TOCTOU fix itself, only for this edge case.
+  it('skips a dangling symlinked asset instead of throwing', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(target.assetsDir, { recursive: true });
+    const danglingTarget = path.join(path.dirname(cwd), `dangling-asset-${path.basename(cwd)}.svg`);
+    const { symlink } = await import('node:fs/promises');
+    await symlink(danglingTarget, path.join(target.assetsDir, 'logo.svg'));
+    await writeFileP(path.resolve(cwd, 'DESIGN.md'), '# Seed\n');
+
+    const result = await exportDesignContext(cwd);
+    const bundle = JSON.parse(await readFile(result.bundlePath, 'utf8'));
+
+    assert.equal(bundle.files.length, 0, 'a dangling symlink must not be collected as a real file');
+    assert.ok(bundle.skipped?.some((s) => s.path === 'assets/logo.svg' && /symlink/.test(s.reason)));
+  });
+
   it('skips a symlinked assets/ directory itself instead of following readdir() through it', async () => {
     const cwd = await makeCwd();
     const target = paths(cwd);

@@ -11,7 +11,7 @@
  * rewriting what it sent.
  */
 
-import { readFile, mkdir, readdir, rm, lstat, stat, open } from 'node:fs/promises';
+import { mkdir, readdir, rm, lstat, stat, open, constants } from 'node:fs/promises';
 import path from 'node:path';
 import {
   paths,
@@ -208,6 +208,34 @@ function isCanonicalBase64(str) {
    Export
    ============================================================ */
 
+/* A separate lstat(path)-then-readFile(path) pair leaves a TOCTOU gap: both
+   calls look the path up fresh, so a symlink swapped in between them is
+   followed by readFile(), embedding whatever it points at in a bundle meant
+   to be handed to someone else -- exactly the leak the lstat check exists
+   to close. O_NOFOLLOW makes open() itself refuse a symlink outright
+   (ELOOP), and fstat()/read() through the resulting handle answer both
+   "what is this" and "what's in it" for the exact same inode open()
+   resolved, not whatever a race swapped in afterward. Returns the open
+   handle plus its stat on success; on failure, a `reason` naming why (for a
+   caller that reports skips) or `null` when there is nothing to report
+   (the path does not exist). */
+async function openRegularFileNoFollow(filePath) {
+  let handle;
+  try {
+    handle = await open(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch (error) {
+    if (error.code === 'ELOOP') return { ok: false, reason: 'symlink, not a real file' };
+    if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return { ok: false, reason: null };
+    throw error;
+  }
+  const fileStat = await handle.stat();
+  if (!fileStat.isFile()) {
+    await handle.close();
+    return { ok: false, reason: 'not a regular file' };
+  }
+  return { ok: true, handle, stat: fileStat };
+}
+
 async function collectFiles(cwd, { includeAssets = true } = {}) {
   const target = paths(cwd);
   const files = [];
@@ -216,54 +244,53 @@ async function collectFiles(cwd, { includeAssets = true } = {}) {
 
   const take = async (absolute, relative) => {
     // A symlink under the store could point anywhere on disk (a cloned
-    // repo can carry one pointing at a local credential); readFile()
-    // follows it, and the export bundle is meant to be handed to someone
-    // else, so a followed link would base64-embed whatever it points at.
-    // None of assets/, fonts/, or cue.png legitimately holds a link.
-    let stat;
-    try {
-      stat = await lstat(absolute);
-    } catch {
+    // repo can carry one pointing at a local credential); reading it would
+    // embed whatever it points at, and the export bundle is meant to be
+    // handed to someone else. None of assets/, fonts/, or cue.png
+    // legitimately holds a link. openRegularFileNoFollow() refuses one
+    // outright (O_NOFOLLOW) instead of checking then separately reading by
+    // path, closing the gap a race could otherwise use to swap one in
+    // between the check and the read.
+    const opened = await openRegularFileNoFollow(absolute);
+    if (!opened.ok) {
+      if (opened.reason) skipped.push({ path: relative, bytes: 0, reason: opened.reason });
       return;
     }
-    if (!stat.isFile()) {
-      skipped.push({
+    const { handle, stat: fileStat } = opened;
+    try {
+      // Reject by the cheap fstat size first so an oversized file is never
+      // fully read into memory just to be thrown away; the post-read check
+      // stays as the authority for a file that grows after this fstat.
+      if (fileStat.size > MAX_FILE_BYTES || total + fileStat.size > MAX_BUNDLE_BYTES) {
+        skipped.push({ path: relative, bytes: fileStat.size, reason: 'too large for the bundle' });
+        return;
+      }
+      // A count no import will accept is not worth generating: the caller
+      // gets a skipped entry naming why, rather than a bundle that fails
+      // whole on the way back in.
+      if (files.length >= MAX_BUNDLE_FILES) {
+        skipped.push({ path: relative, bytes: 0, reason: `bundle already holds the ${MAX_BUNDLE_FILES}-file maximum an import accepts` });
+        return;
+      }
+      let bytes;
+      try {
+        bytes = await handle.readFile();
+      } catch {
+        return;
+      }
+      if (bytes.length > MAX_FILE_BYTES || total + bytes.length > MAX_BUNDLE_BYTES) {
+        skipped.push({ path: relative, bytes: bytes.length, reason: 'too large for the bundle' });
+        return;
+      }
+      total += bytes.length;
+      files.push({
         path: relative,
-        bytes: 0,
-        reason: stat.isSymbolicLink() ? 'symlink, not a real file' : 'not a regular file',
+        mime: MIME.get(path.extname(relative).toLowerCase()) || 'application/octet-stream',
+        base64: bytes.toString('base64'),
       });
-      return;
+    } finally {
+      await handle.close();
     }
-    // Reject by the cheap stat.size first so an oversized file is never
-    // fully read into memory just to be thrown away; the post-read check
-    // stays as the authority for a file that grows between the two calls.
-    if (stat.size > MAX_FILE_BYTES || total + stat.size > MAX_BUNDLE_BYTES) {
-      skipped.push({ path: relative, bytes: stat.size, reason: 'too large for the bundle' });
-      return;
-    }
-    // A count no import will accept is not worth generating: the caller gets
-    // a skipped entry naming why, rather than a bundle that fails whole on
-    // the way back in.
-    if (files.length >= MAX_BUNDLE_FILES) {
-      skipped.push({ path: relative, bytes: 0, reason: `bundle already holds the ${MAX_BUNDLE_FILES}-file maximum an import accepts` });
-      return;
-    }
-    let bytes;
-    try {
-      bytes = await readFile(absolute);
-    } catch {
-      return;
-    }
-    if (bytes.length > MAX_FILE_BYTES || total + bytes.length > MAX_BUNDLE_BYTES) {
-      skipped.push({ path: relative, bytes: bytes.length, reason: 'too large for the bundle' });
-      return;
-    }
-    total += bytes.length;
-    files.push({
-      path: relative,
-      mime: MIME.get(path.extname(relative).toLowerCase()) || 'application/octet-stream',
-      base64: bytes.toString('base64'),
-    });
   };
 
   if (!includeAssets) return { files, skipped };
@@ -331,15 +358,22 @@ async function buildBundle(cwd, { includeAssets = true, now = new Date() } = {})
   let designMd = null;
   const designMdPath = path.resolve(cwd, 'DESIGN.md');
   try {
-    const designMdStat = await lstat(designMdPath);
-    if (designMdStat.isSymbolicLink()) {
-      // readFile() follows a symlink same as any other file; a cloned repo
-      // whose DESIGN.md is a link to somewhere outside the project would
-      // otherwise have that external file's bytes embedded verbatim in a
-      // bundle meant to be handed to someone else.
-      skipped.push({ path: 'DESIGN.md', bytes: 0, reason: 'symlink, not exported' });
-    } else {
-      designMd = await readFile(designMdPath, 'utf8');
+    // A separate lstat()-then-readFile() pair left a gap for a symlink
+    // swapped in between the two to be followed regardless: a cloned repo
+    // whose DESIGN.md is (or becomes, mid-race) a link to somewhere outside
+    // the project would otherwise have that external file's bytes embedded
+    // verbatim in a bundle meant to be handed to someone else.
+    // openRegularFileNoFollow() refuses a symlink at open() itself and
+    // reads through that same handle, closing the gap.
+    const opened = await openRegularFileNoFollow(designMdPath);
+    if (opened.ok) {
+      try {
+        designMd = await opened.handle.readFile('utf8');
+      } finally {
+        await opened.handle.close();
+      }
+    } else if (opened.reason) {
+      skipped.push({ path: 'DESIGN.md', bytes: 0, reason: opened.reason === 'symlink, not a real file' ? 'symlink, not exported' : opened.reason });
     }
   } catch {
     /* Not written yet, which an import is told about rather than guessing. */
