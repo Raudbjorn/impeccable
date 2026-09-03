@@ -1234,6 +1234,7 @@ const HOOK_MANIFESTS_BY_PROVIDER = Object.freeze({
   codex: ['.codex/hooks.json'],
   agents: ['.codex/hooks.json'],
   github: ['.github/hooks/impeccable.json'],
+  omp: ['.omp/hooks/post/impeccable.js'],
 });
 
 function truthyEnv(value) {
@@ -1262,7 +1263,21 @@ function hookEnabledAt(root) {
   return enabled;
 }
 
-const STOP_REVIEW_PROVIDERS = new Set(['claude-code', 'codex', 'agents']);
+const STOP_REVIEW_PROVIDERS = new Set(['claude-code', 'codex', 'agents', 'omp']);
+
+// oh-my-pi's hook is a loaded JS module, not a JSON manifest, so its "is this
+// wired" check is a plain text scan rather than a JSON.parse (which would
+// just throw, caught, and read as "not wired"). The module builds its
+// hook.mjs path via join(...) with separate string segments, so the literal
+// path never appears as one substring; the export's function name is the
+// stable, unique marker instead.
+function fileTextHasHookMarker(filePath) {
+  try {
+    return fs.readFileSync(filePath, 'utf-8').includes('impeccableHook');
+  } catch {
+    return false;
+  }
+}
 
 function automaticHookMode(ctx) {
   if (ctx.platform === 'android' || ctx.platform === 'adaptive') {
@@ -1274,8 +1289,15 @@ function automaticHookMode(ctx) {
   const roots = [...new Set([process.cwd(), ctx.projectRoot, ctx.repoRoot].filter(Boolean).map((root) => path.resolve(root)))];
   for (const root of roots) {
     for (const rel of manifests) {
-      const raw = readJson(path.join(root, rel));
-      if (raw?.hooks && valueHasHookMarker(raw.hooks)) {
+      const abs = path.join(root, rel);
+      let wired;
+      if (/\.m?js$/.test(rel)) {
+        wired = fileTextHasHookMarker(abs);
+      } else {
+        const raw = readJson(abs);
+        wired = Boolean(raw?.hooks && valueHasHookMarker(raw.hooks));
+      }
+      if (wired) {
         return STOP_REVIEW_PROVIDERS.has(IMPECCABLE_PROVIDER_ID) ? 'stop' : 'per-edit';
       }
     }

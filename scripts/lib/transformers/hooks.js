@@ -208,7 +208,15 @@ export function buildGitHubHooksManifest() {
 // oh-my-pi's hook is a loaded JS module (`pi.on(eventName, handler)`), not a
 // JSON manifest, so this is the one builder that returns literal file
 // content rather than an object every other caller JSON.stringify's — see
-// `hooksJsonFor()`'s `isModule` tag below. The payload it sends to hook.mjs
+// `hooksJsonFor()`'s `isModule` tag below. The exported function's name,
+// `impeccableHook`, is load-bearing: it is the marker
+// `skill/scripts/context.mjs`, `skill/scripts/hook-admin.mjs`, and
+// `cli/bin/commands/skills.mjs` each scan for (as `OMP_HOOK_MODULE_MARKER` or
+// its inline equivalent) to detect whether this hook is installed, since the
+// path string these markers use for every other provider never appears here
+// literally (it is built via `join(...)` with separate segments below).
+// Renaming it breaks detection in all three without any test failing here.
+// The payload it sends to hook.mjs
 // on stdin is deliberately shaped exactly like Claude Code's own
 // PostToolUse/Stop JSON: hook-lib.mjs's extraction (`resolveTargetFiles()`,
 // `isStopEvent()`, the `stop_hook_active` re-entrancy guard) and its default
@@ -224,11 +232,12 @@ import { dirname, join } from "node:path";
 
 const HOOK_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "skills", "impeccable", "scripts", "hook.mjs");
 
-function runHook(payload) {
-  const result = spawnSync(process.execPath, [HOOK_SCRIPT], {
+function runHook(payload, timeoutMs) {
+  const result = spawnSync("node", [HOOK_SCRIPT], {
     input: JSON.stringify(payload),
     encoding: "utf8",
     cwd: payload.cwd,
+    timeout: timeoutMs,
   });
   if (!result.stdout) return null;
   try {
@@ -270,7 +279,7 @@ export default function impeccableHook(pi) {
       tool_name: event.toolName,
       tool_input: { file_path: filePath },
       cwd: ctx.cwd,
-    });
+    }, ${TIMEOUT_SECONDS * 1000});
     if (!text) return;
     // ToolResultEventResult.content is a replacement content-block array, not
     // a string: the runner takes \`result.content ?? tool.content\`, so a bare
@@ -285,7 +294,7 @@ export default function impeccableHook(pi) {
       hook_event_name: "Stop",
       stop_hook_active: event.stop_hook_active === true,
       cwd: ctx.cwd,
-    });
+    }, ${STOP_TIMEOUT_SECONDS * 1000});
     // additionalContext alone is dropped. The runner only carries it into a
     // continuation when \`continue: true\` (or a blocking decision) rides along,
     // so without this the Stop findings are discarded as the session settles.

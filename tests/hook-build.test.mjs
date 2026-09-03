@@ -184,8 +184,17 @@ describe('hook manifest builders', () => {
     // Uses raw spawnSync (pi.exec() has no stdin option, and hook.mjs
     // requires stdin), and parses Claude's default payload() JSON envelope
     // back out on its own side.
-    assert.match(source, /spawnSync\(process\.execPath, \[HOOK_SCRIPT\]/);
+    assert.match(source, /spawnSync\("node", \[HOOK_SCRIPT\]/);
     assert.match(source, /hookSpecificOutput\?\.additionalContext/);
+    // A hung hook.mjs must not block edit/stop handling indefinitely. Each
+    // event passes its own timeout, matching the JSON providers' own
+    // TIMEOUT_SECONDS/STOP_TIMEOUT_SECONDS split; spawnSync's timeout kills
+    // the child and leaves result.stdout empty, which the existing
+    // `if (!result.stdout) return null;` already treats as no hook output.
+    assert.match(source, /function runHook\(payload, timeoutMs\)/);
+    assert.match(source, /timeout: timeoutMs/);
+    assert.match(source, /runHook\(\{[\s\S]*?hook_event_name: "PostToolUse"[\s\S]*?\}, 5000\)/);
+    assert.match(source, /runHook\(\{[\s\S]*?hook_event_name: "Stop"[\s\S]*?\}, 30000\)/);
     // ToolResultEventResult.content is a replacement content-block array
     // (packages/coding-agent/src/extensibility/shared-events.ts): the runner
     // takes `result.content ?? tool.content`, so returning a bare string both
@@ -247,6 +256,60 @@ describe('hook manifest builders', () => {
     // bug only for that harness.
     assert.match(source, /event\.tool_input\.file_path/);
     assert.match(source, /event\.input\.path/);
+  });
+
+  it('runs hook scripts with node when OMP owns process.execPath', async () => {
+    // A plain filesystem-shaped path, not the "xd://lsp" placeholder this
+    // used to carry: hasUriScheme()'s device-URI guard rejects anything
+    // scheme-prefixed before runHook() is ever reached, which "xd://lsp"
+    // incidentally is. This test's own point (process.execPath override) is
+    // unrelated to that guard, so it needs a path the guard lets through.
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-omp-hook-'));
+    const moduleDir = path.join(root, '.omp', 'hooks', 'post');
+    const scriptDir = path.join(root, '.omp', 'skills', 'impeccable', 'scripts');
+    fs.mkdirSync(moduleDir, { recursive: true });
+    fs.mkdirSync(scriptDir, { recursive: true });
+    const modulePath = path.join(moduleDir, 'impeccable.mjs');
+
+    // Inject a _getHandlers export into the module so the test can retrieve the
+    // handler references after import (pi.on() runs synchronously during import).
+    const patched = buildOmpHookModule().replace(
+      'export default function impeccableHook(pi) {',
+      'const _handlers = new Map(); export function _getHandlers() { return _handlers; } globalThis._impeccableHandlers = _handlers; export default function impeccableHook(pi) {',
+    ).replace(
+      /pi\.on\("([^"]+)",\s*(async\s*\([^)]+\))\s*=>/g,
+      (_, eventName, params) => `_handlers.set("${eventName}", ${params} =>`,
+    );
+    fs.writeFileSync(modulePath, patched);
+    fs.writeFileSync(path.join(scriptDir, 'hook.mjs'), [
+      `import fs from "node:fs";`,
+      `const payload = JSON.parse(fs.readFileSync(0, "utf8"));`,
+      `if (payload.hook_event_name !== "PostToolUse" || payload.tool_name !== "write" || payload.tool_input.file_path !== "src/notes.tsx") process.exit(2);`,
+      `process.stdout.write(JSON.stringify({ hookSpecificOutput: { additionalContext: "hook ran" } }));`,
+    ].join('\n'));
+    const { default: impeccableHook, _getHandlers } = await import(pathToFileURL(modulePath).href);
+    impeccableHook({ on(name, handler) { _getHandlers().set(name, handler); } });
+    const handlers = _getHandlers();
+
+    const originalExecPath = process.execPath;
+    try {
+      process.execPath = path.join(root, 'omp');
+      const result = await handlers.get('tool_result')({
+        toolName: 'write',
+        input: { path: 'src/notes.tsx' },
+        content: [{ type: 'text', text: 'write result' }],
+      }, { cwd: REPO_ROOT });
+
+      assert.deepEqual(result, {
+        content: [
+          { type: 'text', text: 'write result' },
+          { type: 'text', text: 'hook ran' },
+        ],
+      });
+    } finally {
+      process.execPath = originalExecPath;
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('probes the node runtime everywhere, and notices only where a channel exists', () => {

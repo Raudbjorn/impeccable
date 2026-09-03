@@ -4,11 +4,12 @@ import { dirname, join } from "node:path";
 
 const HOOK_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "skills", "impeccable", "scripts", "hook.mjs");
 
-function runHook(payload) {
-  const result = spawnSync(process.execPath, [HOOK_SCRIPT], {
+function runHook(payload, timeoutMs) {
+  const result = spawnSync("node", [HOOK_SCRIPT], {
     input: JSON.stringify(payload),
     encoding: "utf8",
     cwd: payload.cwd,
+    timeout: timeoutMs,
   });
   if (!result.stdout) return null;
   try {
@@ -50,7 +51,7 @@ export default function impeccableHook(pi) {
       tool_name: event.toolName,
       tool_input: { file_path: filePath },
       cwd: ctx.cwd,
-    });
+    }, 5000);
     if (!text) return;
     // ToolResultEventResult.content is a replacement content-block array, not
     // a string: the runner takes `result.content ?? tool.content`, so a bare
@@ -65,7 +66,7 @@ export default function impeccableHook(pi) {
       hook_event_name: "Stop",
       stop_hook_active: event.stop_hook_active === true,
       cwd: ctx.cwd,
-    });
+    }, 30000);
     // additionalContext alone is dropped. The runner only carries it into a
     // continuation when `continue: true` (or a blocking decision) rides along,
     // so without this the Stop findings are discarded as the session settles.
