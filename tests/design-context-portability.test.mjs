@@ -499,6 +499,28 @@ describe('importDesignContext symlink rejection', () => {
     assert.ok(answersStat.isFile(), 'answers.json must end up a real file, not a symlink');
     assert.equal(await readAnswers(cwd).then((a) => a['palette-primary']), '#B8422E');
   });
+
+  // Regression: writeFileAtomic()'s leaf guarantee (rename() replaces the
+  // directory entry at filePath rather than following a symlink there) says
+  // nothing about a symlinked *ancestor* of filePath. mkdir(recursive),
+  // open(), and rename() all resolve filePath's parent directories the same
+  // way any path lookup does, so an ordinary writeJsonAtomic()/writeContext()/
+  // writeAnswers() call into a project whose `.impeccable` (or
+  // `.impeccable/design-context`) is a symlink previously wrote straight
+  // through it -- with no import/export wrapper, and no --force, involved at
+  // all.
+  it('refuses an ordinary writeJsonAtomic() call when an ancestor of the target is a symlink', async () => {
+    const cwd = await makeCwd();
+    const outsideDir = await mkdtemp(path.join(tmpdir(), 'impeccable-outside-store-'));
+    const { symlink } = await import('node:fs/promises');
+    await symlink(outsideDir, path.join(cwd, '.impeccable'));
+
+    const target = paths(cwd);
+    await assert.rejects(writeJsonAtomic(target.contextJson, { schemaVersion: 1 }, cwd), /symlink/);
+
+    const outsideContents = await readdir(outsideDir);
+    assert.equal(outsideContents.length, 0, 'nothing must have been written through the symlinked .impeccable ancestor');
+  });
 });
 
 describe('exportDesignContext with no questionnaire record', () => {

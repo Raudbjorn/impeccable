@@ -1374,6 +1374,36 @@ const DESIGN_CONTEXT_DIR = '.impeccable/design-context';
 // WORKSPACE_DIR).
 const DESIGN_WORKSPACE_DIR = '.impeccable/visual-cues';
 
+// A leaf-only lstatSync check (fs.lstatSync(store.assetsDir).isSymbolicLink())
+// misses a symlinked ancestor: if `.impeccable` or `design-context` itself is
+// a link, the leaf lookup resolves through it and reports an ordinary
+// directory, and the readdirSync right after it then lists whatever the link
+// actually points at -- outside the project -- and tells the agent to open
+// those names as staged material. Sync mirror of portability.mjs's own
+// symlinkedAncestor()/assertNoneSymlinked(): this file boots every session
+// and stays on node builtins only (see DESIGN_CONTEXT_DIR above), so it
+// cannot import that async helper from design-context/portability.mjs. Walks
+// a handful of fixed, known-depth path segments (never an arbitrary
+// directory sweep), so it stays inside this file's Tier 1 cost budget.
+function symlinkedAncestorSync(targetPath, boundary) {
+  const boundaryAbs = path.resolve(boundary);
+  const resolved = path.resolve(targetPath);
+  const relative = path.relative(boundaryAbs, resolved);
+  if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`)) return null;
+  let cursor = boundaryAbs;
+  for (const segment of relative.split(path.sep).filter(Boolean)) {
+    cursor = path.join(cursor, segment);
+    let stat;
+    try {
+      stat = fs.lstatSync(cursor);
+    } catch {
+      return null;
+    }
+    if (stat.isSymbolicLink()) return cursor;
+  }
+  return null;
+}
+
 function appendDesignContextDirective(parts, ctx) {
   // The resolved project decides first, same precedence every other root
   // chain in this file uses: with --target selecting another workspace, cwd
@@ -1407,20 +1437,23 @@ function appendDesignContextDirective(parts, ctx) {
     try { contextExists = fs.existsSync(store.contextJson); } catch {}
     try { cuesJsonExists = fs.existsSync(store.cuesJson); } catch {}
     try { fontsManifestExists = fs.existsSync(store.fontsManifestJson); } catch {}
-    // lstatSync (not existsSync/stat) so a symlinked assets/ or fonts/ --
-    // a cloned project can point either outside the repo -- is never
-    // followed into readdirSync(): portability.mjs's export side already
-    // refuses to walk a symlinked assets/ the same way (collectFiles()'s
-    // own directory-level skip); listing external names here and telling
-    // the agent to open them as staged material would bypass that same
-    // no-follow policy from the read side instead of the write side.
+    // symlinkedAncestorSync (not existsSync/stat, and not a leaf-only
+    // lstatSync) so a symlinked assets/ or fonts/ -- or a symlinked
+    // `.impeccable`/`design-context` above either of them; a cloned project
+    // can point either outside the repo -- is never followed into
+    // readdirSync(): portability.mjs's export side already refuses to walk a
+    // symlinked assets/ the same way (collectFiles()'s own directory-level
+    // skip, ancestor-checked via its own symlinkedAncestor()); listing
+    // external names here and telling the agent to open them as staged
+    // material would bypass that same no-follow policy from the read side
+    // instead of the write side.
     try {
-      if (!fs.lstatSync(store.assetsDir).isSymbolicLink()) {
+      if (!symlinkedAncestorSync(store.assetsDir, root)) {
         assetNames = fs.readdirSync(store.assetsDir).filter((name) => !name.startsWith('.'));
       }
     } catch {}
     try {
-      if (!fs.lstatSync(store.fontsDir).isSymbolicLink()) {
+      if (!symlinkedAncestorSync(store.fontsDir, root)) {
         fontNames = fs.readdirSync(store.fontsDir).filter((name) => !name.startsWith('.'));
       }
     } catch {}
@@ -1441,10 +1474,22 @@ function appendDesignContextDirective(parts, ctx) {
     if (fontNames.length > 0) pieces.push(`${rel(store.fontsDir)}/ (staged font files: ${fontNames.join(', ')})`);
     if (answersExist) pieces.push(`${rel(store.answersJson)} (every questionnaire decision, per surface)`);
     if (contextExists) pieces.push(`${rel(store.contextJson)} (the interview's chat half, with each staged file's kind and note under context.assets)`);
-    if (cuesJsonExists) pieces.push(`${rel(store.cuesJson)} (the generated cue/palette manifest)`);
-    if (fontsManifestExists) pieces.push(`${rel(store.fontsManifestJson)} (the chosen font pairing)`);
+    if (cuesJsonExists) pieces.push(`${rel(store.cuesJson)} (generated cue/palette candidates, confirmed only where the interview's own answers or chat record points at one)`);
+    if (fontsManifestExists) pieces.push(`${rel(store.fontsManifestJson)} (six ranked candidate font pairings, generated reference material -- not a pick)`);
+    // cueExists/answersExist/contextExists/hasStagedMaterial are each a real
+    // user decision (a picked image, questionnaire answers, the chat
+    // interview's own record, or a file the user actually staged); cues.json
+    // and fonts.json alone are visual-cues.md's generated reference
+    // candidates, and document.md is explicit that nothing in a seed is
+    // picked from them automatically. Asserting "chosen by the user" when
+    // only those manifests are on record would tell the agent generated
+    // candidates are decisions, which is exactly the false signal this
+    // gates against.
+    const hasChoiceBackedRecord = cueExists || answersExist || contextExists || hasStagedMaterial;
     const directive = [
-      'DESIGN_CONTEXT: the visual world on record was chosen by the user in the design interview, and the interview record is files, not only prose: ' + pieces.join('; ') + '.',
+      hasChoiceBackedRecord
+        ? 'DESIGN_CONTEXT: the visual world on record was chosen by the user in the design interview, and the interview record is files, not only prose: ' + pieces.join('; ') + '.'
+        : 'DESIGN_CONTEXT: generated reference candidates exist for this world, not yet confirmed by any user choice: ' + pieces.join('; ') + '.',
     ];
     // A context-only or manifest-only record (no cue, no staged assets --
     // possible now that the check above admits it) has no pixel truth to

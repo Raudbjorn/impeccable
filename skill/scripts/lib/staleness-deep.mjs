@@ -127,7 +127,13 @@ function hasCoverageValue(value) {
   return false;
 }
 
-const SEED_DESIGN_MARKERS = ['/', '$'].map((prefix) =>
+// Exported so design-context-import.mjs's isSeedDesignMd() can match the
+// exact marker document.md's seed mode writes, rather than a loose
+// `<!--\s*SEED\b` regex that also fires on an unrelated ordinary comment
+// like `<!-- SEED colors from legacy theme -->` in a scan-generated
+// DESIGN.md -- misclassifying that project as a pickerless seed and forcing
+// a destructive --force import.
+export const SEED_DESIGN_MARKERS = ['/', '$'].map((prefix) =>
   '<!-- SEED: established with the user before implementation; '
     + `re-run ${prefix}impeccable document once there's code to capture the actual tokens and components. -->`
 );

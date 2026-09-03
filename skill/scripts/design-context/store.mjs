@@ -19,7 +19,7 @@
  */
 
 import fs from 'node:fs';
-import { readFile, mkdir, open, rename, rm } from 'node:fs/promises';
+import { readFile, mkdir, open, rename, rm, lstat } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 
@@ -74,6 +74,48 @@ export function legacyPaths(cwd = process.cwd()) {
   };
 }
 
+/* Checking only the leaf (filePath itself, or its immediate directory) misses
+   a symlinked ancestor: if `.impeccable` or `design-context` is itself a
+   link, every path resolved under it goes through that link, and lstat() on
+   a leaf that does not exist yet inside the link's target reports ENOENT
+   with no hint the link was ever there. Walk from `boundary` down to
+   `targetPath`, checking every existing path component, and stop (nothing
+   to report) as soon as one is missing, since nothing deeper can exist
+   without it. Returns the first offending absolute path, or null. Exported
+   so portability.mjs's export/import symlink guards share this exact walk
+   instead of keeping a second copy in sync by hand. */
+export async function symlinkedAncestor(targetPath, boundary) {
+  const boundaryAbs = path.resolve(boundary);
+  const resolved = path.resolve(targetPath);
+  const relative = path.relative(boundaryAbs, resolved);
+  // A bare `.startsWith('..')` also matches an in-project name that merely
+  // begins with those two characters ("..exports" resolves inside boundary,
+  // same as "exports" would); only an exact ".." or a "../" prefix means
+  // resolved actually lies outside boundary.
+  if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`)) return null;
+  let cursor = boundaryAbs;
+  for (const segment of relative.split(path.sep).filter(Boolean)) {
+    cursor = path.join(cursor, segment);
+    let stat;
+    try {
+      stat = await lstat(cursor);
+    } catch {
+      return null;
+    }
+    if (stat.isSymbolicLink()) return cursor;
+  }
+  return null;
+}
+
+export async function assertNoneSymlinked(boundary, candidatePaths) {
+  for (const candidate of candidatePaths) {
+    const linked = await symlinkedAncestor(candidate, boundary);
+    if (linked) {
+      throw new Error(`${path.relative(path.resolve(boundary), linked)} is a symlink; refusing to operate through it.`);
+    }
+  }
+}
+
 /* Writes `content` to `filePath` without ever writing through a pre-existing
    symlink at that path: a plain writeFile() follows a leaf symlink the same
    as any other write, silently overwriting whatever it points to outside
@@ -82,8 +124,22 @@ export function legacyPaths(cwd = process.cwd()) {
    an unpredictable sibling temp first and renaming it onto filePath keeps
    that guarantee for the final write too. Shared by writeJsonAtomic()
    below and by the readable markdown export, which used to write straight
-   through writeFile() and had none of this. */
-export async function writeFileAtomic(filePath, content) {
+   through writeFile() and had none of this.
+   The leaf guarantee above says nothing about a symlinked *ancestor*:
+   mkdir(recursive), open(), and rename() all resolve `filePath`'s parent
+   directories the same way any path lookup does, following a symlinked
+   `.impeccable` or `design-context` the same as a real one -- so an
+   ordinary writeContext()/writeAnswers()/writeDraft() call could still
+   write outside the project despite the leaf-only guarantee. Checked
+   against `cwd` (the project boundary every caller already resolves
+   filePath from) before any of those calls run. Like the leaf-only
+   TOCTOU noted in portability.mjs, a swap timed between this check and the
+   write immediately after it is not closed -- Node's fs/promises has no
+   openat-style primitive to bind the check and the write to the same
+   resolved parent -- but the common case (a symlink already in place, not
+   one raced into existence mid-call) is. */
+export async function writeFileAtomic(filePath, content, cwd = process.cwd()) {
+  await assertNoneSymlinked(cwd, [path.dirname(filePath)]);
   await mkdir(path.dirname(filePath), { recursive: true });
   // A predictable `${filePath}.tmp` name let a pre-placed symlink there
   // redirect this write outside the project. An unguessable suffix means
@@ -123,8 +179,8 @@ export async function writeFileAtomic(filePath, content) {
   }
 }
 
-export async function writeJsonAtomic(filePath, value) {
-  await writeFileAtomic(filePath, `${JSON.stringify(value, null, 2)}\n`);
+export async function writeJsonAtomic(filePath, value, cwd = process.cwd()) {
+  await writeFileAtomic(filePath, `${JSON.stringify(value, null, 2)}\n`, cwd);
 }
 
 export async function readJsonSoft(filePath) {
@@ -137,11 +193,11 @@ export async function readJsonSoft(filePath) {
 }
 
 export const readContext = (cwd = process.cwd()) => readJsonSoft(paths(cwd).contextJson);
-export const writeContext = (value, cwd = process.cwd()) => writeJsonAtomic(paths(cwd).contextJson, value);
+export const writeContext = (value, cwd = process.cwd()) => writeJsonAtomic(paths(cwd).contextJson, value, cwd);
 export const readAnswers = (cwd = process.cwd()) => readJsonSoft(paths(cwd).answersJson);
-export const writeAnswers = (value, cwd = process.cwd()) => writeJsonAtomic(paths(cwd).answersJson, value);
+export const writeAnswers = (value, cwd = process.cwd()) => writeJsonAtomic(paths(cwd).answersJson, value, cwd);
 export const readDraft = (cwd = process.cwd()) => readJsonSoft(paths(cwd).draftJson);
-export const writeDraft = (value, cwd = process.cwd()) => writeJsonAtomic(paths(cwd).draftJson, value);
+export const writeDraft = (value, cwd = process.cwd()) => writeJsonAtomic(paths(cwd).draftJson, value, cwd);
 export const clearDraft = (cwd = process.cwd()) => rm(paths(cwd).draftJson, { force: true }).catch(() => {});
 
 /* ============================================================
@@ -273,7 +329,7 @@ export async function migrate(cwd = process.cwd()) {
 
   const answers = await readJsonSoft(target.answersJson);
   const rewritten = rewriteFontSources(answers);
-  if (rewritten) await writeJsonAtomic(target.answersJson, rewritten);
+  if (rewritten) await writeJsonAtomic(target.answersJson, rewritten, cwd);
 
   await rm(legacySession, { force: true }).catch(() => {});
   try {
@@ -301,5 +357,5 @@ async function migrateContextFromCues(cwd) {
     schemaVersion: SCHEMA_VERSION,
     ...(hasModes ? { modes: cues.modes } : {}),
     ...(hasContext ? { context: cues.context } : {}),
-  });
+  }, cwd);
 }

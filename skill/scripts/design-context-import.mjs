@@ -23,6 +23,7 @@ import {
   validateBundle,
   MAX_BUNDLE_FILE_BYTES,
 } from './design-context/portability.mjs';
+import { SEED_DESIGN_MARKERS } from './lib/staleness-deep.mjs';
 
 /* A pickerless interview seed stages a provided logo or moodboard under
    assets/ (and can carry context.json / cue.png from an earlier import)
@@ -74,7 +75,13 @@ function isSeedDesignMd(designPath) {
     if (!fstatSync(fd).isFile()) return false;
     const buffer = Buffer.alloc(SEED_MARKER_PROBE_BYTES);
     const bytesRead = readSync(fd, buffer, 0, buffer.length, 0);
-    return /<!--\s*SEED\b/.test(buffer.subarray(0, bytesRead).toString('utf8'));
+    const probe = buffer.subarray(0, bytesRead).toString('utf8');
+    // The exact marker document.md's seed mode writes, not a loose
+    // `<!--\s*SEED\b` shape: that shape also matches an unrelated ordinary
+    // comment like `<!-- SEED colors from legacy theme -->` in a
+    // scan-generated DESIGN.md, misclassifying it as a pickerless seed and
+    // forcing a destructive --force import.
+    return SEED_DESIGN_MARKERS.some((marker) => probe.includes(marker));
   } catch {
     return false;
   } finally {

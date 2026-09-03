@@ -653,16 +653,20 @@ for (const modelId of resolveModelList()) {
       // override the rule itself carries. This is the inverse of the rule:
       // proof the override is not a dead clause a later edit can silently
       // drop. It only means anything if the agent actually reaches the
-      // rule, so the primary assertion is reachability (craft-floor.md
-      // loads before implementation); the secondary one is a soft text
-      // check for the shape a model's response takes when it applies the
-      // general rule without registering the explicit override.
+      // rule, so the first assertion is reachability (craft-floor.md loads
+      // before implementation).
       //
-      // Not a hex-value assertion: this harness has no image-generation
-      // tool, so it cannot drive the real palette-authoring pipeline to a
-      // literal color decision within a bounded, costed step count. What it
-      // can check is that the guardrail is reachable and that the agent's
-      // own words do not describe swapping the client's named palette out.
+      // The behavior itself needs more than reachability and narration: a
+      // run that made no implementation write at all, or silently swapped
+      // the requested colors for another palette while saying nothing about
+      // it, passed the older text-only check. The harness's only mutation
+      // tool is `write` (whole-file, no separate edit tool -- see
+      // harness.mjs), so the actual implementation write is asserted
+      // directly: an HTML/CSS file must be written, and it must carry both
+      // exact hex values DESIGN.md names, not a paraphrase or a nearby hue.
+      // The narration check stays as a secondary signal for the case where
+      // colors happen to survive by accident while the agent's own words
+      // still describe reaching past them.
       const workspace = prepareWorkspace({
         files: {
           'PRODUCT.md': PRODUCT_MD_SAMPLE_DIWALI,
@@ -689,10 +693,27 @@ for (const modelId of resolveModelList()) {
           `craft-floor.md (which carries the cultural-symbol-palette rule and its explicit-brief override) should load before the agent edits index.html.\n` +
             `Trace: ${JSON.stringify(summarizeTrace(trace), null, 2)}`,
         );
-        const writtenContent = trace.toolCalls
-          .filter((call) => call.name === 'write')
-          .map((call) => call.input?.contents ?? '')
-          .join('\n');
+        const implementationWrites = trace.toolCalls.filter(
+          (call) => call.name === 'write' && /\.(html?|css)$/i.test(call.input?.path ?? ''),
+        );
+        assert.ok(
+          implementationWrites.length >= 1,
+          `expected the agent to write an HTML/CSS file implementing the requested palette, not only describe it.\n` +
+            `Trace: ${JSON.stringify(summarizeTrace(trace), null, 2)}`,
+        );
+        const writtenContent = implementationWrites.map((call) => call.input?.contents ?? '').join('\n');
+        assert.match(
+          writtenContent,
+          /#E8871E/i,
+          `the client's marigold orange (#E8871E) must appear verbatim in the implementation output, not a substituted hue.\n` +
+            `Trace: ${JSON.stringify(summarizeTrace(trace), null, 2)}\nwritten: ${writtenContent.slice(0, 2000)}`,
+        );
+        assert.match(
+          writtenContent,
+          /#8C1D18/i,
+          `the client's deep red (#8C1D18) must appear verbatim in the implementation output, not a substituted hue.\n` +
+            `Trace: ${JSON.stringify(summarizeTrace(trace), null, 2)}\nwritten: ${writtenContent.slice(0, 2000)}`,
+        );
         const observedText = `${text}\n${writtenContent}`;
         assert.doesNotMatch(
           observedText,

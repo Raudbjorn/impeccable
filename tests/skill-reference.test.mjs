@@ -69,23 +69,25 @@ describe('skill reference authoring contracts', () => {
   });
 
   // Regression: craft-floor.md's cultural-symbol-palette rule
-  // (<!-- rule:skill-reflex-cultural-palette -->) is the short reflex a
-  // model reads right before editing UI; its explicit-brief override only
-  // lives in visual-cues.md's fuller PALETTE RULES section. Nothing ties
-  // the two together, so an edit to either file can silently drop the
-  // override -- craft-floor.md's own line names no exception at all -- and
-  // the reflex hardens into a rule with no escape hatch for a client's own
-  // documented palette. This does not verify a model actually follows the
-  // rule (that needs a real LLM call; see tests/skill-behavior's scenario
-  // 16), only that the two files still agree the override exists.
-  it('keeps the cultural-symbol-palette rule paired with its explicit-brief override', () => {
+  // (<!-- rule:skill-reflex-cultural-palette -->) is the mandatory playbook
+  // loaded immediately before every UI edit, and a `polish` run does not
+  // have to load visual-cues.md at all -- so an override that lived only in
+  // visual-cues.md's fuller PALETTE RULES section left an agent that never
+  // reaches that file seeing nothing but the unconditional ban, free to
+  // override an explicit client palette. The override now sits beside the
+  // marker in craft-floor.md itself, so this asserts it there directly
+  // rather than merely in the other reference. This does not verify a model
+  // actually follows the rule (that needs a real LLM call; see
+  // tests/skill-behavior's scenario 16), only that the file text still
+  // carries the exception.
+  it('keeps the cultural-symbol-palette rule paired with its explicit-brief override in craft-floor.md', () => {
     const craftFloor = readFileSync(join(ROOT, 'skill/reference/craft-floor.md'), 'utf-8').replace(/\r\n?/g, '\n');
     const visualCues = readFileSync(join(ROOT, 'skill/reference/visual-cues.md'), 'utf-8').replace(/\r\n?/g, '\n');
 
     assert.match(
       craftFloor,
-      /cultural-symbol palette[\s\S]{0,300}<!-- rule:skill-reflex-cultural-palette -->/,
-      'craft-floor.md must still carry the cultural-symbol-palette reflex rule and its marker',
+      /cultural-symbol palette[\s\S]{0,300}explicit brief[\s\S]{0,20}names the cultural palette overrides this rule[\s\S]{0,50}<!-- rule:skill-reflex-cultural-palette -->/,
+      'craft-floor.md must carry the cultural-symbol-palette reflex rule, its explicit-brief override, and its marker together, in the mandatory playbook a `polish` run always loads',
     );
     assert.match(
       visualCues,
@@ -95,7 +97,7 @@ describe('skill reference authoring contracts', () => {
     assert.match(
       visualCues,
       /explicit brief[\s\S]{0,20}names the cultural palette overrides this rule/,
-      'visual-cues.md must still carry the explicit-brief override -- craft-floor.md names no exception at all, so this is the only place it lives',
+      'visual-cues.md must still carry its own copy of the explicit-brief override too',
     );
   });
 });

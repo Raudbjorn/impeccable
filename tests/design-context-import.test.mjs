@@ -134,6 +134,25 @@ describe('design-context-import.mjs already-has-a-context guard', () => {
     assert.equal(res.status, 0, res.stderr);
     assert.match(res.stdout, /IMPORTED \d+ files/);
   });
+
+  // Regression: a loose `<!--\s*SEED\b` shape also matched an unrelated
+  // ordinary comment that merely starts with the word SEED, like a scanned
+  // theme file's own note about where its colors came from -- misclassifying
+  // a normal scan-generated DESIGN.md as a pickerless seed and forcing
+  // --force, a destructive flag, for what should be a routine first import.
+  it('does not require --force for a DESIGN.md whose comment merely starts with the word SEED', () => {
+    const cwd = makeCwd();
+    writeFileSync(
+      path.join(cwd, 'DESIGN.md'),
+      '# DESIGN.md\n\n<!-- SEED colors from legacy theme -->\n\n## Colors\n\nSome real, scanned tokens.\n',
+    );
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.equal(res.status, 0, res.stderr);
+    assert.match(res.stdout, /IMPORTED \d+ files/);
+  });
 });
 
 // Regression: isSeedDesignMd() read the whole file with readFileSync() and

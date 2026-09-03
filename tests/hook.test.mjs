@@ -3427,6 +3427,14 @@ describe('resolveTargetFiles()', () => {
     assert.deepEqual(resolveTargetFiles({ tool_input: { file_path: 'D:\\Users\\dev\\App.tsx' } }, '/proj'), ['D:\\Users\\dev\\App.tsx']);
   });
 
+  // Regression: a doubled, merely redundant separator right after the drive
+  // letter ("C://...") matches the authority regex's "letter, colon, //"
+  // shape exactly, so the single-form drive check above did not catch it and
+  // it was silently dropped from the scan same as a real URI would be.
+  it('does not mistake a Windows drive letter with a doubled separator for a URI scheme', () => {
+    assert.deepEqual(resolveTargetFiles({ tool_input: { file_path: 'C://Users/dev/App.tsx' } }, '/proj'), ['C://Users/dev/App.tsx']);
+  });
+
   // Regression: an earlier fix for the "scheme-prefixed virtual documents"
   // case above matched any "identifier followed by a colon" generically,
   // which also matched real filesystem paths that merely happen to share

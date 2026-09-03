@@ -21,6 +21,8 @@ import {
   writeContext,
   writeFileAtomic,
   writeJsonAtomic,
+  symlinkedAncestor,
+  assertNoneSymlinked,
   SCHEMA_VERSION,
 } from './store.mjs';
 
@@ -72,47 +74,12 @@ const SURFACE_LABELS = { persuade: 'Landing page', operate: 'Tool', read: 'Docs'
 const ROLES = ['primary', 'secondary', 'tertiary', 'neutral'];
 const PER_SURFACE = ['color-strategy', 'boundary-style', 'corner-style', 'depth-style', 'motion-energy'];
 
-/* Checking only the leaf (e.g. target.storeDir) misses a symlinked ancestor:
-   an `.impeccable` that is itself a link resolves every path under it through
-   that link, and if the leaf does not exist yet inside the link's target,
-   lstat(leaf) reports ENOENT with no hint that its parent was ever a link.
-   Walk from cwd down to targetPath, checking every existing component, and
-   stop (nothing to report) as soon as one is missing, since nothing deeper
-   can exist without it. Returns the first offending absolute path, or null. */
-async function symlinkedAncestor(targetPath, cwd) {
-  const boundary = path.resolve(cwd);
-  const resolved = path.resolve(targetPath);
-  const relative = path.relative(boundary, resolved);
-  // A bare `.startsWith('..')` also matches an in-project name that merely
-  // begins with those two characters ("..exports" resolves inside cwd,
-  // same as "exports" would), wrongly treating it as outside the boundary
-  // and skipping the walk below entirely -- exactly the case a pre-existing
-  // symlink named that way needs checked, not waved through. Only an exact
-  // ".." (targetPath is cwd's parent) or a "../" prefix (a genuine
-  // traversal segment) means resolved actually lies outside cwd.
-  if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`)) return null;
-  let cursor = boundary;
-  for (const segment of relative.split(path.sep).filter(Boolean)) {
-    cursor = path.join(cursor, segment);
-    let stat;
-    try {
-      stat = await lstat(cursor);
-    } catch {
-      return null;
-    }
-    if (stat.isSymbolicLink()) return cursor;
-  }
-  return null;
-}
-
-async function assertNoneSymlinked(cwd, candidatePaths) {
-  for (const candidate of candidatePaths) {
-    const linked = await symlinkedAncestor(candidate, cwd);
-    if (linked) {
-      throw new Error(`${path.relative(cwd, linked)} is a symlink; refusing to operate through it.`);
-    }
-  }
-}
+// symlinkedAncestor()/assertNoneSymlinked() (walk from a boundary down to a
+// target path, refusing any component that is a symlink) now live in
+// store.mjs: writeFileAtomic() there needs the exact same walk to guard a
+// symlinked `.impeccable`/`design-context` ancestor before an ordinary
+// writeContext()/writeAnswers()/writeDraft() call, so both modules share one
+// copy instead of keeping two in sync by hand.
 
 /* The four managed JSON files buildBundle()/importDesignContext() read or
    write directly. Deliberately narrow: assetsDir/fontsDir are not included
@@ -260,7 +227,14 @@ async function readJsonNoFollow(filePath) {
   if (!opened.ok) return null;
   try {
     const parsed = JSON.parse(await opened.handle.readFile('utf8'));
-    return parsed && typeof parsed === 'object' ? parsed : null;
+    // None of this helper's four callers (answersJson, contextJson,
+    // cuesJson, fontsManifestJson) is ever legitimately an array at the top
+    // level; without this, a malformed-but-JSON-valid `[]` on disk passed
+    // through here unchanged, buildBundle() wrote it straight into the
+    // export as `answers: []`, and validateBundle() -- which explicitly
+    // rejects an array answers field -- then refused to import the very
+    // bundle this release had just generated.
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
   } catch {
     return null;
   } finally {
@@ -678,8 +652,8 @@ export async function exportDesignContext(cwd, { outDir, includeAssets = true, n
   // same as any other write, silently overwriting whatever it points to
   // outside the project -- exactly the gap writeJsonAtomic() (used for
   // bundlePath just below) already closes for the other output file.
-  await writeFileAtomic(markdownPath, renderMarkdown(bundle));
-  await writeJsonAtomic(bundlePath, bundle);
+  await writeFileAtomic(markdownPath, renderMarkdown(bundle), cwd);
+  await writeJsonAtomic(bundlePath, bundle, cwd);
   return { markdownPath, bundlePath, skipped: bundle.skipped || [] };
 }
 
@@ -910,7 +884,7 @@ export async function importDesignContext(cwd, bundle, { design = 'skip', force 
        same import. */
     try {
       await mkdir(path.dirname(absolute), { recursive: true });
-      await writeFileAtomic(absolute, decoded.get(relative));
+      await writeFileAtomic(absolute, decoded.get(relative), cwd);
       written += 1;
     } catch (error) {
       // Only the three destination shapes the comment above documents --
@@ -940,10 +914,10 @@ export async function importDesignContext(cwd, bundle, { design = 'skip', force 
     await writeJsonAtomic(target.cuesJson, wholeCues || {
       cues: [],
       ...(bundle.chosenCue?.slug ? { palette: { [bundle.chosenCue.slug]: bundle.chosenCue.palette } } : { palette: {} }),
-    });
+    }, cwd);
   }
   if (bundle.fonts && !(await readJsonSoft(target.fontsManifestJson))) {
-    await writeJsonAtomic(target.fontsManifestJson, bundle.fonts);
+    await writeJsonAtomic(target.fontsManifestJson, bundle.fonts, cwd);
   }
 
   let designWritten = false;

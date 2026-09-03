@@ -261,6 +261,12 @@ describe('hook manifest builders', () => {
       'D:\\Users\\me\\file.tsx',
       'C:src\\App.tsx',
       'release:notes.tsx',
+      // Doubled, merely redundant separator: matches the authority regex's
+      // "letter, colon, //" shape exactly, so a leaf drive-path exemption
+      // that only recognizes a single "\" or "/" after the colon still
+      // misclassified this one as a URI.
+      'C://Users/dev/App.tsx',
+      'z://tmp/file.tsx',
     ]) {
       assert.ok(!hasUriScheme(p), `guard must not reject real path ${p}`);
     }

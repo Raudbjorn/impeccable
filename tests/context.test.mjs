@@ -692,6 +692,29 @@ describe('loadContext (monorepo project context)', () => {
     fs.rmSync(outsideDir, { recursive: true, force: true });
   });
 
+  it('does not list names reached through a symlinked design-context/ ancestor', () => {
+    // Regression: a leaf-only lstatSync(store.assetsDir) check misses a
+    // symlinked ancestor -- if `.impeccable/design-context` itself is a
+    // link, the leaf lookup for .../design-context/assets resolves through
+    // it and reports an ordinary directory, so readdirSync() lists whatever
+    // the link's target actually holds under an assets/ subdirectory.
+    write('PRODUCT.md', '# Root product\n');
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-outside-design-context-'));
+    fs.mkdirSync(path.join(outsideDir, 'assets'), { recursive: true });
+    fs.writeFileSync(path.join(outsideDir, 'assets', 'secret-logo.svg'), '<svg></svg>');
+    fs.mkdirSync(path.join(scratch, '.impeccable'), { recursive: true });
+    fs.symlinkSync(outsideDir, path.join(scratch, '.impeccable', 'design-context'));
+
+    const res = spawnSync(process.execPath, [SCRIPT_PATH], {
+      cwd: scratch,
+      encoding: 'utf8',
+      env: { ...process.env, IMPECCABLE_NO_UPDATE_CHECK: '1', IMPECCABLE_NO_STALENESS_CHECK: '1' },
+    });
+    assert.equal(res.status, 0);
+    assert.doesNotMatch(res.stdout, /secret-logo\.svg/, 'a symlinked design-context/ ancestor must never surface staged material from outside the repo');
+    fs.rmSync(outsideDir, { recursive: true, force: true });
+  });
+
   it('asks for an app when the CLI runs from a monorepo root without selection', () => {
     writeMonorepo();
     const res = spawnSync(process.execPath, [SCRIPT_PATH], {

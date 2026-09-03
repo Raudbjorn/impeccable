@@ -198,7 +198,17 @@ const URI_AUTHORITY_SCHEME_RE = /^[a-z][a-z0-9+.-]*:\\/\\//i;
 // it. This list only grows for a concretely observed virtual scheme.
 const KNOWN_SCHEMELESS_VIRTUAL_PREFIXES = ["untitled:", "vscode-notebook-cell:"];
 
+// A single-letter scheme is indistinguishable from a Windows drive letter by
+// shape alone, and the authority regex above requires only ":" + "//" right
+// after it -- so "C://Users/dev/App.tsx" (a drive path with a doubled,
+// merely redundant separator) matches the same as "xd://" does. Checked
+// before the authority regex so a real drive path is exempted regardless of
+// which separator form follows the colon (single "\\", single "/", or the
+// doubled "//" the authority regex would otherwise catch).
+const WINDOWS_DRIVE_PATH_RE = /^[a-z]:[\\\\/]/i;
+
 function hasUriScheme(value) {
+  if (WINDOWS_DRIVE_PATH_RE.test(value)) return false;
   if (URI_AUTHORITY_SCHEME_RE.test(value)) return true;
   return KNOWN_SCHEMELESS_VIRTUAL_PREFIXES.some((prefix) => value.startsWith(prefix));
 }
