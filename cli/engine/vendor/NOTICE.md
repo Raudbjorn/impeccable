@@ -1,15 +1,5 @@
 # Third-Party Notices
 
-This project includes content derived from third-party work, used under the terms of its original license.
-
-## Platform Design Skills
-
-The `skill/reference/android.md` platform reference file is distilled from ehmo's `platform-design-skills` (Material Design 3 rules), rewritten in Impeccable's voice.
-
-**Original work:** https://github.com/ehmo/platform-design-skills
-**Original license:** MIT
-**Author:** ehmo
-
 ## Static HTML parser bundle
 
 `cli/engine/vendor/static-html-parsers.mjs` is a generated bundle of the parser packages (direct and transitive) the static-HTML detector needs at runtime. Skill and plugin installs copy that file with the detector; they do not install these packages from npm. This notice is also shipped alongside the bundle itself, as `cli/engine/vendor/NOTICE.md`, in every artifact that includes it (the npm package and every generated skill/plugin output).

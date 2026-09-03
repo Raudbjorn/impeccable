@@ -37,7 +37,8 @@
   },
   "files": [
     "cli/",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE.md"
   ],
   "scripts": {
     "build:skills": "bun run scripts/build.js --skip-root-sync",
