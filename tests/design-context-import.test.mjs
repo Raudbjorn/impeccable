@@ -103,15 +103,36 @@ describe('design-context-import.mjs already-has-a-context guard', () => {
   // plain import used to overlay another bundle's answers/context onto that
   // world without requiring --force, and left the existing DESIGN.md in
   // place (--design defaults to "skip"), leaving a mixed context.
-  it('refuses a plain import into a project carrying only a root DESIGN.md', () => {
+  it('refuses a plain import into a project carrying only a root seed DESIGN.md', () => {
     const cwd = makeCwd();
-    writeFileSync(path.join(cwd, 'DESIGN.md'), '# Seed\n\nSome direction.\n');
+    writeFileSync(
+      path.join(cwd, 'DESIGN.md'),
+      '# Seed\n\nSome direction.\n\n<!-- SEED: established with the user before implementation; re-run /impeccable document once there\'s code to capture the actual tokens and components. -->\n',
+    );
 
     const bundle = bundleFile(cwd);
     const res = runImport(cwd, [bundle]);
 
-    assert.notEqual(res.status, 0, 'a project with only DESIGN.md must not read as empty');
+    assert.notEqual(res.status, 0, 'a project with only a seed DESIGN.md must not read as empty');
     assert.match(res.stderr, /already has a design context/);
+  });
+
+  // Regression: hasManagedState() used to treat any root DESIGN.md as
+  // managed design-context state, checking existence alone. The ordinary
+  // `document` scan flow also writes a DESIGN.md, from a project's actual
+  // built code, with no design context (answers/context/staged assets)
+  // behind it at all -- that DESIGN.md carries no `<!-- SEED` marker.
+  // Requiring --force for a routine first import into such a project made
+  // a destructive flag the price of normal use.
+  it('does not require --force for a plain import into a project whose DESIGN.md came from a normal scan, not a seed', () => {
+    const cwd = makeCwd();
+    writeFileSync(path.join(cwd, 'DESIGN.md'), '# DESIGN.md\n\n## Colors\n\nSome real, scanned tokens.\n');
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.equal(res.status, 0, res.stderr);
+    assert.match(res.stdout, /IMPORTED \d+ files/);
   });
 });
 

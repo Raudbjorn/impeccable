@@ -794,11 +794,20 @@ export async function importDesignContext(cwd, bundle, { design = 'skip', force 
     // which is exactly the case to skip rather than write through.
     try {
       const handle = await open(designPath, 'wx');
+      let written = false;
       try {
         await handle.writeFile(bundle.designMd);
+        written = true;
         designWritten = true;
       } finally {
         await handle.close();
+        // The exclusive open already created designPath; a write failure
+        // past that point (ENOSPC, EFBIG) would otherwise leave a partial
+        // file behind that a retry's own 'wx' open then rejects with
+        // EEXIST -- permanently skipping the document rather than retrying
+        // it. Clean up what this call itself created before the error
+        // propagates.
+        if (!written) await rm(designPath, { force: true }).catch(() => {});
       }
     } catch (error) {
       if (error.code !== 'EEXIST') throw error;

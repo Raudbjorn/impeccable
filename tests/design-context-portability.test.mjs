@@ -1,6 +1,7 @@
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readdir, stat, readFile, writeFile as writeFileP, mkdir as mkdirP, rm } from 'node:fs/promises';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
@@ -873,6 +874,44 @@ describe('DESIGN.md symlink handling', () => {
 
     assert.equal(result.designWritten, false, 'writing through a dangling symlink must be refused');
     assert.equal(await stat(danglingTarget).then(() => true, () => false), false, 'nothing may be created at the link target');
+  });
+
+  // Regression: open(designPath, 'wx') already creates the file; a write
+  // failure past that point (ENOSPC, EFBIG) left the partial file in place
+  // while the error still propagated. A retry's own 'wx' open then hit
+  // EEXIST against that partial file and silently skipped writing DESIGN.md
+  // forever, instead of retrying it. Forcing a real write-time failure
+  // needs a real OS limit (see the EFBIG-under-`ulimit -f` writeFileAtomic
+  // test above for why): run as a child process since the limit is set
+  // per-process and Node has no API to lower its own after starting.
+  it('cleans up a partial DESIGN.md when the write itself fails, so a retry does not see a permanent EEXIST', () => {
+    if (process.platform === 'win32') return; // ulimit -f is POSIX-only
+    const cwd = mkdtempSync(path.join(tmpdir(), 'design-context-designmd-efbig-'));
+    const portabilityModuleUrl = pathToFileURL(path.resolve('skill/scripts/design-context/portability.mjs')).href;
+    const scriptPath = path.join(cwd, 'probe.mjs');
+    writeFileSync(scriptPath, [
+      `import { importDesignContext } from '${portabilityModuleUrl}';`,
+      `import fs from 'node:fs';`,
+      `import path from 'node:path';`,
+      `const dir = process.env.TARGET_DIR;`,
+      `const bundle = { kind: 'impeccable-design-context', schemaVersion: 1, answers: null, files: [], designMd: 'x'.repeat(5 * 1024 * 1024) };`,
+      `try {`,
+      `  await importDesignContext(dir, bundle, { design: 'write' });`,
+      `  console.log('WROTE');`,
+      `} catch (error) {`,
+      `  console.log('THREW:' + (error.code || error.message));`,
+      `}`,
+      `console.log('DESIGN_MD_EXISTS:' + fs.existsSync(path.join(dir, 'DESIGN.md')));`,
+    ].join('\n'));
+
+    const result = spawnSync('bash', ['-c', `ulimit -f 1; node ${scriptPath}`], {
+      encoding: 'utf8',
+      env: { ...process.env, TARGET_DIR: cwd },
+    });
+    if (result.error) return; // bash/ulimit unavailable in this environment; nothing to assert
+
+    assert.match(result.stdout, /THREW:EFBIG/, `expected an EFBIG failure mid-write; got stdout=${result.stdout} stderr=${result.stderr}`);
+    assert.match(result.stdout, /DESIGN_MD_EXISTS:false/, 'the partial DESIGN.md must not survive a failed write, or a retry would see a permanent EEXIST');
   });
 
   // Regression: the lstat()-then-writeFile() this replaced left a gap

@@ -12,7 +12,7 @@
  * branch on. Exit 1 on a bundle this release cannot read.
  */
 
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { migrate, paths, pidAlive, readJsonSoft } from './design-context/store.mjs';
@@ -31,13 +31,31 @@ import {
    manifests in place -- a mixed context, despite the refusal below existing
    specifically to require --force before anything gets replaced.
 
-   A seed can also carry nothing under the store at all: DESIGN.md alone, at
-   the project root, is itself a valid record (design-context.md's own
-   no-argument status routing treats it that way). Without this check, a
-   plain import onto that project overlays another bundle's answers/context
-   on top of an existing, unrelated design world, and DESIGN.md itself is
-   left in place -- --design defaults to "skip", so nothing here even offers
-   to reconcile the mismatch. */
+   A seed can also carry nothing under the store at all: a pickerless-seed
+   DESIGN.md alone, at the project root, is itself a valid record
+   (design-context.md's own no-argument status routing treats it that way).
+   Without this check, a plain import onto that project overlays another
+   bundle's answers/context on top of an existing, unrelated design world,
+   and DESIGN.md itself is left in place -- --design defaults to "skip", so
+   nothing here even offers to reconcile the mismatch.
+
+   Not every DESIGN.md is that record, though: the ordinary `document` scan
+   flow writes one from a project's actual built code, with no design
+   context behind it at all. Treating file existence alone as "has a design
+   context" made every such project reject a plain import and demand
+   --force, a destructive flag, for what should be a routine first import.
+   Only a *seed* DESIGN.md carries the `<!-- SEED` marker document.md's seed
+   mode writes (see its template and its own staleness check in
+   lib/staleness-deep.mjs's SEED_DESIGN_MARKERS); check for that instead of
+   mere presence. */
+function isSeedDesignMd(designPath) {
+  try {
+    return /<!--\s*SEED\b/.test(readFileSync(designPath, 'utf8'));
+  } catch {
+    return false;
+  }
+}
+
 function hasManagedState(cwd) {
   const target = paths(cwd);
   if (
@@ -46,7 +64,7 @@ function hasManagedState(cwd) {
     existsSync(target.cuePng) ||
     existsSync(target.cuesJson) ||
     existsSync(target.fontsManifestJson) ||
-    existsSync(path.resolve(cwd, 'DESIGN.md'))
+    isSeedDesignMd(path.resolve(cwd, 'DESIGN.md'))
   ) {
     return true;
   }
