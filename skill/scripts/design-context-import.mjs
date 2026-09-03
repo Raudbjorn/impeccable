@@ -17,7 +17,7 @@ import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { migrate, paths, pidAlive, readJsonSoft } from './design-context/store.mjs';
 import {
-  assertManagedRootsNotSymlinked,
+  assertMigrationSourcesNotSymlinked,
   importDesignContext,
   validateBundle,
   MAX_BUNDLE_FILE_BYTES,
@@ -86,13 +86,15 @@ if (!['skip', 'write'].includes(design)) {
   process.exit(1);
 }
 
-/* migrate() (below) writes through the same managed paths
-   importDesignContext() does further down, and its own symlink rejection
-   runs too late to protect migrate(): a symlinked `.impeccable` ancestor
-   would let migrate() move legacy files or write context.json outside the
-   project before the import call ever gets a chance to refuse. */
+/* migrate() (below) reads from and writes through paths
+   importDesignContext()'s own symlink rejection never covers (it runs too
+   late, and does not know about migrate()'s legacy sources or its
+   journalJsonl/assetsDir/fontsDir destinations): a symlinked `.impeccable`
+   ancestor, or a symlinked legacy `design-interview` source, would let
+   migrate() move content in or out of the project before the import call
+   ever gets a chance to refuse. */
 try {
-  await assertManagedRootsNotSymlinked(process.cwd());
+  await assertMigrationSourcesNotSymlinked(process.cwd());
 } catch (error) {
   console.error(error.message);
   process.exit(1);

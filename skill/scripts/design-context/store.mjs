@@ -56,6 +56,24 @@ export function fontRelativePath(name) {
   return path.join(STORE_DIR, 'fonts', name);
 }
 
+/** Every path migrate() reads from or moves out of. Exposed so a caller can
+    guard them for symlinks before migrate() ever runs, the same way
+    paths() exposes the current store's destinations: a symlinked legacy
+    source would let migrate() read or move content from outside the
+    project into the store, the mirror image of a symlinked destination
+    moving content out. */
+export function legacyPaths(cwd = process.cwd()) {
+  const dir = path.resolve(cwd, LEGACY_DIR);
+  return {
+    legacyDir: dir,
+    answersJson: path.join(dir, 'answers.json'),
+    journalJsonl: path.join(dir, 'doc-edits.jsonl'),
+    sessionJson: path.join(dir, 'doc-session.json'),
+    assetsDir: path.join(dir, 'assets'),
+    fontsDir: path.join(dir, 'fonts'),
+  };
+}
+
 export async function writeJsonAtomic(filePath, value) {
   await mkdir(path.dirname(filePath), { recursive: true });
   // A predictable `${filePath}.tmp` name let a pre-placed symlink there

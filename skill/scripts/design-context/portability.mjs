@@ -15,6 +15,7 @@ import { readFile, mkdir, readdir, rm, writeFile, lstat } from 'node:fs/promises
 import path from 'node:path';
 import {
   paths,
+  legacyPaths,
   readAnswers,
   readContext,
   readJsonSoft,
@@ -98,20 +99,56 @@ async function symlinkedAncestor(targetPath, cwd) {
   return null;
 }
 
-/* migrate() (design-context-import.mjs, design-context-export.mjs) writes
-   through these same four paths -- moving legacy files onto them, or
-   writing context.json from cues.json -- before either CLI ever calls
-   exportDesignContext()/importDesignContext(), whose own checks otherwise
-   catch a symlinked ancestor too late to protect migrate()'s writes. Call
-   this before migrate(), not only before the export/import call. */
-export async function assertManagedRootsNotSymlinked(cwd) {
-  const target = paths(cwd);
-  for (const managedPath of [target.answersJson, target.contextJson, target.cuesJson, target.fontsManifestJson]) {
-    const linked = await symlinkedAncestor(managedPath, cwd);
+async function assertNoneSymlinked(cwd, candidatePaths) {
+  for (const candidate of candidatePaths) {
+    const linked = await symlinkedAncestor(candidate, cwd);
     if (linked) {
       throw new Error(`${path.relative(cwd, linked)} is a symlink; refusing to operate through it.`);
     }
   }
+}
+
+/* The four managed JSON files buildBundle()/importDesignContext() read or
+   write directly. Deliberately narrow: assetsDir/fontsDir are not included
+   here because collectFiles() already gives a symlinked assets/ or fonts/
+   its own softer, per-directory skip (the rest of the export still
+   completes), and folding them into this hard-refuse check would override
+   that with a whole-export failure instead. */
+export async function assertManagedRootsNotSymlinked(cwd) {
+  const target = paths(cwd);
+  await assertNoneSymlinked(cwd, [target.answersJson, target.contextJson, target.cuesJson, target.fontsManifestJson]);
+}
+
+/* Everything migrate() (design-context-import.mjs, design-context-export.mjs)
+   reads from or writes through, called before migrate() runs, not only
+   before the export/import call that follows it -- migrate()'s own writes
+   otherwise reach a symlinked ancestor before either CLI's later checks
+   get the chance to refuse. Broader than assertManagedRootsNotSymlinked on
+   purpose: migrate() is an all-or-nothing legacy move with no per-file
+   skip logic of its own, so every path it touches is worth a hard refuse,
+   including journalJsonl/assetsDir/fontsDir as move destinations and the
+   legacy `.impeccable/design-interview` paths as move sources -- a
+   symlinked source would let migrate() read or move content from outside
+   the project into the store, the mirror image of a symlinked destination
+   moving content out. */
+export async function assertMigrationSourcesNotSymlinked(cwd) {
+  const target = paths(cwd);
+  const legacy = legacyPaths(cwd);
+  await assertNoneSymlinked(cwd, [
+    target.answersJson,
+    target.contextJson,
+    target.cuesJson,
+    target.fontsManifestJson,
+    target.journalJsonl,
+    target.assetsDir,
+    target.fontsDir,
+    legacy.legacyDir,
+    legacy.answersJson,
+    legacy.journalJsonl,
+    legacy.sessionJson,
+    legacy.assetsDir,
+    legacy.fontsDir,
+  ]);
 }
 
 // A flat repeated character class ([A-Za-z0-9+/]*) matches left to right

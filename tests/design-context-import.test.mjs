@@ -142,4 +142,61 @@ describe('design-context-import.mjs refuses a symlinked .impeccable before migra
     assert.equal(existsSync(path.join(outsideDir, 'design-context', 'context.json')), false,
       'migrate() must never have written through the symlinked ancestor');
   });
+
+  // Regression: the guard above only checked the four managed JSON
+  // destinations; migrate() also moves legacy assets/fonts/journal onto
+  // target.assetsDir/target.fontsDir/target.journalJsonl, and reads them
+  // from `.impeccable/design-interview` in the first place. Neither
+  // direction was covered.
+  it('refuses when the assets/ migration destination is a symlink, before moving anything onto it', () => {
+    const cwd = makeCwd();
+    const legacyDir = path.join(cwd, '.impeccable', 'design-interview');
+    mkdirSync(path.join(legacyDir, 'assets'), { recursive: true });
+    writeFileSync(path.join(legacyDir, 'assets', 'logo.svg'), '<svg></svg>');
+    const outsideDir = path.join(path.dirname(cwd), `outside-assets-${path.basename(cwd)}`);
+    mkdirSync(outsideDir, { recursive: true });
+    mkdirSync(path.join(cwd, '.impeccable', 'design-context'), { recursive: true });
+    symlinkSync(outsideDir, path.join(cwd, '.impeccable', 'design-context', 'assets'));
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.notEqual(res.status, 0);
+    assert.match(res.stderr, /is a symlink/);
+    assert.equal(existsSync(path.join(outsideDir, 'logo.svg')), false,
+      'migrate() must never have moved the legacy asset through the symlinked destination');
+  });
+
+  it('refuses when the legacy assets/ source is a symlink, before reading or moving anything from it', () => {
+    const cwd = makeCwd();
+    const outsideDir = path.join(path.dirname(cwd), `outside-legacy-assets-${path.basename(cwd)}`);
+    mkdirSync(outsideDir, { recursive: true });
+    writeFileSync(path.join(outsideDir, 'secret.svg'), 'do not move me');
+    mkdirSync(path.join(cwd, '.impeccable', 'design-interview'), { recursive: true });
+    symlinkSync(outsideDir, path.join(cwd, '.impeccable', 'design-interview', 'assets'));
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.notEqual(res.status, 0);
+    assert.match(res.stderr, /is a symlink/);
+    assert.equal(existsSync(path.join(outsideDir, 'secret.svg')), true,
+      'migrate() must never have moved the external file out through the symlinked legacy source');
+    assert.equal(existsSync(path.join(cwd, '.impeccable', 'design-context', 'assets', 'secret.svg')), false);
+  });
+
+  it('refuses when the legacy journal source is a symlink, before migrate() reads doc-session.json through it', () => {
+    const cwd = makeCwd();
+    const outsideDir = path.join(path.dirname(cwd), `outside-legacy-dir-${path.basename(cwd)}`);
+    mkdirSync(outsideDir, { recursive: true });
+    writeFileSync(path.join(outsideDir, 'doc-session.json'), JSON.stringify({ pid: process.pid, port: 4321 }));
+    mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
+    symlinkSync(outsideDir, path.join(cwd, '.impeccable', 'design-interview'));
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.notEqual(res.status, 0);
+    assert.match(res.stderr, /is a symlink/);
+  });
 });

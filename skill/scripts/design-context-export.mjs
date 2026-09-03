@@ -11,7 +11,7 @@
  */
 
 import { migrate } from './design-context/store.mjs';
-import { assertManagedRootsNotSymlinked, exportDesignContext } from './design-context/portability.mjs';
+import { assertMigrationSourcesNotSymlinked, exportDesignContext } from './design-context/portability.mjs';
 
 function printHelp() {
   console.log(`Usage: node design-context-export.mjs [options]
@@ -50,13 +50,14 @@ if (unknown) {
 }
 
 try {
-  // migrate() (below) writes through the same managed paths
-  // exportDesignContext() reads further down, and its own symlink
-  // rejection runs too late to protect migrate(): a symlinked
-  // `.impeccable` ancestor would let migrate() move legacy files or write
-  // context.json outside the project before the export call ever gets a
-  // chance to refuse.
-  await assertManagedRootsNotSymlinked(process.cwd());
+  // migrate() (below) reads from and writes through paths
+  // exportDesignContext()'s own symlink rejection never covers (it runs
+  // too late, and does not know about migrate()'s legacy sources or its
+  // journalJsonl/assetsDir/fontsDir destinations): a symlinked
+  // `.impeccable` ancestor, or a symlinked legacy `design-interview`
+  // source, would let migrate() move content in or out of the project
+  // before the export call ever gets a chance to refuse.
+  await assertMigrationSourcesNotSymlinked(process.cwd());
   await migrate(process.cwd());
 
   const { markdownPath, bundlePath, skipped } = await exportDesignContext(process.cwd(), {
