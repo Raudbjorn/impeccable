@@ -10,6 +10,7 @@
 
 import { createHash } from 'node:crypto';
 import fs from 'fs';
+import os from 'node:os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawnSync } from 'node:child_process';
@@ -20,19 +21,33 @@ const ROOT = path.resolve(__dirname, '..');
 const ENTRY = path.join(__dirname, 'lib/static-html-parsers.entry.mjs');
 const OUT_DIR = path.join(ROOT, 'cli/engine/vendor');
 const OUTPUT = path.join(OUT_DIR, 'static-html-parsers.mjs');
-const PARSER_PACKAGES = ['htmlparser2', 'css-select', 'css-tree', 'domutils'];
-const DIGEST_RE = /^\s*\* Source digest: ([0-9a-f]+)\s*$/m;
+const HEADER_END = '*/\n';
 
-function sourceDigest() {
-  const hash = createHash('sha256');
-  hash.update(fs.readFileSync(ENTRY));
-  hash.update('\n');
-  for (const name of PARSER_PACKAGES) {
-    const pkgPath = path.join(ROOT, 'node_modules', name, 'package.json');
-    const version = JSON.parse(fs.readFileSync(pkgPath, 'utf8')).version;
-    hash.update(`${name}@${version}\n`);
+// Builds the bundle body fresh via `bun build`, which resolves and inlines
+// the full dependency graph (including transitive packages like
+// source-map-js) from the current lockfile -- so this reflects any change
+// anywhere in that graph, not just the direct packages' own versions.
+function buildBody() {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-static-html-parsers-'));
+  const tmpFile = path.join(tmpDir, 'bundle.mjs');
+  try {
+    const result = spawnSync(
+      'bun',
+      ['build', ENTRY, '--outfile', tmpFile, '--target', 'node', '--format', 'esm'],
+      { cwd: ROOT, encoding: 'utf8' },
+    );
+    if (result.status !== 0) {
+      process.stderr.write(result.stderr || result.stdout || 'bun build failed\n');
+      process.exit(result.status ?? 1);
+    }
+    return fs.readFileSync(tmpFile, 'utf8');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   }
-  return hash.digest('hex').slice(0, 16);
+}
+
+function digestOf(body) {
+  return createHash('sha256').update(body).digest('hex').slice(0, 16);
 }
 
 function header(digest) {
@@ -47,34 +62,26 @@ function header(digest) {
 `;
 }
 
-function generate(outfile) {
-  fs.mkdirSync(path.dirname(outfile), { recursive: true });
-  const result = spawnSync(
-    'bun',
-    ['build', ENTRY, '--outfile', outfile, '--target', 'node', '--format', 'esm'],
-    { cwd: ROOT, encoding: 'utf8' },
-  );
-  if (result.status !== 0) {
-    process.stderr.write(result.stderr || result.stdout || 'bun build failed\n');
-    process.exit(result.status ?? 1);
-  }
-  const output = header(sourceDigest()) + fs.readFileSync(outfile, 'utf8');
-  fs.writeFileSync(outfile, output);
-  return output;
+function splitHeader(content) {
+  const end = content.indexOf(HEADER_END);
+  if (end === -1) throw new Error(`${path.relative(ROOT, OUTPUT)} is missing its generated header`);
+  return content.slice(end + HEADER_END.length);
 }
 
 if (process.argv.includes('--check')) {
-  const committed = fs.readFileSync(OUTPUT, 'utf8');
-  const found = committed.match(DIGEST_RE)?.[1];
-  const expected = sourceDigest();
-  if (found !== expected) {
+  const committedBody = splitHeader(fs.readFileSync(OUTPUT, 'utf8'));
+  const freshBody = buildBody();
+  if (freshBody !== committedBody) {
     process.stderr.write(
-      'cli/engine/vendor/static-html-parsers.mjs is stale. Run: node scripts/build-static-html-parsers.js\n',
+      'cli/engine/vendor/static-html-parsers.mjs is stale (a fresh rebuild differs byte-for-byte). Run: node scripts/build-static-html-parsers.js\n',
     );
     process.exit(1);
   }
   process.exit(0);
 }
 
-generate(OUTPUT);
-console.log(`Generated ${path.relative(ROOT, OUTPUT)} (${(fs.statSync(OUTPUT).size / 1024).toFixed(1)} KB)`);
+const body = buildBody();
+const output = header(digestOf(body)) + body;
+fs.mkdirSync(OUT_DIR, { recursive: true });
+fs.writeFileSync(OUTPUT, output);
+console.log(`Generated ${path.relative(ROOT, OUTPUT)} (${(Buffer.byteLength(output) / 1024).toFixed(1)} KB)`);
