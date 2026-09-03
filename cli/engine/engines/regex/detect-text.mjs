@@ -500,9 +500,18 @@ function isNeutralBorderColor(str) {
 
 const TW_SOLID_CHROMATIC_BG_RE = /\bbg-(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d+(?!\/)\b/;
 
+// A '/' opens a regex literal (not division) unless it follows an identifier,
+// number, string-ish close, `)`, `]`, or `.` — the same heuristic tokenizers
+// use for the ASI-adjacent regex/divide ambiguity.
+function canPrecedeRegex(char) {
+  return char === undefined || !/[A-Za-z0-9_$)\].'"`]/.test(char);
+}
+
 function scanJs(text, start, onChar) {
   let stringQuote = '';
   let inTemplate = false;
+  let inRegex = false;
+  let inRegexClass = false;
   let paren = 0;
   let brace = 0;
   const interpBrace = [];
@@ -528,9 +537,25 @@ function scanJs(text, start, onChar) {
       if (char === '`') { inTemplate = false; continue; }
       continue;
     }
+    if (inRegex) {
+      if (char === '\\') { i++; continue; }
+      if (char === '[') { inRegexClass = true; continue; }
+      if (char === ']') { inRegexClass = false; continue; }
+      if (char === '/' && !inRegexClass) inRegex = false;
+      continue;
+    }
 
     if (char === "'" || char === '"') { stringQuote = char; continue; }
     if (char === '`') { inTemplate = true; continue; }
+    if (char === '/' && next !== '/' && next !== '*') {
+      let j = i - 1;
+      while (j >= start && /\s/.test(text[j])) j--;
+      if (canPrecedeRegex(j >= start ? text[j] : undefined)) {
+        inRegex = true;
+        inRegexClass = false;
+        continue;
+      }
+    }
     if (char === '(') { paren++; continue; }
     if (char === ')') { paren--; continue; }
     if (char === '{') { brace++; continue; }

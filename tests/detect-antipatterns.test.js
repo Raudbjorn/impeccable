@@ -343,6 +343,18 @@ describe('detectText — gray-on-color (issue #633)', () => {
       '<div className={value ?? fallback ? "bg-red-500" : "text-slate-400"} />',
     )).toHaveLength(0);
   });
+
+  test('regex literal with ?/: before the real ternary — no finding', () => {
+    expect(grayOnColor(
+      '<div className={/a?b/.test(value) ? "text-slate-400" : "bg-red-500"} />',
+    )).toHaveLength(0);
+  });
+
+  test('regex literal containing a colon-terminated group — no finding', () => {
+    expect(grayOnColor(
+      '<div className={/foo?:bar/.test(value) ? "text-slate-400" : "bg-red-500"} />',
+    )).toHaveLength(0);
+  });
 });
 
 describe('detectText — broken images in source comments', () => {
