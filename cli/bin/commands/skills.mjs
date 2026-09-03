@@ -1420,6 +1420,20 @@ function rewriteHookCommandsForSkillRoot(value, provider, { skillRoot, absolute 
   return value;
 }
 
+// oh-my-pi's hook module computes its own hook.mjs path relative to itself
+// (`join(dirname(fileURLToPath(import.meta.url)), "..", "..", "skills", ...)`),
+// correct only when the skill sits in the same .omp/ tree as the hook file.
+// When it doesn't (skillRoot !== root, or root is $HOME), bake in an absolute
+// path instead — the JS-module counterpart of rewriteHookCommandsForSkillRoot.
+function rewriteOmpHookModuleForSkillRoot(content, { skillRoot, absolute }) {
+  if (!absolute) return content;
+  const hookScript = join(skillRoot, '.omp', 'skills', 'impeccable', 'scripts', 'hook.mjs');
+  return content.replace(
+    /const HOOK_SCRIPT = join\([^;]*\);/,
+    `const HOOK_SCRIPT = ${JSON.stringify(hookScript)};`,
+  );
+}
+
 // The file paths the CLI writes hook manifests to (the local override target,
 // e.g. settings.local.json — not the shared sibling).
 function expectedHookDests(root, providers) {
@@ -1598,12 +1612,25 @@ function copyProviderHooks(bundleDir, root, providers, { force = false, skillRoo
       if (!existsSync(src)) continue;
 
       if (isModule) {
-        // A plain file, not a JSON manifest: no per-install path rewriting
-        // (the module resolves its own hook.mjs path relative to itself) and
-        // nothing to merge (oh-my-pi gives every hook its own file), so this
-        // is just an idempotent copy.
-        const content = readFileSync(src, 'utf8');
-        if (existsSync(dest) && readFileSync(dest, 'utf8') === content) continue;
+        // Nothing to merge (oh-my-pi gives every hook its own file), but the
+        // path IS rewritten when the skill lives outside the project: the
+        // module resolves hook.mjs relative to its own location, correct
+        // only when hook and skill sit in the same .omp/ tree. That is false
+        // for --scope=global, where the hook file still lands in the project
+        // (hookRoot stays projectRoot) but the skill installs to $HOME.
+        const raw = readFileSync(src, 'utf8');
+        const absolute = skillRoot !== root || isHomeDir(root);
+        const content = rewriteOmpHookModuleForSkillRoot(raw, { skillRoot, absolute });
+        if (existsSync(dest)) {
+          const existing = readFileSync(dest, 'utf8');
+          if (existing === content) continue;
+          if (!existing.includes(OMP_HOOK_MODULE_MARKER)) {
+            if (!force) {
+              throw new Error(`Existing hook module is not an Impeccable hook: ${dest}. Re-run with --force to replace it.`);
+            }
+            writeFileSync(`${dest}.bak`, existing);
+          }
+        }
         mkdirSync(dirname(dest), { recursive: true });
         writeFileSync(dest, content);
         written.push(provider);

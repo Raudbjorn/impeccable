@@ -12,7 +12,7 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { execSync, execFileSync } from 'child_process';
 import { mkdtempSync, existsSync, readdirSync, readFileSync, mkdirSync, writeFileSync, chmodSync, rmSync, lstatSync, realpathSync, readlinkSync, symlinkSync, statSync } from 'fs';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { tmpdir } from 'os';
 import {
   collectInstallDetections,
@@ -29,6 +29,7 @@ import {
   migrateUnprefixImpeccable,
   resolveInstallTargets,
 } from '../cli/bin/commands/skills.mjs';
+import { buildOmpHookModule } from '../scripts/lib/transformers/hooks.js';
 
 const CLI = join(import.meta.dir, '..', 'cli', 'bin', 'cli.js');
 
@@ -1875,7 +1876,9 @@ describe('copyProviderHooks: hook command path resolution (#399)', () => {
 });
 
 // A bundle whose omp hook is a JS module, not a JSON manifest — oh-my-pi
-// discovers hooks by file presence under `.omp/hooks/post/`, one file per hook.
+// discovers hooks by file presence under `.omp/hooks/post/`, one file per
+// hook. Real production content (not a hand-rolled stand-in) so the
+// skillRoot-rewrite tests below exercise the actual HOOK_SCRIPT computation.
 function createOmpBundle(root) {
   const bundleRoot = join(root, 'omp-bundle');
   const skillDir = join(bundleRoot, '.omp', 'skills', 'impeccable', 'scripts');
@@ -1884,7 +1887,7 @@ function createOmpBundle(root) {
     '---\nname: impeccable\nversion: 9.9.9-local\n---\nbundle\n');
   const hookDir = join(bundleRoot, '.omp', 'hooks', 'post');
   mkdirSync(hookDir, { recursive: true });
-  writeFileSync(join(hookDir, 'impeccable.js'), 'export default function impeccableHook(pi) {}\n');
+  writeFileSync(join(hookDir, 'impeccable.js'), buildOmpHookModule());
   return bundleRoot;
 }
 
@@ -1910,6 +1913,77 @@ describe('copyProviderHooks: oh-my-pi module hook (not a JSON manifest)', () => 
     const first = readFileSync(dest, 'utf8');
     copyProviderHooks(bundleDir, tmp, ['.omp'], { skillRoot: tmp });
     expect(readFileSync(dest, 'utf8')).toBe(first);
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  // --scope=global: the hook file always lands in the project (hookRoot:
+  // projectRoot in chooseInstallPlan), but the skill it must invoke lives in
+  // $HOME. The verbatim module resolves hook.mjs relative to its own
+  // location, which is wrong here; it must be rewritten to an absolute path.
+  test('rewrites the hook.mjs path to an absolute one when the skill lives outside the project (--scope=global)', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'imp-hook-omp-global-'));
+    const skillHome = mkdtempSync(join(tmpdir(), 'imp-hook-omp-skillroot-'));
+    const bundleDir = createOmpBundle(tmp);
+
+    copyProviderHooks(bundleDir, tmp, ['.omp'], { skillRoot: skillHome });
+
+    const dest = join(tmp, '.omp', 'hooks', 'post', 'impeccable.js');
+    const content = readFileSync(dest, 'utf8');
+    const absoluteHookScript = join(skillHome, '.omp', 'skills', 'impeccable', 'scripts', 'hook.mjs');
+    expect(content).toContain(absoluteHookScript);
+    expect(content).not.toContain('fileURLToPath(import.meta.url)');
+    rmSync(tmp, { recursive: true, force: true });
+    rmSync(skillHome, { recursive: true, force: true });
+  });
+
+  test('keeps the self-relative path when skillRoot matches root (project-scoped install)', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'imp-hook-omp-project-'));
+    const bundleDir = createOmpBundle(tmp);
+
+    copyProviderHooks(bundleDir, tmp, ['.omp'], { skillRoot: tmp });
+
+    const dest = join(tmp, '.omp', 'hooks', 'post', 'impeccable.js');
+    expect(readFileSync(dest, 'utf8')).toContain('fileURLToPath(import.meta.url)');
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  test('refuses to overwrite an unowned existing hook module without --force', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'imp-hook-omp-unowned-'));
+    const bundleDir = createOmpBundle(tmp);
+    const dest = join(tmp, '.omp', 'hooks', 'post', 'impeccable.js');
+    mkdirSync(dirname(dest), { recursive: true });
+    writeFileSync(dest, 'export default function someoneElsesHook(pi) {}\n');
+
+    expect(() => copyProviderHooks(bundleDir, tmp, ['.omp'], { skillRoot: tmp })).toThrow(/not an Impeccable hook/);
+    expect(readFileSync(dest, 'utf8')).toBe('export default function someoneElsesHook(pi) {}\n');
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  test('backs up and replaces an unowned hook module when --force is set', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'imp-hook-omp-force-'));
+    const bundleDir = createOmpBundle(tmp);
+    const dest = join(tmp, '.omp', 'hooks', 'post', 'impeccable.js');
+    mkdirSync(dirname(dest), { recursive: true });
+    writeFileSync(dest, 'export default function someoneElsesHook(pi) {}\n');
+
+    copyProviderHooks(bundleDir, tmp, ['.omp'], { skillRoot: tmp, force: true });
+
+    expect(readFileSync(dest, 'utf8')).toContain('impeccableHook');
+    expect(readFileSync(`${dest}.bak`, 'utf8')).toBe('export default function someoneElsesHook(pi) {}\n');
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  test('replaces our own outdated hook module without needing --force', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'imp-hook-omp-ours-'));
+    const bundleDir = createOmpBundle(tmp);
+    const dest = join(tmp, '.omp', 'hooks', 'post', 'impeccable.js');
+    mkdirSync(dirname(dest), { recursive: true });
+    writeFileSync(dest, 'export default function impeccableHook(pi) { /* an older build */ }\n');
+
+    copyProviderHooks(bundleDir, tmp, ['.omp'], { skillRoot: tmp });
+
+    expect(readFileSync(dest, 'utf8')).toBe(buildOmpHookModule());
+    expect(existsSync(`${dest}.bak`)).toBe(false);
     rmSync(tmp, { recursive: true, force: true });
   });
 });
