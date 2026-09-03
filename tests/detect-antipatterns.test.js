@@ -355,6 +355,21 @@ describe('detectText — gray-on-color (issue #633)', () => {
       '<div className={/foo?:bar/.test(value) ? "text-slate-400" : "bg-red-500"} />',
     )).toHaveLength(0);
   });
+
+  test('expression-ended self-closing tag is not mistaken for a regex literal — no finding', () => {
+    expect(grayOnColor(
+      '<div><div className={cn("bg-amber-500")} /><span className="text-slate-400">Vital few</span></div>',
+    )).toHaveLength(0);
+  });
+
+  test('a real regex literal matching ">" still opens inside a JSX expression — no finding', () => {
+    // Only the brace-0 tag boundary is excluded from opening regex state;
+    // inside a `{...}` expression, `/>/ ` is a real regex literal (matching
+    // the character `>`), not the JSX self-close.
+    expect(grayOnColor(
+      '<div className={/>/.test(value) ? "bg-amber-500" : "text-slate-400"} />',
+    )).toHaveLength(0);
+  });
 });
 
 describe('detectText — broken images in source comments', () => {

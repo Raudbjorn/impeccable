@@ -547,7 +547,13 @@ function scanJs(text, start, onChar) {
 
     if (char === "'" || char === '"') { stringQuote = char; continue; }
     if (char === '`') { inTemplate = true; continue; }
-    if (char === '/' && next !== '/' && next !== '*') {
+    // `/>` closes a JSX tag only outside any `{...}` expression (brace 0) --
+    // a bare `}` right before it would otherwise pass canPrecedeRegex and
+    // read it as opening a regex. Inside an expression, `/>` can be a real
+    // regex literal (e.g. `{/>/.test(value) ? a : b}`), so only the
+    // brace-0 tag-boundary case is excluded, not `/>` generally.
+    const jsxSelfClose = next === '>' && brace === 0;
+    if (char === '/' && next !== '/' && next !== '*' && !jsxSelfClose) {
       let j = i - 1;
       while (j >= start && /\s/.test(text[j])) j--;
       if (canPrecedeRegex(j >= start ? text[j] : undefined)) {
