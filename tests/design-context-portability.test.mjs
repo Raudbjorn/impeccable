@@ -656,6 +656,32 @@ describe('exportDesignContext symlink handling', () => {
 
     await assert.rejects(exportDesignContext(cwd, { outDir: 'custom-out' }), /symlink/);
   });
+
+  // Regression: the destination check above only covers directory
+  // components; a pre-existing design-context.md symlink at the leaf was
+  // still followed by a plain writeFile(), overwriting its external target.
+  // writeFileAtomic() (rename() onto the leaf, not writeFile() through it)
+  // fixes this by succeeding safely rather than by refusing: the export
+  // completes, and the symlink entry is replaced with a real file instead
+  // of being followed.
+  it('writes design-context.md safely instead of following a pre-existing symlink at that exact leaf path', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(target.storeDir, { recursive: true });
+    await writeFileP(target.answersJson, JSON.stringify({ 'palette-primary': '#B8422E' }));
+    const secretFile = path.join(path.dirname(cwd), `secret-design-context-${path.basename(cwd)}.md`);
+    await writeFileP(secretFile, 'do not overwrite me');
+    await mkdirP(target.exportsDir, { recursive: true });
+    const { symlink, lstat: lstatP } = await import('node:fs/promises');
+    const markdownPath = path.join(target.exportsDir, 'design-context.md');
+    await symlink(secretFile, markdownPath);
+
+    const result = await exportDesignContext(cwd);
+
+    assert.equal(await readFile(secretFile, 'utf8'), 'do not overwrite me', 'the link target must be untouched');
+    assert.ok((await lstatP(result.markdownPath)).isFile(), 'design-context.md must end up a real file, not the symlink');
+    assert.match(await readFile(result.markdownPath, 'utf8'), /Design context/);
+  });
 });
 
 describe('exportDesignContext bundle size cap', () => {

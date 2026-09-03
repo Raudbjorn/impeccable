@@ -74,18 +74,24 @@ export function legacyPaths(cwd = process.cwd()) {
   };
 }
 
-export async function writeJsonAtomic(filePath, value) {
+/* Writes `content` to `filePath` without ever writing through a pre-existing
+   symlink at that path: a plain writeFile() follows a leaf symlink the same
+   as any other write, silently overwriting whatever it points to outside
+   the project. rename(), unlike writeFile(), replaces the directory entry
+   at its destination rather than following a symlink there, so writing to
+   an unpredictable sibling temp first and renaming it onto filePath keeps
+   that guarantee for the final write too. Shared by writeJsonAtomic()
+   below and by the readable markdown export, which used to write straight
+   through writeFile() and had none of this. */
+export async function writeFileAtomic(filePath, content) {
   await mkdir(path.dirname(filePath), { recursive: true });
   // A predictable `${filePath}.tmp` name let a pre-placed symlink there
-  // redirect this write outside the project: writeFile() follows a symlink
-  // same as any other write, and only the rename() step below operates on
-  // the link itself rather than through it -- by which point the linked
-  // target had already been overwritten with this file's content. An
-  // unguessable suffix means no symlink can be pre-placed at the exact
-  // path this call will use, and `wx` (O_CREAT|O_EXCL) refuses to write
-  // through one on the rare chance a name collides anyway.
+  // redirect this write outside the project. An unguessable suffix means
+  // no symlink can be pre-placed at the exact path this call will use, and
+  // `wx` (O_CREAT|O_EXCL) refuses to write through one on the rare chance
+  // a name collides anyway.
   const temporary = `${filePath}.${randomBytes(8).toString('hex')}.tmp`;
-  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx' });
+  await writeFile(temporary, content, { flag: 'wx' });
   try {
     await rename(temporary, filePath);
   } catch (error) {
@@ -97,6 +103,10 @@ export async function writeJsonAtomic(filePath, value) {
     await rm(temporary, { force: true }).catch(() => {});
     throw error;
   }
+}
+
+export async function writeJsonAtomic(filePath, value) {
+  await writeFileAtomic(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 export async function readJsonSoft(filePath) {

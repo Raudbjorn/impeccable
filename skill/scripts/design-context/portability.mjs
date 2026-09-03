@@ -21,6 +21,7 @@ import {
   readJsonSoft,
   writeAnswers,
   writeContext,
+  writeFileAtomic,
   writeJsonAtomic,
   SCHEMA_VERSION,
 } from './store.mjs';
@@ -545,7 +546,11 @@ export async function exportDesignContext(cwd, { outDir, includeAssets = true, n
   if (serializedSize > MAX_BUNDLE_FILE_BYTES) {
     throw new Error(`This export would be about ${serializedSize} bytes; bundles this release can import back in are capped at ${MAX_BUNDLE_FILE_BYTES} bytes. Try --no-assets or trim DESIGN.md/answers.`);
   }
-  await writeFile(markdownPath, renderMarkdown(bundle));
+  // A plain writeFile() follows a pre-existing symlink at markdownPath the
+  // same as any other write, silently overwriting whatever it points to
+  // outside the project -- exactly the gap writeJsonAtomic() (used for
+  // bundlePath just below) already closes for the other output file.
+  await writeFileAtomic(markdownPath, renderMarkdown(bundle));
   await writeJsonAtomic(bundlePath, bundle);
   return { markdownPath, bundlePath, skipped: bundle.skipped || [] };
 }
