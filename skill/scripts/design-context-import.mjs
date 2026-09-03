@@ -113,6 +113,39 @@ if (!['skip', 'write'].includes(design)) {
   process.exit(1);
 }
 
+/* Read and validate the bundle before migrate() (below) gets a chance to
+   run. migrate() moves files on disk (a legacy-layout project's
+   design-interview store into the current one); it used to run first, so a
+   bundle that failed this same validation moments later -- oversized,
+   malformed, not a regular file -- still left that migration's filesystem
+   side effects in place before the process exited on the bundle error.
+   Invalid input must have no side effects at all. */
+let bundle;
+try {
+  const bundlePath = path.resolve(process.cwd(), source);
+  // The per-entry checks inside importDesignContext bound decoded file
+  // payloads; they say nothing about the serialized bundle itself, which
+  // readFile() below would otherwise load whole into memory (then JSON.parse
+  // the whole thing) before any of those checks ever run. Reject an
+  // oversized file by its own size, before reading or parsing it at all.
+  const bundleStat = await stat(bundlePath);
+  // The size check above is only meaningful for a regular file: a FIFO or
+  // character device commonly reports size 0 regardless of what actually
+  // flows through it, so one named `bundle.json` would sail past that check
+  // and then block (or stream unbounded data) in the readFile() below,
+  // which has no cap of its own.
+  if (!bundleStat.isFile()) {
+    throw new Error(`${bundlePath} is not a regular file.`);
+  }
+  if (bundleStat.size > MAX_BUNDLE_FILE_BYTES) {
+    throw new Error(`This bundle is ${bundleStat.size} bytes; this release reads bundles up to ${MAX_BUNDLE_FILE_BYTES} bytes.`);
+  }
+  bundle = validateBundle(JSON.parse(await readFile(bundlePath, 'utf8')));
+} catch (error) {
+  console.error(error.message);
+  process.exit(1);
+}
+
 /* migrate() (below) reads from and writes through paths
    importDesignContext()'s own symlink rejection never covers (it runs too
    late, and does not know about migrate()'s legacy sources or its
@@ -149,32 +182,6 @@ if (session && pidAlive(session.pid)) {
 
 if (!args.includes('--force') && hasManagedState(process.cwd())) {
   console.error('This project already has a design context. Re-run with --force to replace it.');
-  process.exit(1);
-}
-
-let bundle;
-try {
-  const bundlePath = path.resolve(process.cwd(), source);
-  // The per-entry checks inside importDesignContext bound decoded file
-  // payloads; they say nothing about the serialized bundle itself, which
-  // readFile() below would otherwise load whole into memory (then JSON.parse
-  // the whole thing) before any of those checks ever run. Reject an
-  // oversized file by its own size, before reading or parsing it at all.
-  const bundleStat = await stat(bundlePath);
-  // The size check above is only meaningful for a regular file: a FIFO or
-  // character device commonly reports size 0 regardless of what actually
-  // flows through it, so one named `bundle.json` would sail past that check
-  // and then block (or stream unbounded data) in the readFile() below,
-  // which has no cap of its own.
-  if (!bundleStat.isFile()) {
-    throw new Error(`${bundlePath} is not a regular file.`);
-  }
-  if (bundleStat.size > MAX_BUNDLE_FILE_BYTES) {
-    throw new Error(`This bundle is ${bundleStat.size} bytes; this release reads bundles up to ${MAX_BUNDLE_FILE_BYTES} bytes.`);
-  }
-  bundle = validateBundle(JSON.parse(await readFile(bundlePath, 'utf8')));
-} catch (error) {
-  console.error(error.message);
   process.exit(1);
 }
 

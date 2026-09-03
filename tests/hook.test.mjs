@@ -3418,14 +3418,27 @@ describe('resolveTargetFiles()', () => {
   });
 
   // Regression guard for the fix above: a Windows drive letter ("C:\..." or
-  // "D:/...") matches the same "single letter, colon" syntax a one-letter
-  // URI scheme would, but is never a scheme in practice. Matching scheme
-  // prefixes generally (not just "scheme://") makes this the one case that
-  // needs an explicit exemption rather than falling out of the "://" check
-  // for free.
+  // "D:/...") matches the same "letter, colon" syntax a URI scheme would,
+  // but is never a scheme in practice. The allowlist approach (rather than
+  // a generic "identifier followed by a colon" match) never matches these
+  // at all, so no explicit exemption is needed for them.
   it('does not mistake a Windows drive letter for a URI scheme', () => {
     assert.deepEqual(resolveTargetFiles({ tool_input: { file_path: 'C:/Users/dev/App.tsx' } }, '/proj'), ['C:/Users/dev/App.tsx']);
     assert.deepEqual(resolveTargetFiles({ tool_input: { file_path: 'D:\\Users\\dev\\App.tsx' } }, '/proj'), ['D:\\Users\\dev\\App.tsx']);
+  });
+
+  // Regression: an earlier fix for the "scheme-prefixed virtual documents"
+  // case above matched any "identifier followed by a colon" generically,
+  // which also matched real filesystem paths that merely happen to share
+  // that shape: a POSIX filename may legally contain a colon anywhere, and
+  // a Windows drive-relative path ("C:foo", relative to the current
+  // directory on that drive, no separator right after the colon) is a
+  // valid path too, distinct from the absolute "C:\..." / "C:/..." forms
+  // above. Neither is a URI scheme; the allowlist approach never rejects
+  // either, since neither matches "://" nor the known virtual-scheme list.
+  it('does not mistake a real filename containing a colon, or a Windows drive-relative path, for a URI scheme', () => {
+    assert.deepEqual(resolveTargetFiles({ tool_input: { file_path: 'release:notes.tsx' } }, '/proj'), ['release:notes.tsx']);
+    assert.deepEqual(resolveTargetFiles({ tool_input: { file_path: 'C:src\\App.tsx' } }, '/proj'), ['C:src\\App.tsx']);
   });
 });
 

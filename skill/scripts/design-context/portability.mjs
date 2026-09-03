@@ -345,13 +345,20 @@ async function buildBundle(cwd, { includeAssets = true, now = new Date() } = {})
     /* Not written yet, which an import is told about rather than guessing. */
   }
 
+  /* Whole, never trimmed: the questionnaire validates the manifest by its
+     pair count and quietly falls back to its own set at any other number.
+     Read here, ahead of the non-empty check below, so a fonts-manifest-only
+     record (no answers, no files, no DESIGN.md, no context.json) counts
+     too, instead of being read twice. */
+  const fonts = await readJsonSoft(target.fontsManifestJson);
+
   // hasManagedState() (design-context-import.mjs) already treats an
-  // on-disk context.json alone as a real managed record -- it can be the
-  // only retained state after importing an `answers: null` bundle with no
-  // files and an unwritten DESIGN.md -- and blocks a plain re-import of
-  // such a project. Without storedOnDisk here, export disagreed and
+  // on-disk context.json, cues.json, or fonts.json alone as a real managed
+  // record -- design-context.md's own no-argument status routing offers
+  // export for exactly that set -- and blocks a plain re-import of such a
+  // project. Without storedOnDisk/cues/fonts here, export disagreed and
   // refused to round-trip exactly that state back out.
-  if (!answers && !files.length && !designMd && !storedOnDisk) {
+  if (!answers && !files.length && !designMd && !storedOnDisk && !cues && !fonts) {
     throw new Error('No design interview found. Run /impeccable document to create one.');
   }
 
@@ -362,9 +369,7 @@ async function buildBundle(cwd, { includeAssets = true, now = new Date() } = {})
     product: { name: stored.context?.product?.name || '' },
     context: stored,
     answers,
-    /* Whole, never trimmed: the questionnaire validates the manifest by its
-       pair count and quietly falls back to its own set at any other number. */
-    fonts: await readJsonSoft(target.fontsManifestJson),
+    fonts,
     chosenCue: chosenCuePalette ? { slug: source, palette: chosenCuePalette } : null,
     designMd,
     files,

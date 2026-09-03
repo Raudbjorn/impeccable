@@ -247,18 +247,26 @@ function runHook(payload, timeoutMs) {
   }
 }
 
-// RFC 3986: scheme starts with a letter, then letters/digits/+/-/., then
-// ":". Matches just the "scheme:" prefix, not "scheme://": plenty of real
-// tool surfaces carry a scheme with no authority part at all (e.g.
-// untitled:Untitled-1, vscode-notebook-cell:/path), not only xd://-style
-// LSP targets. A Windows drive letter (a single letter, colon, then a path
-// separator) matches the same "letter followed by a colon" syntax but is
-// always exactly one letter; no real scheme is that shape.
+// RFC 3986 authority-style scheme ("scheme://..."): essentially no real
+// filename is shaped exactly like this, so it alone safely catches xd://,
+// http://, file://, and similar with no false positives.
+const URI_AUTHORITY_SCHEME_RE = /^[a-z][a-z0-9+.-]*:\\/\\//i;
+
+// A short allowlist of specific virtual-document identifiers with no
+// authority part at all -- an editor's unsaved-buffer and notebook-cell
+// pseudo-paths, never a real filesystem target. Deliberately NOT a generic
+// "identifier followed by a colon" pattern: POSIX filenames may legally
+// contain a colon anywhere (a real "release:notes.tsx" is syntactically
+// indistinguishable from a scheme prefix by shape alone), and a Windows
+// drive letter uses a colon too, both absolute ("C:\\...") and
+// drive-relative ("C:foo", no separator right after the colon) -- matching
+// on shape alone rejected real filesystem targets that happened to share
+// it. This list only grows for a concretely observed virtual scheme.
+const KNOWN_SCHEMELESS_VIRTUAL_PREFIXES = ["untitled:", "vscode-notebook-cell:"];
+
 function hasUriScheme(value) {
-  const match = /^([a-z][a-z0-9+.-]*):/i.exec(value);
-  if (!match) return false;
-  if (match[1].length === 1 && /^[\\\\/]/.test(value.slice(match[0].length))) return false;
-  return true;
+  if (URI_AUTHORITY_SCHEME_RE.test(value)) return true;
+  return KNOWN_SCHEMELESS_VIRTUAL_PREFIXES.some((prefix) => value.startsWith(prefix));
 }
 
 export default function impeccableHook(pi) {

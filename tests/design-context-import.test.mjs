@@ -291,3 +291,54 @@ describe('design-context-import.mjs refuses a symlinked .impeccable before migra
     assert.match(res.stdout, /IMPORTED \d+ files/);
   });
 });
+
+describe('design-context-import.mjs validates the bundle before migrate() runs', () => {
+  // Regression: migrate() (which moves a legacy-layout project's
+  // design-interview store into the current one) used to run before the
+  // bundle was ever stat'd, parsed, or validated. A rejected import -- an
+  // oversized, malformed, or otherwise invalid bundle -- still left
+  // migrate()'s filesystem side effects in place before the process exited
+  // on the bundle error. Invalid input must have no side effects at all.
+  it('does not migrate a legacy store when the named bundle is malformed', () => {
+    const cwd = makeCwd();
+    const legacyDir = path.join(cwd, '.impeccable', 'design-interview');
+    mkdirSync(path.join(legacyDir, 'assets'), { recursive: true });
+    writeFileSync(path.join(legacyDir, 'assets', 'logo.svg'), '<svg></svg>');
+    writeFileSync(path.join(cwd, 'bundle.json'), JSON.stringify({ kind: 'not-a-design-context-bundle' }));
+
+    const res = runImport(cwd, ['bundle.json']);
+
+    assert.notEqual(res.status, 0, 'a malformed bundle must be refused');
+    assert.match(res.stderr, /Expected a .* bundle/);
+    assert.equal(
+      existsSync(path.join(legacyDir, 'assets', 'logo.svg')),
+      true,
+      'the legacy asset must still be at its original path: migrate() must never have run before the bundle was rejected',
+    );
+    assert.equal(
+      existsSync(path.join(cwd, '.impeccable', 'design-context', 'assets', 'logo.svg')),
+      false,
+      'nothing may have been moved into the current-layout store either',
+    );
+  });
+
+  it('does not migrate a legacy store when the named bundle is oversized', () => {
+    const cwd = makeCwd();
+    const legacyDir = path.join(cwd, '.impeccable', 'design-interview');
+    mkdirSync(path.join(legacyDir, 'assets'), { recursive: true });
+    writeFileSync(path.join(legacyDir, 'assets', 'logo.svg'), '<svg></svg>');
+    // Any content works: the size check must reject this before the file is
+    // ever read or parsed. Past MAX_BUNDLE_FILE_BYTES (32 MiB).
+    writeFileSync(path.join(cwd, 'bundle.json'), 'x'.repeat(33 * 1024 * 1024));
+
+    const res = runImport(cwd, ['bundle.json']);
+
+    assert.notEqual(res.status, 0, 'an oversized bundle must be refused');
+    assert.match(res.stderr, /this release reads bundles up to/);
+    assert.equal(
+      existsSync(path.join(legacyDir, 'assets', 'logo.svg')),
+      true,
+      'the legacy asset must still be at its original path: migrate() must never have run before the bundle was rejected',
+    );
+  });
+});

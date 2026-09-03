@@ -474,6 +474,38 @@ describe('exportDesignContext with no questionnaire record', () => {
     assert.equal(bundle.answers, null);
     assert.equal(bundle.context.context.product.name, 'Retained');
   });
+
+  // Regression: design-context.md's own no-argument status routing (and
+  // hasManagedState() in design-context-import.mjs) already treat an
+  // on-disk cues.json or fonts.json alone as a real managed record and
+  // offer/require exactly this state -- but buildBundle()'s non-empty check
+  // never looked at either manifest, so export refused a project whose only
+  // retained state was one of them, disagreeing with what the status
+  // routing had just told the user to do.
+  it('exports a project whose only retained state is the cue manifest (cues.json)', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(path.dirname(target.cuesJson), { recursive: true });
+    await writeFileP(target.cuesJson, JSON.stringify({ cues: [], palette: {} }));
+
+    const result = await exportDesignContext(cwd);
+
+    const bundle = JSON.parse(await readFile(result.bundlePath, 'utf8'));
+    assert.equal(bundle.answers, null);
+  });
+
+  it('exports a project whose only retained state is the font manifest (fonts.json)', async () => {
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(path.dirname(target.fontsManifestJson), { recursive: true });
+    await writeFileP(target.fontsManifestJson, JSON.stringify({ heading: 'Inter', body: 'Inter' }));
+
+    const result = await exportDesignContext(cwd);
+
+    const bundle = JSON.parse(await readFile(result.bundlePath, 'utf8'));
+    assert.equal(bundle.answers, null);
+    assert.deepEqual(bundle.fonts, { heading: 'Inter', body: 'Inter' });
+  });
 });
 
 // Regression for PR #15 review thread: importing a bundle whose answers are

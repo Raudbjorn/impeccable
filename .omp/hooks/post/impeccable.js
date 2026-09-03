@@ -4,12 +4,11 @@ import { dirname, join } from "node:path";
 
 const HOOK_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "skills", "impeccable", "scripts", "hook.mjs");
 
-function runHook(payload, timeoutMs) {
-  const result = spawnSync("node", [HOOK_SCRIPT], {
+function runHook(payload) {
+  const result = spawnSync(process.execPath, [HOOK_SCRIPT], {
     input: JSON.stringify(payload),
     encoding: "utf8",
     cwd: payload.cwd,
-    timeout: timeoutMs,
   });
   if (!result.stdout) return null;
   try {
@@ -17,20 +16,6 @@ function runHook(payload, timeoutMs) {
   } catch {
     return null;
   }
-}
-
-// RFC 3986: scheme starts with a letter, then letters/digits/+/-/., then
-// ":". Matches just the "scheme:" prefix, not "scheme://": plenty of real
-// tool surfaces carry a scheme with no authority part at all (e.g.
-// untitled:Untitled-1, vscode-notebook-cell:/path), not only xd://-style
-// LSP targets. A Windows drive letter (a single letter, colon, then a path
-// separator) matches the same "letter followed by a colon" syntax but is
-// always exactly one letter; no real scheme is that shape.
-function hasUriScheme(value) {
-  const match = /^([a-z][a-z0-9+.-]*):/i.exec(value);
-  if (!match) return false;
-  if (match[1].length === 1 && /^[\\/]/.test(value.slice(match[0].length))) return false;
-  return true;
 }
 
 export default function impeccableHook(pi) {
@@ -41,17 +26,20 @@ export default function impeccableHook(pi) {
       (event.input && typeof event.input.path === 'string' && event.input.path) ||
       null;
     if (!filePath) return;
-    // Some tool surfaces carry a scheme-prefixed identifier that is not a
-    // real filesystem target. Spawning hook.mjs on them is wasted work —
-    // hook-lib.mjs downstream file-missing skip is the only thing keeping
-    // it cheap. Reject at the adapter so the spawn never happens.
-    if (hasUriScheme(filePath)) return;
+    // Some tool surfaces (e.g. xd:// LSP targets) carry a scheme://-prefixed
+    // path that is not a real filesystem target. Spawning hook.mjs on them
+    // is wasted work — hook-lib.mjs downstream file-missing skip is the
+    // only thing keeping it cheap. Reject at the adapter so the spawn never
+    // happens. Anchored to the start of filePath so real paths (absolute,
+    // relative, Windows-drive) never match. RFC 3986: scheme starts with a
+    // letter, then letters/digits/+/-/., then ://.
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(filePath)) return;
     const text = runHook({
       hook_event_name: "PostToolUse",
       tool_name: event.toolName,
       tool_input: { file_path: filePath },
       cwd: ctx.cwd,
-    }, 5000);
+    });
     if (!text) return;
     // ToolResultEventResult.content is a replacement content-block array, not
     // a string: the runner takes `result.content ?? tool.content`, so a bare
@@ -66,11 +54,10 @@ export default function impeccableHook(pi) {
       hook_event_name: "Stop",
       stop_hook_active: event.stop_hook_active === true,
       cwd: ctx.cwd,
-    }, 30000);
+    });
     // additionalContext alone is dropped. The runner only carries it into a
     // continuation when `continue: true` (or a blocking decision) rides along,
     // so without this the Stop findings are discarded as the session settles.
     if (text) return { continue: true, additionalContext: text };
   });
 }
-

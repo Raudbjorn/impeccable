@@ -1240,26 +1240,29 @@ function relativize(filePath, cwd) {
 // https://developers.openai.com/codex/hooks#posttooluse
 const APPLY_PATCH_FILE_RE = /^\*\*\* (?:Update|Add) File: (.+)$/gm;
 
-// RFC 3986: scheme starts with a letter, then letters/digits/+/-/., then
-// ":". Anchored at the string start, same as the OMP adapter's own
-// device-URI guard, so a real filesystem path that merely contains a colon
-// somewhere past the start is never mistaken for one. Deliberately matches
-// just the "scheme:" prefix, not "scheme://": plenty of real editor/LSP
-// virtual documents have no authority part at all (`untitled:Untitled-1`,
-// `vscode-notebook-cell:/path/to/notebook.ipynb#cell`), and requiring "//"
-// let those through as if they were real filesystem paths.
-const URI_SCHEME_RE = /^([a-z][a-z0-9+.-]*):/i;
+// RFC 3986 authority-style scheme ("scheme://..."): anchored at the string
+// start, same as the OMP adapter's own device-URI guard, so a real
+// filesystem path that merely contains "://" somewhere past the start is
+// never mistaken for one. Safe on its own: essentially no real filename is
+// shaped exactly like this, so it alone catches xd://, http://, file://,
+// and similar without any false positives.
+const URI_AUTHORITY_SCHEME_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
 
-// A Windows drive letter ("C:\...", "D:/...") matches the same "letter
-// followed by a colon" syntax a URI scheme does, but is always exactly one
-// letter and always followed immediately by a path separator; no real
-// scheme in practice is that shape, so this is enough to tell them apart
-// without a fixed allowlist of drive letters.
+// A short allowlist of specific virtual-document identifiers that carry no
+// authority part at all -- an editor's unsaved-buffer and notebook-cell
+// pseudo-paths, never a real filesystem target. Deliberately NOT a generic
+// "identifier followed by a colon" pattern: POSIX filenames may legally
+// contain a colon anywhere (a real "release:notes.tsx" is syntactically
+// indistinguishable from a scheme prefix by shape alone), and a Windows
+// drive letter uses a colon too, both absolute ("C:\...") and
+// drive-relative ("C:foo", no separator right after the colon) -- matching
+// on shape alone rejected real filesystem targets that happened to share
+// it. This list only grows for a concretely observed virtual scheme.
+const KNOWN_SCHEMELESS_VIRTUAL_PREFIXES = ['untitled:', 'vscode-notebook-cell:'];
+
 function hasUriScheme(value) {
-  const match = URI_SCHEME_RE.exec(value);
-  if (!match) return false;
-  if (match[1].length === 1 && /^[\\/]/.test(value.slice(match[0].length))) return false;
-  return true;
+  if (URI_AUTHORITY_SCHEME_RE.test(value)) return true;
+  return KNOWN_SCHEMELESS_VIRTUAL_PREFIXES.some((prefix) => value.startsWith(prefix));
 }
 
 export function parseApplyPatchPaths(command, projectCwd) {

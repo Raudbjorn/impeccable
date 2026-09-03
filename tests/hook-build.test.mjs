@@ -231,7 +231,11 @@ describe('hook manifest builders', () => {
     // `hasUriScheme`.
     const source = buildOmpHookModule();
     assert.ok(source.includes('hasUriScheme(filePath)'), 'adapter must carry a guard that calls hasUriScheme(filePath)');
-    const fnMatch = source.match(/function hasUriScheme\(value\) \{[\s\S]*?\n\}/);
+    // Extracted from the first supporting const through the end of the
+    // function body, not just the function itself: hasUriScheme() reads
+    // module-level constants (the authority-scheme regex, the known-scheme
+    // allowlist) it does not declare inline.
+    const fnMatch = source.match(/const URI_AUTHORITY_SCHEME_RE[\s\S]*?function hasUriScheme\(value\) \{[\s\S]*?\n\}/);
     assert.ok(fnMatch, 'module must define a hasUriScheme() guard function');
     const hasUriScheme = new Function(`${fnMatch[0]}\nreturn hasUriScheme;`)();
 
@@ -246,8 +250,18 @@ describe('hook manifest builders', () => {
     ]) {
       assert.ok(hasUriScheme(uri), `guard must reject device URI ${uri}`);
     }
-    // Real paths the adapter must NOT reject — absolute POSIX, relative, Windows-drive.
-    for (const p of ['/abs/path.tsx', 'rel/path.tsx', './local.tsx', 'C:/Users/me/file.tsx', 'D:\\Users\\me\\file.tsx']) {
+    // Real paths the adapter must NOT reject — absolute POSIX, relative,
+    // Windows-drive (absolute and drive-relative), and a real filename that
+    // merely happens to contain a colon.
+    for (const p of [
+      '/abs/path.tsx',
+      'rel/path.tsx',
+      './local.tsx',
+      'C:/Users/me/file.tsx',
+      'D:\\Users\\me\\file.tsx',
+      'C:src\\App.tsx',
+      'release:notes.tsx',
+    ]) {
       assert.ok(!hasUriScheme(p), `guard must not reject real path ${p}`);
     }
     // The adapter must read the path from BOTH event.input.path (OMP shape)
