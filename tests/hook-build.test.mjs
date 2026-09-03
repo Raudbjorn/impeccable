@@ -186,6 +186,15 @@ describe('hook manifest builders', () => {
     // back out on its own side.
     assert.match(source, /spawnSync\("node", \[HOOK_SCRIPT\]/);
     assert.match(source, /hookSpecificOutput\?\.additionalContext/);
+    // A hung hook.mjs must not block edit/stop handling indefinitely. Each
+    // event passes its own timeout, matching the JSON providers' own
+    // TIMEOUT_SECONDS/STOP_TIMEOUT_SECONDS split; spawnSync's timeout kills
+    // the child and leaves result.stdout empty, which the existing
+    // `if (!result.stdout) return null;` already treats as no hook output.
+    assert.match(source, /function runHook\(payload, timeoutMs\)/);
+    assert.match(source, /timeout: timeoutMs/);
+    assert.match(source, /runHook\(\{[\s\S]*?hook_event_name: "PostToolUse"[\s\S]*?\}, 5000\)/);
+    assert.match(source, /runHook\(\{[\s\S]*?hook_event_name: "Stop"[\s\S]*?\}, 30000\)/);
     // ToolResultEventResult.content is a replacement content-block array
     // (packages/coding-agent/src/extensibility/shared-events.ts): the runner
     // takes `result.content ?? tool.content`, so returning a bare string both
