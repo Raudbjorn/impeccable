@@ -1139,7 +1139,7 @@ describe('hook-admin.mjs', () => {
   it('hooks on accepts declined consent and installs missing provider manifests', () => {
     fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
     fs.writeFileSync(getLocalConfigPath(cwd), JSON.stringify({ hook: { consent: 'declined', quiet: true } }));
-    for (const provider of ['.claude', '.agents', '.github']) {
+    for (const provider of ['.claude', '.agents', '.github', '.omp']) {
       fs.mkdirSync(path.join(cwd, provider, 'skills', 'impeccable', 'scripts'), { recursive: true });
     }
     fs.mkdirSync(path.join(cwd, '.claude'), { recursive: true });
@@ -1154,7 +1154,7 @@ describe('hook-admin.mjs', () => {
 
     const out = runAdmin(['on']);
     assert.match(out, /Recorded local hook consent/);
-    assert.match(out, /Installed or repaired hook manifests for: \.claude, \.agents, \.github/);
+    assert.match(out, /Installed or repaired hook manifests for: \.claude, \.agents, \.github, \.omp/);
 
     const shared = JSON.parse(fs.readFileSync(getConfigPath(cwd), 'utf-8')).hook;
     assert.equal(shared.enabled, true);
@@ -1179,6 +1179,85 @@ describe('hook-admin.mjs', () => {
     const github = JSON.parse(fs.readFileSync(path.join(cwd, '.github', 'hooks', 'impeccable.json'), 'utf-8'));
     assert.equal(github.hooks.postToolUse[0].matcher, 'edit|create|apply_patch');
     assert.match(github.hooks.postToolUse[0].bash, /\.github\/skills\/impeccable\/scripts\/hook\.mjs/);
+
+    const omp = fs.readFileSync(path.join(cwd, '.omp', 'hooks', 'post', 'impeccable.js'), 'utf-8');
+    assert.match(omp, /export default function impeccableHook\(pi\)/);
+  });
+
+  it('hooks on is idempotent for an already-correct oh-my-pi hook module', () => {
+    fs.mkdirSync(path.join(cwd, '.omp', 'skills', 'impeccable', 'scripts'), { recursive: true });
+    runAdmin(['on']);
+    const first = fs.readFileSync(path.join(cwd, '.omp', 'hooks', 'post', 'impeccable.js'), 'utf-8');
+
+    const out = runAdmin(['on']);
+    assert.match(out, /Hook manifests already installed for:.*\.omp/);
+    const second = fs.readFileSync(path.join(cwd, '.omp', 'hooks', 'post', 'impeccable.js'), 'utf-8');
+    assert.equal(second, first, 're-running on must not rewrite an already-correct module');
+  });
+
+  it('reset removes the oh-my-pi hook module file', () => {
+    fs.mkdirSync(path.join(cwd, '.omp', 'skills', 'impeccable', 'scripts'), { recursive: true });
+    runAdmin(['on']);
+    assert.ok(fs.existsSync(path.join(cwd, '.omp', 'hooks', 'post', 'impeccable.js')));
+
+    const out = runAdmin(['reset']);
+    assert.match(out, /Removed hook entries from:.*\.omp/);
+    assert.equal(fs.existsSync(path.join(cwd, '.omp', 'hooks', 'post', 'impeccable.js')), false);
+  });
+
+  it('hooks on backs up an unowned oh-my-pi hook module before replacing it', () => {
+    fs.mkdirSync(path.join(cwd, '.omp', 'skills', 'impeccable', 'scripts'), { recursive: true });
+    const dest = path.join(cwd, '.omp', 'hooks', 'post', 'impeccable.js');
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, 'export default function someoneElsesHook(pi) {}\n');
+
+    const out = runAdmin(['on']);
+    assert.match(out, /Backed up malformed manifest\(s\):.*impeccable\.js\.bak/);
+
+    assert.equal(
+      fs.readFileSync(`${dest}.bak`, 'utf-8'),
+      'export default function someoneElsesHook(pi) {}\n',
+    );
+    assert.match(fs.readFileSync(dest, 'utf-8'), /export default function impeccableHook\(pi\)/);
+  });
+
+  it('hooks on does not clobber an existing .bak when backing up a second unowned hook module', () => {
+    fs.mkdirSync(path.join(cwd, '.omp', 'skills', 'impeccable', 'scripts'), { recursive: true });
+    const dest = path.join(cwd, '.omp', 'hooks', 'post', 'impeccable.js');
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, 'export default function firstForeignHook(pi) {}\n');
+
+    runAdmin(['on']);
+    assert.equal(
+      fs.readFileSync(`${dest}.bak`, 'utf-8'),
+      'export default function firstForeignHook(pi) {}\n',
+    );
+
+    // A second foreign hook lands at the same path; repairing again must not
+    // overwrite the first backup.
+    fs.writeFileSync(dest, 'export default function secondForeignHook(pi) {}\n');
+    runAdmin(['on']);
+
+    assert.equal(
+      fs.readFileSync(`${dest}.bak`, 'utf-8'),
+      'export default function firstForeignHook(pi) {}\n',
+    );
+    assert.equal(
+      fs.readFileSync(`${dest}.bak.2`, 'utf-8'),
+      'export default function secondForeignHook(pi) {}\n',
+    );
+  });
+
+  it('hooks on replaces its own outdated oh-my-pi hook module without a backup', () => {
+    fs.mkdirSync(path.join(cwd, '.omp', 'skills', 'impeccable', 'scripts'), { recursive: true });
+    const dest = path.join(cwd, '.omp', 'hooks', 'post', 'impeccable.js');
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, 'export default function impeccableHook(pi) { /* an older build */ }\n');
+
+    const out = runAdmin(['on']);
+    assert.doesNotMatch(out, /Backed up/);
+    assert.equal(fs.existsSync(`${dest}.bak`), false);
+    assert.match(fs.readFileSync(dest, 'utf-8'), /export default function impeccableHook\(pi\)/);
   });
 
   it('ignore-rule overused-font requires explicit broad suppression', () => {

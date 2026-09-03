@@ -46,6 +46,12 @@ const IMPECCABLE_HOOK_COMMAND_MARKERS = [
   'skills/impeccable/scripts/hook-after-edit.mjs',
   'skills/impeccable/scripts/hook-stop.mjs',
 ];
+// oh-my-pi's hook is a loaded JS module, not a JSON manifest built from a
+// command string, so it has no `skills/impeccable/scripts/hook.mjs`-style
+// command text to search for (the module builds that path via `join(...)`
+// with separate string segments). The exported function's name is the
+// stable, unique marker instead.
+const OMP_HOOK_MODULE_MARKER = 'impeccableHook';
 const TIMEOUT_SECONDS = 5;
 const STATUS_MESSAGE = 'Checking UI changes';
 // The Stop deep pass scans every UI file touched in the session with the full
@@ -139,6 +145,75 @@ const HOOK_MANIFEST_TARGETS = [
         ],
       },
     }),
+  },
+  {
+    // oh-my-pi discovers hooks as one file per module under
+    // `.omp/hooks/post/*.js`, auto-loaded by file presence rather than a
+    // shared settings entry, so this target's manifest is the module's raw
+    // source text rather than a JSON object `isModule` tells
+    // repairHookManifests/reset to write/compare/delete it as such. No
+    // `sharedDestRel`: unlike Claude's settings.local.json/settings.json
+    // split, oh-my-pi has no local-vs-team-shared distinction for this file.
+    // Keep this source in sync with buildOmpHookModule() in
+    // scripts/lib/transformers/hooks.js in the repo.
+    provider: '.omp',
+    skillRel: '.omp/skills/impeccable',
+    destRel: '.omp/hooks/post/impeccable.js',
+    isModule: true,
+    manifest: () => `import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const HOOK_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "skills", "impeccable", "scripts", "hook.mjs");
+
+function runHook(payload, timeoutMs) {
+  const result = spawnSync("node", [HOOK_SCRIPT], {
+    input: JSON.stringify(payload),
+    encoding: "utf8",
+    cwd: payload.cwd,
+    timeout: timeoutMs,
+  });
+  if (!result.stdout) return null;
+  try {
+    return JSON.parse(result.stdout)?.hookSpecificOutput?.additionalContext || null;
+  } catch {
+    return null;
+  }
+}
+
+export default function impeccableHook(pi) {
+  pi.on("tool_result", async (event, ctx) => {
+    if (event.toolName !== "edit" && event.toolName !== "write") return;
+    const filePath = event.input && typeof event.input.path === "string" ? event.input.path : null;
+    if (!filePath) return;
+    const text = runHook({
+      hook_event_name: "PostToolUse",
+      tool_name: event.toolName,
+      tool_input: { file_path: filePath },
+      cwd: ctx.cwd,
+    }, ${TIMEOUT_SECONDS * 1000});
+    if (!text) return;
+    // ToolResultEventResult.content is a replacement content-block array, not
+    // a string: the runner takes \`result.content ?? tool.content\`, so a bare
+    // string both discards the edit's own output and hands back a shape the
+    // provider cannot render. Append a text block to what the tool produced.
+    const blocks = Array.isArray(event.content) ? event.content : [];
+    return { content: [...blocks, { type: "text", text }] };
+  });
+
+  pi.on("session_stop", async (event, ctx) => {
+    const text = runHook({
+      hook_event_name: "Stop",
+      stop_hook_active: event.stop_hook_active === true,
+      cwd: ctx.cwd,
+    }, ${STOP_TIMEOUT_SECONDS * 1000});
+    // additionalContext alone is dropped. The runner only carries it into a
+    // continuation when \`continue: true\` (or a blocking decision) rides along,
+    // so without this the Stop findings are discarded as the session settles.
+    if (text) return { continue: true, additionalContext: text };
+  });
+}
+`,
   },
 ];
 
@@ -380,6 +455,28 @@ function repairHookManifests(cwd) {
   for (const target of HOOK_MANIFEST_TARGETS) {
     if (!fs.existsSync(path.join(cwd, target.skillRel))) continue;
     const dest = path.join(cwd, target.destRel);
+
+    if (target.isModule) {
+      const content = target.manifest();
+      const current = fs.existsSync(dest) ? safeReadText(dest) : null;
+      if (current === content) {
+        result.already.push(target.provider);
+        continue;
+      }
+      // A foreign file at this path (no Impeccable marker) is a user-managed
+      // hook, not ours to overwrite silently — back it up first, the same
+      // treatment the JSON branch above gives a manifest it can't parse.
+      if (current !== null && !current.includes(OMP_HOOK_MODULE_MARKER)) {
+        const backup = nextAvailableBackupPath(dest);
+        fs.copyFileSync(dest, backup);
+        result.backups.push(backup);
+      }
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, content);
+      result.written.push(target.provider);
+      continue;
+    }
+
     const sharedDest = target.sharedDestRel ? path.join(cwd, target.sharedDestRel) : null;
 
     if (sharedDest && fileHasImpeccableHookMarker(sharedDest)) {
@@ -751,6 +848,38 @@ function manifestIsUnreadableButWired(manifestPath) {
   }
 }
 
+// A fixed `${path}.bak` would clobber a backup left by a previous repair,
+// silently losing whatever foreign content it held. Walk `.bak`, `.bak.2`,
+// `.bak.3`, ... to the first name not already taken.
+function nextAvailableBackupPath(filePath) {
+  let candidate = `${filePath}.bak`;
+  let n = 2;
+  while (fs.existsSync(candidate)) {
+    candidate = `${filePath}.bak.${n}`;
+    n++;
+  }
+  return candidate;
+}
+
+/** Module-file twin of fileHasImpeccableHookMarker: a plain text scan, never JSON. */
+function fileHasOmpHookMarker(filePath) {
+  if (!fs.existsSync(filePath)) return false;
+  try {
+    return fs.readFileSync(filePath, 'utf-8').includes(OMP_HOOK_MODULE_MARKER);
+  } catch {
+    return false;
+  }
+}
+
+// oh-my-pi's hook file holds nothing but the Impeccable hook (one hook per
+// file is its own convention), so "prune" is a plain delete rather than the
+// JSON targets' strip-and-keep-the-rest — there is no "rest" to preserve.
+function pruneOmpHookModule(filePath) {
+  if (!fileHasOmpHookMarker(filePath)) return false;
+  fs.rmSync(filePath, { force: true });
+  return true;
+}
+
 /** Delete the hook's own state files. Never a kill switch, so always safe. */
 function removeHookStateFiles(cwd) {
   const removed = [];
@@ -782,7 +911,13 @@ function reset(cwd) {
   const stillShared = [];
   for (const target of HOOK_MANIFEST_TARGETS) {
     const destPath = path.join(cwd, target.destRel);
-    if (manifestIsUnreadableButWired(destPath)) {
+    if (target.isModule) {
+      try {
+        if (pruneOmpHookModule(destPath)) pruned.push(target.provider);
+      } catch (err) {
+        failed.push(`${target.destRel} (${err.message || err})`);
+      }
+    } else if (manifestIsUnreadableButWired(destPath)) {
       unreadable.push(target.destRel);
     } else {
       try {
