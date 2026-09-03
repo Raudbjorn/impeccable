@@ -188,13 +188,12 @@ describe('hook manifest builders', () => {
     assert.match(source, /hookSpecificOutput\?\.additionalContext/);
     // A hung hook.mjs must not block edit/stop handling indefinitely. Each
     // event passes its own timeout, matching the JSON providers' own
-    // TIMEOUT_SECONDS/STOP_TIMEOUT_SECONDS split; spawnSync's timeout kills
-    // the child and leaves result.stdout empty, which the existing
-    // `if (!result.stdout) return null;` already treats as no hook output.
-    assert.match(source, /function runHook\(payload, timeoutMs\)/);
+    // TIMEOUT_SECONDS/STOP_TIMEOUT_SECONDS split; spawnSync's timeout reaches
+    // the same explicit error-reporting path as other subprocess failures.
+    assert.match(source, /function runHook\(payload, timeoutMs, ctx\)/);
     assert.match(source, /timeout: timeoutMs/);
-    assert.match(source, /runHook\(\{[\s\S]*?hook_event_name: "PostToolUse"[\s\S]*?\}, 5000\)/);
-    assert.match(source, /runHook\(\{[\s\S]*?hook_event_name: "Stop"[\s\S]*?\}, 30000\)/);
+    assert.match(source, /runHook\(\{[\s\S]*?hook_event_name: "PostToolUse"[\s\S]*?\}, 5000, ctx\)/);
+    assert.match(source, /runHook\(\{[\s\S]*?hook_event_name: "Stop"[\s\S]*?\}, 30000, ctx\)/);
     // ToolResultEventResult.content is a replacement content-block array
     // (packages/coding-agent/src/extensibility/shared-events.ts): the runner
     // takes `result.content ?? tool.content`, so returning a bare string both
@@ -359,6 +358,81 @@ describe('hook manifest builders', () => {
       'TIMEOUT_SECONDS', 'STOP_TIMEOUT_SECONDS', `return \`${match[1]}\`;`,
     )(Number(timeoutMatch[1]), Number(stopTimeoutMatch[1]));
     assert.equal(embeddedManifest, buildOmpHookModule());
+  });
+
+  it('reports a missing Node runtime without replacing the tool result', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-omp-hook-no-node-'));
+    const modulePath = path.join(root, 'hooks', 'post', 'impeccable.mjs');
+    fs.mkdirSync(path.dirname(modulePath), { recursive: true });
+    fs.writeFileSync(modulePath, buildOmpHookModule());
+
+    const handlers = new Map();
+    const originalPath = process.env.PATH;
+    try {
+      const loaded = await import(`${pathToFileURL(modulePath).href}?case=${Date.now()}`);
+      loaded.default({ on: (name, handler) => handlers.set(name, handler) });
+      process.env.PATH = root;
+      const notices = [];
+
+      const result = await handlers.get('tool_result')(
+        {
+          toolName: 'edit',
+          input: { path: '/tmp/App.tsx' },
+          content: [{ type: 'text', text: 'edit result' }],
+        },
+        {
+          cwd: root,
+          hasUI: true,
+          ui: { notify: (message, type) => notices.push({ message, type }) },
+        },
+      );
+
+      assert.equal(result, undefined);
+      assert.equal(notices.length, 1);
+      assert.match(notices[0].message, /Impeccable hook failed to run:.*node/i);
+      assert.equal(notices[0].type, 'error');
+    } finally {
+      if (originalPath === undefined) delete process.env.PATH;
+      else process.env.PATH = originalPath;
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('reports the signal that terminated the hook subprocess', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-omp-hook-signal-'));
+    const modulePath = path.join(root, '.omp', 'hooks', 'post', 'impeccable.mjs');
+    const scriptPath = path.join(root, '.omp', 'skills', 'impeccable', 'scripts', 'hook.mjs');
+    fs.mkdirSync(path.dirname(modulePath), { recursive: true });
+    fs.mkdirSync(path.dirname(scriptPath), { recursive: true });
+    fs.writeFileSync(modulePath, buildOmpHookModule());
+    fs.writeFileSync(scriptPath, 'process.stderr.write("before signal\\n"); process.kill(process.pid, "SIGTERM");\n');
+
+    const handlers = new Map();
+    try {
+      const loaded = await import(`${pathToFileURL(modulePath).href}?case=${Date.now()}`);
+      loaded.default({ on: (name, handler) => handlers.set(name, handler) });
+      const notices = [];
+
+      const result = await handlers.get('tool_result')(
+        {
+          toolName: 'write',
+          input: { path: '/tmp/App.tsx' },
+          content: [{ type: 'text', text: 'write result' }],
+        },
+        {
+          cwd: root,
+          hasUI: true,
+          ui: { notify: (message, type) => notices.push({ message, type }) },
+        },
+      );
+
+      assert.equal(result, undefined);
+      assert.equal(notices.length, 1);
+      assert.match(notices[0].message, /SIGTERM/);
+      assert.equal(notices[0].type, 'error');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('probes the node runtime everywhere, and notices only where a channel exists', () => {

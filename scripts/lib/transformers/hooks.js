@@ -232,13 +232,20 @@ import { dirname, join } from "node:path";
 
 const HOOK_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "skills", "impeccable", "scripts", "hook.mjs");
 
-function runHook(payload, timeoutMs) {
+function runHook(payload, timeoutMs, ctx) {
   const result = spawnSync("node", [HOOK_SCRIPT], {
     input: JSON.stringify(payload),
     encoding: "utf8",
     cwd: payload.cwd,
     timeout: timeoutMs,
   });
+  if (result.error || result.status !== 0) {
+    const reason = result.error?.message || result.signal || result.stderr?.trim() || \`exit code \${result.status}\`;
+    const message = \`Impeccable hook failed to run: \${reason}\`;
+    if (ctx.hasUI) ctx.ui.notify(message, "error");
+    else console.error(message);
+    return null;
+  }
   if (!result.stdout) return null;
   try {
     return JSON.parse(result.stdout)?.hookSpecificOutput?.additionalContext || null;
@@ -297,7 +304,7 @@ export default function impeccableHook(pi) {
       tool_name: event.toolName,
       tool_input: { file_path: filePath },
       cwd: ctx.cwd,
-    }, ${TIMEOUT_SECONDS * 1000});
+    }, ${TIMEOUT_SECONDS * 1000}, ctx);
     if (!text) return;
     // ToolResultEventResult.content is a replacement content-block array, not
     // a string: the runner takes \`result.content ?? tool.content\`, so a bare
@@ -312,7 +319,7 @@ export default function impeccableHook(pi) {
       hook_event_name: "Stop",
       stop_hook_active: event.stop_hook_active === true,
       cwd: ctx.cwd,
-    }, ${STOP_TIMEOUT_SECONDS * 1000});
+    }, ${STOP_TIMEOUT_SECONDS * 1000}, ctx);
     // additionalContext alone is dropped. The runner only carries it into a
     // continuation when \`continue: true\` (or a blocking decision) rides along,
     // so without this the Stop findings are discarded as the session settles.
