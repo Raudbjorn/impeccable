@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 const HOOK_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "skills", "impeccable", "scripts", "hook.mjs");
 
 function runHook(payload) {
-  const result = spawnSync("node", [HOOK_SCRIPT], {
+  const result = spawnSync(process.execPath, [HOOK_SCRIPT], {
     input: JSON.stringify(payload),
     encoding: "utf8",
     cwd: payload.cwd,
