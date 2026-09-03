@@ -3813,6 +3813,7 @@ describe('runHook() — events without file_path', () => {
     const r = await runHook({ stdinJson: event, env: {}, cwd, detector: det });
     assert.equal(r.exitCode, 0);
     assert.equal(r.stdout, '');
+    assert.equal(r.audit.skipped, 'no-file-path');
   });
 });
 
