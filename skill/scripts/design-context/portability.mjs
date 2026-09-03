@@ -704,6 +704,15 @@ export async function importDesignContext(cwd, bundle, { design = 'skip', force 
     if (bytes.length > MAX_FILE_BYTES || totalBytes > MAX_BUNDLE_BYTES) {
       throw new Error(`Bundle entry ${relative} is larger than this release accepts.`);
     }
+    // A duplicate path collapses silently in this map (last payload wins),
+    // but the write loop below still iterates rawFiles itself and would
+    // write that one payload once per occurrence, reporting `written` one
+    // higher per duplicate than the number of files that actually exist on
+    // disk. Reject before any mutation below, rather than let the count and
+    // the bundle's own semantics quietly disagree.
+    if (decoded.has(relative)) {
+      throw new Error(`Bundle entry ${relative} is named more than once.`);
+    }
     decoded.set(relative, bytes);
   }
 

@@ -105,6 +105,25 @@ describe('importDesignContext file entries', () => {
     assert.equal(result.written, 0, 'a backslash-separator escape must be skipped, not written');
   });
 
+  // Regression: a duplicate path collapsed silently into one entry in the
+  // decoded map (last payload wins), but the write loop still iterated the
+  // bundle's own raw file list and wrote that one payload once per
+  // occurrence -- reporting `written` one higher per duplicate than the
+  // number of files that actually landed on disk, and doing the redundant
+  // write before any target mutation had a chance to check for this.
+  it('rejects a bundle naming the same path more than once, before any target mutation', async () => {
+    const cwd = await makeCwd();
+    const bundle = bundleWithFiles([
+      { path: 'assets/logo.svg', base64: Buffer.from('first').toString('base64') },
+      { path: 'assets/logo.svg', base64: Buffer.from('second').toString('base64') },
+    ]);
+
+    await assert.rejects(importDesignContext(cwd, bundle), /named more than once/);
+    // No mutation must have landed: the duplicate is caught before any write.
+    const target = paths(cwd);
+    assert.equal(await stat(target.storeDir).then(() => true, () => false), false);
+  });
+
   it('rejects a NUL byte in the file segment instead of crashing writeFile() uncaught', async () => {
     const cwd = await makeCwd();
     const bundle = bundleWithFiles([
@@ -945,7 +964,7 @@ describe('DESIGN.md symlink handling', () => {
   // per-process and Node has no API to lower its own after starting.
   it('cleans up a partial DESIGN.md when the write itself fails, so a retry does not see a permanent EEXIST', () => {
     if (process.platform === 'win32') return; // ulimit -f is POSIX-only
-    const cwd = mkdtempSync(path.join(tmpdir(), 'design-context-designmd-efbig-'));
+    const cwd = mkdtempSync(path.join(sandboxRoot, 'design-context-designmd-efbig-'));
     const portabilityModuleUrl = pathToFileURL(path.resolve('skill/scripts/design-context/portability.mjs')).href;
     const scriptPath = path.join(cwd, 'probe.mjs');
     writeFileSync(scriptPath, [

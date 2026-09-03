@@ -136,6 +136,46 @@ describe('design-context-import.mjs already-has-a-context guard', () => {
   });
 });
 
+// Regression: isSeedDesignMd() read the whole file with readFileSync() and
+// never checked what kind of thing was actually at DESIGN.md. A FIFO or
+// character device there could block the read indefinitely (readFileSync
+// has no cap of its own and would simply wait), and an oversized real file
+// was loaded whole into memory just to find a marker that, by construction,
+// always sits within its first few hundred bytes.
+describe('design-context-import.mjs DESIGN.md seed-marker probe hardening', () => {
+  it('does not block indefinitely when DESIGN.md is a FIFO', () => {
+    if (process.platform === 'win32') return; // mkfifo is POSIX-only
+    const cwd = makeCwd();
+    const mkfifo = spawnSync('mkfifo', [path.join(cwd, 'DESIGN.md')]);
+    if (mkfifo.error || mkfifo.status !== 0) return; // mkfifo unavailable in this environment
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle], { timeout: 5000 });
+
+    // A FIFO with nothing on the other end to write to it must not be
+    // treated as a seed DESIGN.md (isSeedDesignMd() must not hang trying to
+    // read it), so the import proceeds as if no DESIGN.md were there at all.
+    assert.equal(res.status, 0, res.stderr);
+    assert.match(res.stdout, /IMPORTED \d+ files/);
+  });
+
+  it('finds the seed marker in a DESIGN.md far larger than the probe window without reading it whole', () => {
+    const cwd = makeCwd();
+    // The marker sits at the very start (right after frontmatter), same as
+    // document.md's seed mode actually writes it; the rest of the file is
+    // padding well past SEED_MARKER_PROBE_BYTES, standing in for a large
+    // real document.
+    const marker = '<!-- SEED: established with the user before implementation; re-run /impeccable document once there\'s code to capture the actual tokens and components. -->\n';
+    writeFileSync(path.join(cwd, 'DESIGN.md'), marker + '#'.repeat(9 * 1024 * 1024));
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.notEqual(res.status, 0, 'a large seed DESIGN.md must still be recognized as managed state');
+    assert.match(res.stderr, /already has a design context/);
+  });
+});
+
 // Regression: the bundle size check above stat()s the path and compares
 // only its `size`, which is meaningful for a regular file but not for a
 // FIFO or character device (commonly 0 regardless of what actually flows

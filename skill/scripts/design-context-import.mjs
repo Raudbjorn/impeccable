@@ -12,7 +12,7 @@
  * branch on. Exit 1 on a bundle this release cannot read.
  */
 
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, openSync, fstatSync, readSync, closeSync, constants } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { migrate, paths, pidAlive, readJsonSoft } from './design-context/store.mjs';
@@ -48,11 +48,36 @@ import {
    mode writes (see its template and its own staleness check in
    lib/staleness-deep.mjs's SEED_DESIGN_MARKERS); check for that instead of
    mere presence. */
+// document.md's seed mode writes the marker as the first line of the
+// markdown body, right after the frontmatter's closing "---", so it always
+// sits well within this many bytes of the start; bounding the read here
+// means a huge DESIGN.md is never loaded whole just to answer yes/no.
+const SEED_MARKER_PROBE_BYTES = 8192;
+
 function isSeedDesignMd(designPath) {
+  let fd;
   try {
-    return /<!--\s*SEED\b/.test(readFileSync(designPath, 'utf8'));
+    // O_NOFOLLOW refuses a symlink outright rather than reading through it.
+    // O_NONBLOCK matters for a FIFO specifically: opening one for reading
+    // blocks until a writer opens the other end, which O_RDONLY alone would
+    // have done right here, before fstat ever got the chance to say this
+    // is not a regular file. With it, the open itself never blocks; fstat
+    // (not a separate lstat/stat call) then answers "is this a regular
+    // file" for the exact same fd the read below uses, catching a FIFO or
+    // character device before any read is attempted.
+    fd = openSync(designPath, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   } catch {
     return false;
+  }
+  try {
+    if (!fstatSync(fd).isFile()) return false;
+    const buffer = Buffer.alloc(SEED_MARKER_PROBE_BYTES);
+    const bytesRead = readSync(fd, buffer, 0, buffer.length, 0);
+    return /<!--\s*SEED\b/.test(buffer.subarray(0, bytesRead).toString('utf8'));
+  } catch {
+    return false;
+  } finally {
+    closeSync(fd);
   }
 }
 
