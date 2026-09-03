@@ -195,6 +195,29 @@ describe('design-context-import.mjs bundle non-regular-file guard', () => {
     assert.notEqual(res.status, 0, 'a FIFO must be refused, not read');
     assert.match(res.stderr, /not a regular file/);
   });
+
+  // Regression: the bundle path used to be opened with O_RDONLY | O_NONBLOCK
+  // only, so a bundle argument replaced with a symlink between the caller
+  // resolving it and this process's open() call was followed like any other
+  // regular file, defeating the stat-through-the-same-fd guard entirely.
+  // O_NOFOLLOW makes the open() itself fail on a symlink.
+  it('refuses a bundle path that is a symlink instead of reading through it', () => {
+    const cwd = makeCwd();
+    const outsideDir = mkdtempSync(path.join(sandboxRoot, 'outside-'));
+    const realBundle = path.join(outsideDir, 'real-bundle.json');
+    writeFileSync(realBundle, JSON.stringify({
+      kind: 'impeccable-design-context',
+      schemaVersion: 1,
+      answers: { 'palette-primary': '#B8422E' },
+    }));
+    const linkPath = path.join(cwd, 'bundle.json');
+    symlinkSync(realBundle, linkPath);
+
+    const res = runImport(cwd, ['bundle.json']);
+
+    assert.notEqual(res.status, 0, 'a symlinked bundle path must be refused, not followed');
+    assert.match(res.stderr, /not a regular file|ELOOP|symlink/i);
+  });
 });
 
 // Regression: portability.mjs's per-entry decoded-byte checks only bound

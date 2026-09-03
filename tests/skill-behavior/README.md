@@ -131,6 +131,7 @@ problem that one model's priors expose rather than as a model floor.
 | 1-7, 10, 12-15 | pass | pass | pass |
 | 8 (SvelteKit exploration) | flaky | pass | pass |
 | 11 (shape resolves the build gate) | flaky | pass | pass |
+| 16 (cultural-palette override survives craft-floor.md) | not measured (no provider key in this environment) | not measured | not measured |
 
 Scenarios 8 and 11 pass on re-run, so treat a single failure there as flake and
 confirm with a second run before investigating.

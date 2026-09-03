@@ -16,8 +16,6 @@ import path from 'node:path';
 import {
   paths,
   legacyPaths,
-  readAnswers,
-  readContext,
   readJsonSoft,
   writeAnswers,
   writeContext,
@@ -236,6 +234,40 @@ async function openRegularFileNoFollow(filePath) {
   return { ok: true, handle, stat: fileStat };
 }
 
+/* assertManagedRootsNotSymlinked() lstat-checks answers.json/context.json/
+   cues.json/fonts.json once, before buildBundle() runs; readAnswers(),
+   readContext(), and readJsonSoft() (store.mjs) then reopen those same paths
+   through plain readFile(), which follows a symlink. A swap landing in the
+   gap between the two -- the same race openRegularFileNoFollow() already
+   closes for DESIGN.md and every asset -- would still leak whatever the
+   symlink points at into a bundle meant to be handed to someone else.
+   Opening with O_NOFOLLOW and reading through that same handle closes it
+   for these four managed JSON reads too. Soft like readJsonSoft(): missing,
+   non-file, symlinked, unparsable, or unreadable (permission denied, too
+   many open files, any other operational failure) all read as absent
+   rather than aborting the export outright -- matching how a genuinely
+   missing file already behaves here, and how readJsonSoft() itself treats
+   every failure. openRegularFileNoFollow() throws on a code it does not
+   recognize (a caller that wants that surfaced, unlike this one), so the
+   open itself is inside the try too, not only the read that follows it. */
+async function readJsonNoFollow(filePath) {
+  let opened;
+  try {
+    opened = await openRegularFileNoFollow(filePath);
+  } catch {
+    return null;
+  }
+  if (!opened.ok) return null;
+  try {
+    const parsed = JSON.parse(await opened.handle.readFile('utf8'));
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  } finally {
+    await opened.handle.close();
+  }
+}
+
 async function collectFiles(cwd, { includeAssets = true } = {}) {
   const target = paths(cwd);
   const files = [];
@@ -344,11 +376,11 @@ async function buildBundle(cwd, { includeAssets = true, now = new Date() } = {})
      `design-context.md` flows both key off the existence of `answers.json`
      to recognise a completed questionnaire, so an import that synthesizes
      an empty object would install a record that reads as fully answered. */
-  const answers = await readAnswers(cwd);
+  const answers = await readJsonNoFollow(target.answersJson);
 
-  const storedOnDisk = await readContext(cwd);
+  const storedOnDisk = await readJsonNoFollow(target.contextJson);
   const stored = storedOnDisk || { schemaVersion: SCHEMA_VERSION };
-  const cues = await readJsonSoft(target.cuesJson);
+  const cues = await readJsonNoFollow(target.cuesJson);
   const source = typeof answers?.['palette-source'] === 'string' ? answers['palette-source'] : '';
   /* A seed or custom palette names no cue, so there is no image and no dealt
      entry to carry. The hexes in the answers are the palette of record. */
@@ -384,7 +416,7 @@ async function buildBundle(cwd, { includeAssets = true, now = new Date() } = {})
      Read here, ahead of the non-empty check below, so a fonts-manifest-only
      record (no answers, no files, no DESIGN.md, no context.json) counts
      too, instead of being read twice. */
-  const fonts = await readJsonSoft(target.fontsManifestJson);
+  const fonts = await readJsonNoFollow(target.fontsManifestJson);
 
   // hasManagedState() (design-context-import.mjs) already treats an
   // on-disk context.json, cues.json, or fonts.json alone as a real managed
@@ -656,6 +688,17 @@ export function decodeBundleFiles(bundle) {
     throw new Error(`This bundle names ${rawFiles.length} files; this release imports at most ${MAX_BUNDLE_FILES}.`);
   }
   const decoded = new Map();
+  // Case-folded path -> the first original-cased path seen for it. Windows
+  // and default-configured macOS filesystems fold case, so "assets/logo.svg"
+  // and "assets/LOGO.svg" land on the same destination there even though
+  // they are distinct keys in `decoded`; an exact-match duplicate check
+  // alone missed that collision, so the write loop below silently
+  // overwrote the first with the second while this function still reported
+  // two distinct decoded entries -- `written` then counted a file that
+  // could never exist on disk. Folding here, before either file is
+  // accepted, rejects the whole bundle up front rather than let the two
+  // filesystems disagree about how many files actually landed.
+  const seenFolded = new Map();
   let totalBytes = 0;
   for (const file of rawFiles) {
     const relative = String(file?.path || '');
@@ -694,10 +737,14 @@ export function decodeBundleFiles(bundle) {
     // that one payload once per occurrence, reporting a written count one
     // higher per duplicate than the number of files that actually exist on
     // disk. Reject before any caller can mutate anything, rather than let
-    // the count and the bundle's own semantics quietly disagree.
-    if (decoded.has(relative)) {
-      throw new Error(`Bundle entry ${relative} is named more than once.`);
+    // the count and the bundle's own semantics quietly disagree. Folded
+    // rather than exact so a same-cased duplicate (the common case) and a
+    // cross-cased collision are caught by the one check.
+    const folded = relative.toLowerCase();
+    if (seenFolded.has(folded)) {
+      throw new Error(`Bundle entries ${seenFolded.get(folded)} and ${relative} name the same destination once case is folded, which some filesystems do not distinguish.`);
     }
+    seenFolded.set(folded, relative);
     decoded.set(relative, bytes);
   }
   return decoded;
@@ -825,15 +872,28 @@ export async function importDesignContext(cwd, bundle, { design = 'skip', force 
        than let it abort the import after earlier files in this loop, and
        any forced rm()s before it, already landed. mkdir() belongs inside
        this same try: `assets/` or `fonts/` as a plain file (not a
-       directory) -- a shape hasManagedState() does not detect either, so a
-       plain, non-forced import can reach here -- makes mkdir() throw
-       ENOTDIR just as uncaught as a bad rename() would, after answers.json
-       and context.json have already been written for this same import. */
+       directory) is a shape hasManagedState() does not detect either, so a
+       plain, non-forced import can reach here -- mkdir({recursive:true})
+       throws EEXIST when the final path segment (here, `assets/` or
+       `fonts/` itself) already exists as a non-directory, or ENOTDIR when
+       an intermediate segment does; either way it is uncaught, after
+       answers.json and context.json have already been written for this
+       same import. */
     try {
       await mkdir(path.dirname(absolute), { recursive: true });
       await writeFileAtomic(absolute, decoded.get(relative));
       written += 1;
     } catch (error) {
+      // Only the three destination shapes the comment above documents --
+      // EISDIR (a pre-existing directory at the destination), and EEXIST /
+      // ENOTDIR (assets/ or fonts/ itself is a plain file, not a directory)
+      // -- are expected here and safe to skip past. Anything else (ENOSPC,
+      // EACCES, a genuine I/O failure) is an operational failure, not a
+      // destination shape this loop already knows how to route around:
+      // swallowing it the same way reported IMPORTED after a forced import
+      // had already deleted the old store, leaving a partial context that
+      // looked complete to the caller. Let it abort the import instead.
+      if (!['EISDIR', 'EEXIST', 'ENOTDIR'].includes(error.code)) throw error;
       process.stderr.write(`Skipped ${relative}: could not write the destination (${error.code || error.message})\n`);
     }
   }

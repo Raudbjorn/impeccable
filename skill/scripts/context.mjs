@@ -1407,11 +1407,22 @@ function appendDesignContextDirective(parts, ctx) {
     try { contextExists = fs.existsSync(store.contextJson); } catch {}
     try { cuesJsonExists = fs.existsSync(store.cuesJson); } catch {}
     try { fontsManifestExists = fs.existsSync(store.fontsManifestJson); } catch {}
+    // lstatSync (not existsSync/stat) so a symlinked assets/ or fonts/ --
+    // a cloned project can point either outside the repo -- is never
+    // followed into readdirSync(): portability.mjs's export side already
+    // refuses to walk a symlinked assets/ the same way (collectFiles()'s
+    // own directory-level skip); listing external names here and telling
+    // the agent to open them as staged material would bypass that same
+    // no-follow policy from the read side instead of the write side.
     try {
-      assetNames = fs.readdirSync(store.assetsDir).filter((name) => !name.startsWith('.'));
+      if (!fs.lstatSync(store.assetsDir).isSymbolicLink()) {
+        assetNames = fs.readdirSync(store.assetsDir).filter((name) => !name.startsWith('.'));
+      }
     } catch {}
     try {
-      fontNames = fs.readdirSync(store.fontsDir).filter((name) => !name.startsWith('.'));
+      if (!fs.lstatSync(store.fontsDir).isSymbolicLink()) {
+        fontNames = fs.readdirSync(store.fontsDir).filter((name) => !name.startsWith('.'));
+      }
     } catch {}
     // A root imported from an `answers: null` bundle (the pickerless-seed
     // signal) can carry only context.json -- no cue, no answers, no staged

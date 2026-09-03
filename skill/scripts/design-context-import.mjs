@@ -154,12 +154,15 @@ let bundle;
 try {
   const bundlePath = path.resolve(process.cwd(), source);
   // A separate stat(path)-then-readFile(path) pair looks the path up
-  // twice, leaving a window for it to be replaced (or, for a FIFO/pipe, to
-  // simply grow past what was checked) between the two. O_NONBLOCK matters
-  // for a FIFO specifically: opening one for reading would otherwise block
-  // this whole CLI waiting for a writer, before fstat ever got the chance
-  // to say this isn't a regular file.
-  const handle = await open(bundlePath, constants.O_RDONLY | constants.O_NONBLOCK);
+  // twice, leaving a window for it to be replaced (with a symlink, a
+  // FIFO/pipe, a device, or simply grown past what was checked) between the
+  // two. Opening once and then fstat-ing and reading through that same fd
+  // closes the window: O_NOFOLLOW refuses a symlink outright rather than
+  // reading through it, and O_NONBLOCK matters for a FIFO specifically --
+  // opening one for reading would otherwise block this whole CLI waiting for
+  // a writer, before fstat ever got the chance to say this isn't a regular
+  // file.
+  const handle = await open(bundlePath, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const bundleStat = await handle.stat();
     // The size check above is only meaningful for a regular file: a FIFO or

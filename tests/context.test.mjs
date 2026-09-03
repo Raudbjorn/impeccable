@@ -669,6 +669,29 @@ describe('loadContext (monorepo project context)', () => {
     assert.doesNotMatch(res.stdout, /open the cue image/, 'no cue.png exists on this record; the directive must not claim there is one to open');
   });
 
+  it('does not list names from a symlinked assets/ or fonts/ directory', () => {
+    // Regression: readdirSync() follows a symlink the same as a real
+    // directory. A cloned project can point assets/ or fonts/ outside the
+    // repo; without an lstat guard first, this directive listed those
+    // external names and told the agent to open them as staged material --
+    // exactly the follow portability.mjs's export side already refuses for
+    // the same two directories.
+    write('PRODUCT.md', '# Root product\n');
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-outside-assets-'));
+    fs.writeFileSync(path.join(outsideDir, 'secret-logo.svg'), '<svg></svg>');
+    fs.mkdirSync(path.join(scratch, '.impeccable', 'design-context'), { recursive: true });
+    fs.symlinkSync(outsideDir, path.join(scratch, '.impeccable', 'design-context', 'assets'));
+
+    const res = spawnSync(process.execPath, [SCRIPT_PATH], {
+      cwd: scratch,
+      encoding: 'utf8',
+      env: { ...process.env, IMPECCABLE_NO_UPDATE_CHECK: '1', IMPECCABLE_NO_STALENESS_CHECK: '1' },
+    });
+    assert.equal(res.status, 0);
+    assert.doesNotMatch(res.stdout, /secret-logo\.svg/, 'a symlinked assets/ must never be listed as staged material');
+    fs.rmSync(outsideDir, { recursive: true, force: true });
+  });
+
   it('asks for an app when the CLI runs from a monorepo root without selection', () => {
     writeMonorepo();
     const res = spawnSync(process.execPath, [SCRIPT_PATH], {

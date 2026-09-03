@@ -1,6 +1,6 @@
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readdir, stat, readFile, writeFile as writeFileP, mkdir as mkdirP, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, stat, readFile, writeFile as writeFileP, mkdir as mkdirP, rm, chmod } from 'node:fs/promises';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -118,8 +118,26 @@ describe('importDesignContext file entries', () => {
       { path: 'assets/logo.svg', base64: Buffer.from('second').toString('base64') },
     ]);
 
-    await assert.rejects(importDesignContext(cwd, bundle), /named more than once/);
+    await assert.rejects(importDesignContext(cwd, bundle), /name the same destination/);
     // No mutation must have landed: the duplicate is caught before any write.
+    const target = paths(cwd);
+    assert.equal(await stat(target.storeDir).then(() => true, () => false), false);
+  });
+
+  // Regression: the duplicate check compared paths exact-case only, but
+  // Windows and default macOS filesystems fold case -- "assets/logo.svg" and
+  // "assets/LOGO.svg" write to the same destination there even though they
+  // are distinct keys in the decoded map. Two entries differing only in
+  // case sailed past the check, the second silently overwrote the first on
+  // disk, and `written` still counted both.
+  it('rejects a bundle whose paths collide only once case is folded, before any target mutation', async () => {
+    const cwd = await makeCwd();
+    const bundle = bundleWithFiles([
+      { path: 'assets/logo.svg', base64: Buffer.from('first').toString('base64') },
+      { path: 'assets/LOGO.svg', base64: Buffer.from('second').toString('base64') },
+    ]);
+
+    await assert.rejects(importDesignContext(cwd, bundle), /name the same destination/);
     const target = paths(cwd);
     assert.equal(await stat(target.storeDir).then(() => true, () => false), false);
   });
@@ -418,6 +436,36 @@ describe('importDesignContext symlink rejection', () => {
     assert.equal(await readFile(target.assetsDir, 'utf8'), 'not a directory', 'the file at assets/ must survive untouched');
     // The rest of the import still completed instead of throwing partway through.
     assert.equal(await readAnswers(cwd).then((a) => a['palette-primary']), '#B8422E');
+  });
+
+  // Regression: the write loop's catch block swallowed every error the same
+  // way, including operational failures (permission denied, disk full, I/O
+  // error) that are not one of the two documented destination shapes
+  // (EISDIR, ENOTDIR). Reporting IMPORTED after a forced import had already
+  // deleted the old store, with a write that actually failed for an
+  // unrelated operational reason silently downgraded to a skip, left a
+  // partial context that looked complete to the caller. Only the two
+  // destination-shape codes should be swallowed; anything else must abort
+  // the import.
+  it('rethrows an operational write failure instead of silently skipping it', async (t) => {
+    if (process.getuid?.() === 0) {
+      t.skip('a read-only directory does not stop root from writing into it');
+      return;
+    }
+    const cwd = await makeCwd();
+    const target = paths(cwd);
+    await mkdirP(target.assetsDir, { recursive: true });
+    await chmod(target.assetsDir, 0o555); // read + execute, no write
+
+    const bundle = bundleWithFiles([
+      { path: 'assets/logo.svg', base64: Buffer.from('payload').toString('base64') },
+    ]);
+
+    try {
+      await assert.rejects(importDesignContext(cwd, bundle), /EACCES/);
+    } finally {
+      await chmod(target.assetsDir, 0o755);
+    }
   });
 
   // Regression: the per-file destination checks above (and the store/
