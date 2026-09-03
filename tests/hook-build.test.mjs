@@ -326,6 +326,35 @@ describe('hook manifest builders', () => {
     }
   });
 
+  // Regression: hook-admin.mjs's repair/on action (repairHookManifests())
+  // embeds its own hand-written copy of this exact module as one of
+  // HOOK_MANIFEST_TARGETS, rather than importing buildOmpHookModule() --
+  // skill/scripts/** ships to installed projects, scripts/lib/transformers/
+  // does not, so the two cannot share a runtime import. A source-level fix
+  // to buildOmpHookModule() (the URI-scheme guard, the tool_input.file_path
+  // fallback) silently drifted out of sync with hook-admin.mjs's copy, so
+  // running the hook repair/on action overwrote a project's corrected
+  // .omp/hooks/post/impeccable.js with the stale, narrower one -- the
+  // installed file un-fixed itself. Extract hook-admin.mjs's embedded copy
+  // the same way and assert it is byte-identical to the generator's output,
+  // so any future edit to one that isn't mirrored in the other fails here
+  // instead of silently drifting again.
+  it('keeps hook-admin.mjs\'s embedded OMP repair manifest byte-identical to buildOmpHookModule()', () => {
+    const hookAdminSource = fs.readFileSync(path.join(REPO_ROOT, 'skill/scripts/hook-admin.mjs'), 'utf8');
+    const match = hookAdminSource.match(/manifest: \(\) => `([\s\S]*?)`,\n {2}\},\n\];/);
+    assert.ok(match, 'hook-admin.mjs must define the .omp HOOK_MANIFEST_TARGETS entry\'s manifest as a template literal in this shape');
+    // Extracted from hook-admin.mjs's own const declarations, not
+    // hardcoded, so a change to either file's timeout constant is asserted
+    // for real rather than compared against a value this test assumed.
+    const timeoutMatch = hookAdminSource.match(/const TIMEOUT_SECONDS = (\d+);/);
+    const stopTimeoutMatch = hookAdminSource.match(/const STOP_TIMEOUT_SECONDS = (\d+);/);
+    assert.ok(timeoutMatch && stopTimeoutMatch, 'hook-admin.mjs must define TIMEOUT_SECONDS and STOP_TIMEOUT_SECONDS as plain numeric consts');
+    const embeddedManifest = new Function(
+      'TIMEOUT_SECONDS', 'STOP_TIMEOUT_SECONDS', `return \`${match[1]}\`;`,
+    )(Number(timeoutMatch[1]), Number(stopTimeoutMatch[1]));
+    assert.equal(embeddedManifest, buildOmpHookModule());
+  });
+
   it('probes the node runtime everywhere, and notices only where a channel exists', () => {
     // Claude Code and Codex render a `systemMessage` from hook stdout, so their
     // manifests carry the one-time unsupported-runtime notice. Copilot (contract

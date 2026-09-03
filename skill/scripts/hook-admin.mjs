@@ -181,11 +181,41 @@ function runHook(payload, timeoutMs) {
   }
 }
 
+// RFC 3986 authority-style scheme ("scheme://..."): essentially no real
+// filename is shaped exactly like this, so it alone safely catches xd://,
+// http://, file://, and similar with no false positives.
+const URI_AUTHORITY_SCHEME_RE = /^[a-z][a-z0-9+.-]*:\\/\\//i;
+
+// A short allowlist of specific virtual-document identifiers with no
+// authority part at all -- an editor's unsaved-buffer and notebook-cell
+// pseudo-paths, never a real filesystem target. Deliberately NOT a generic
+// "identifier followed by a colon" pattern: POSIX filenames may legally
+// contain a colon anywhere (a real "release:notes.tsx" is syntactically
+// indistinguishable from a scheme prefix by shape alone), and a Windows
+// drive letter uses a colon too, both absolute ("C:\\...") and
+// drive-relative ("C:foo", no separator right after the colon) -- matching
+// on shape alone rejected real filesystem targets that happened to share
+// it. This list only grows for a concretely observed virtual scheme.
+const KNOWN_SCHEMELESS_VIRTUAL_PREFIXES = ["untitled:", "vscode-notebook-cell:"];
+
+function hasUriScheme(value) {
+  if (URI_AUTHORITY_SCHEME_RE.test(value)) return true;
+  return KNOWN_SCHEMELESS_VIRTUAL_PREFIXES.some((prefix) => value.startsWith(prefix));
+}
+
 export default function impeccableHook(pi) {
   pi.on("tool_result", async (event, ctx) => {
     if (event.toolName !== "edit" && event.toolName !== "write") return;
-    const filePath = event.input && typeof event.input.path === "string" ? event.input.path : null;
+    const filePath =
+      (event.tool_input && typeof event.tool_input.file_path === 'string' && event.tool_input.file_path) ||
+      (event.input && typeof event.input.path === 'string' && event.input.path) ||
+      null;
     if (!filePath) return;
+    // Some tool surfaces carry a scheme-prefixed identifier that is not a
+    // real filesystem target. Spawning hook.mjs on them is wasted work —
+    // hook-lib.mjs downstream file-missing skip is the only thing keeping
+    // it cheap. Reject at the adapter so the spawn never happens.
+    if (hasUriScheme(filePath)) return;
     const text = runHook({
       hook_event_name: "PostToolUse",
       tool_name: event.toolName,
