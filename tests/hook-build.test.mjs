@@ -6,8 +6,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import path from 'node:path';
 import os from 'node:os';
+import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
@@ -158,7 +158,7 @@ describe('hook manifest builders', () => {
     assert.equal(manifest.hooks.preToolUse, undefined);
   });
 
-  it('builds an oh-my-pi hook module (JS source, not a JSON manifest)', () => {
+  it('builds an oh-my-pi hook module (JS source, not a JSON manifest)', async () => {
     // oh-my-pi loads `.omp/hooks/post/*` as an imported JS module exporting
     // `pi.on(eventName, handler)`, not a JSON manifest — hooksJsonFor() tags
     // this one with `isModule: true` so callers know to write it verbatim
@@ -205,9 +205,85 @@ describe('hook manifest builders', () => {
     // or a blocking decision accompanies the context; additionalContext on its
     // own is dropped as the session settles.
     assert.match(source, /return \{ continue: true, additionalContext: text \}/);
+    // Verify syntactic structure without importing (data: URL would make
+    // import.meta.url = data:..., breaking HOOK_SCRIPT path resolution).
+    assert.ok(
+      source.includes('pi.on("tool_result"') && source.includes('pi.on("session_stop"'),
+      'module must register tool_result and session_stop handlers',
+    );
+    assert.ok(/hasUriScheme\(filePath\)/.test(source), 'module must guard filePath');
+  });
+  it('oh-my-pi adapter rejects device URI tool targets before spawning hook.mjs', () => {
+    // Some tool surfaces (e.g. `xd://` LSP targets, or scheme-only virtual
+    // documents like `untitled:Untitled-1` with no authority part at all)
+    // carry a scheme-prefixed identifier instead of a filesystem path. The
+    // adapter previously only rejected when `event.input.path` was null, so
+    // it spawned hook.mjs on every edit and hook-lib.mjs's downstream
+    // `file-missing` skip was the only thing keeping it cheap. Reject at the
+    // adapter so the spawn never happens.
+    //
+    // Verify the guard is present and rejects device/scheme URIs while
+    // accepting real filesystem paths (including a Windows drive letter,
+    // which matches the same "letter, colon" syntax a scheme does but is
+    // never one in practice). Extracting the guard function from the source
+    // and running it directly lets the assertion stay honest if a future
+    // edit changes its internals, as long as the call site is still named
+    // `hasUriScheme`.
+    const source = buildOmpHookModule();
+    assert.ok(source.includes('hasUriScheme(filePath)'), 'adapter must carry a guard that calls hasUriScheme(filePath)');
+    // Extracted from the first supporting const through the end of the
+    // function body, not just the function itself: hasUriScheme() reads
+    // module-level constants (the authority-scheme regex, the known-scheme
+    // allowlist) it does not declare inline.
+    const fnMatch = source.match(/const URI_AUTHORITY_SCHEME_RE[\s\S]*?function hasUriScheme\(value\) \{[\s\S]*?\n\}/);
+    assert.ok(fnMatch, 'module must define a hasUriScheme() guard function');
+    const hasUriScheme = new Function(`${fnMatch[0]}\nreturn hasUriScheme;`)();
+
+    // Device/scheme URIs the adapter must reject.
+    for (const uri of [
+      'xd://lsp/foo',
+      'file:///etc/hosts',
+      'http://example.com/x',
+      'https://x.test/y',
+      'untitled:Untitled-1',
+      'vscode-notebook-cell:/path/to/notebook.ipynb#cell',
+    ]) {
+      assert.ok(hasUriScheme(uri), `guard must reject device URI ${uri}`);
+    }
+    // Real paths the adapter must NOT reject — absolute POSIX, relative,
+    // Windows-drive (absolute and drive-relative), and a real filename that
+    // merely happens to contain a colon.
+    for (const p of [
+      '/abs/path.tsx',
+      'rel/path.tsx',
+      './local.tsx',
+      'C:/Users/me/file.tsx',
+      'D:\\Users\\me\\file.tsx',
+      'C:src\\App.tsx',
+      'release:notes.tsx',
+      // Doubled, merely redundant separator: matches the authority regex's
+      // "letter, colon, //" shape exactly, so a leaf drive-path exemption
+      // that only recognizes a single "\" or "/" after the colon still
+      // misclassified this one as a URI.
+      'C://Users/dev/App.tsx',
+      'z://tmp/file.tsx',
+    ]) {
+      assert.ok(!hasUriScheme(p), `guard must not reject real path ${p}`);
+    }
+    // The adapter must read the path from BOTH event.input.path (OMP shape)
+    // and event.tool_input.file_path (Claude Code shape), so a future edit
+    // doesn't accidentally drop the Claude Code fallback and re-introduce the
+    // bug only for that harness.
+    assert.match(source, /event\.tool_input\.file_path/);
+    assert.match(source, /event\.input\.path/);
   });
 
   it('runs hook scripts with node when OMP owns process.execPath', async () => {
+    // A plain filesystem-shaped path, not the "xd://lsp" placeholder this
+    // used to carry: hasUriScheme()'s device-URI guard rejects anything
+    // scheme-prefixed before runHook() is ever reached, which "xd://lsp"
+    // incidentally is. This test's own point (process.execPath override) is
+    // unrelated to that guard, so it needs a path the guard lets through.
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-omp-hook-'));
     const moduleDir = path.join(root, '.omp', 'hooks', 'post');
     const scriptDir = path.join(root, '.omp', 'skills', 'impeccable', 'scripts');
@@ -228,7 +304,7 @@ describe('hook manifest builders', () => {
     fs.writeFileSync(path.join(scriptDir, 'hook.mjs'), [
       `import fs from "node:fs";`,
       `const payload = JSON.parse(fs.readFileSync(0, "utf8"));`,
-      `if (payload.hook_event_name !== "PostToolUse" || payload.tool_name !== "write" || payload.tool_input.file_path !== "xd://lsp") process.exit(2);`,
+      `if (payload.hook_event_name !== "PostToolUse" || payload.tool_name !== "write" || payload.tool_input.file_path !== "src/notes.tsx") process.exit(2);`,
       `process.stdout.write(JSON.stringify({ hookSpecificOutput: { additionalContext: "hook ran" } }));`,
     ].join('\n'));
     const { default: impeccableHook, _getHandlers } = await import(pathToFileURL(modulePath).href);
@@ -240,7 +316,7 @@ describe('hook manifest builders', () => {
       process.execPath = path.join(root, 'omp');
       const result = await handlers.get('tool_result')({
         toolName: 'write',
-        input: { path: 'xd://lsp' },
+        input: { path: 'src/notes.tsx' },
         content: [{ type: 'text', text: 'write result' }],
       }, { cwd: REPO_ROOT });
 
@@ -254,6 +330,35 @@ describe('hook manifest builders', () => {
       process.execPath = originalExecPath;
       fs.rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  // Regression: hook-admin.mjs's repair/on action (repairHookManifests())
+  // embeds its own hand-written copy of this exact module as one of
+  // HOOK_MANIFEST_TARGETS, rather than importing buildOmpHookModule() --
+  // skill/scripts/** ships to installed projects, scripts/lib/transformers/
+  // does not, so the two cannot share a runtime import. A source-level fix
+  // to buildOmpHookModule() (the URI-scheme guard, the tool_input.file_path
+  // fallback) silently drifted out of sync with hook-admin.mjs's copy, so
+  // running the hook repair/on action overwrote a project's corrected
+  // .omp/hooks/post/impeccable.js with the stale, narrower one -- the
+  // installed file un-fixed itself. Extract hook-admin.mjs's embedded copy
+  // the same way and assert it is byte-identical to the generator's output,
+  // so any future edit to one that isn't mirrored in the other fails here
+  // instead of silently drifting again.
+  it('keeps hook-admin.mjs\'s embedded OMP repair manifest byte-identical to buildOmpHookModule()', () => {
+    const hookAdminSource = fs.readFileSync(path.join(REPO_ROOT, 'skill/scripts/hook-admin.mjs'), 'utf8');
+    const match = hookAdminSource.match(/manifest: \(\) => `([\s\S]*?)`,\n {2}\},\n\];/);
+    assert.ok(match, 'hook-admin.mjs must define the .omp HOOK_MANIFEST_TARGETS entry\'s manifest as a template literal in this shape');
+    // Extracted from hook-admin.mjs's own const declarations, not
+    // hardcoded, so a change to either file's timeout constant is asserted
+    // for real rather than compared against a value this test assumed.
+    const timeoutMatch = hookAdminSource.match(/const TIMEOUT_SECONDS = (\d+);/);
+    const stopTimeoutMatch = hookAdminSource.match(/const STOP_TIMEOUT_SECONDS = (\d+);/);
+    assert.ok(timeoutMatch && stopTimeoutMatch, 'hook-admin.mjs must define TIMEOUT_SECONDS and STOP_TIMEOUT_SECONDS as plain numeric consts');
+    const embeddedManifest = new Function(
+      'TIMEOUT_SECONDS', 'STOP_TIMEOUT_SECONDS', `return \`${match[1]}\`;`,
+    )(Number(timeoutMatch[1]), Number(stopTimeoutMatch[1]));
+    assert.equal(embeddedManifest, buildOmpHookModule());
   });
 
   it('probes the node runtime everywhere, and notices only where a channel exists', () => {
@@ -433,6 +538,35 @@ describe('generated hook artifacts in repo', () => {
       const hookLib = await import(pathToFileURL(path.join(abs, 'hook-lib.mjs')));
       const detector = await hookLib.loadDetector();
       assert.equal(typeof detector.detectText, 'function');
+    }
+  });
+  it('OMP hook adapter rejects xd:// URIs at runtime', async () => {
+    // Write source to a real temp file so import.meta.url resolves correctly
+    // (data: URL would make HOOK_SCRIPT path resolution fail). A predictable
+    // path directly under os.tmpdir() would let a pre-existing symlink there
+    // redirect the write; mkdtempSync gives a fresh, unpredictable directory
+    // instead, matching the pattern used elsewhere in this file.
+    const src = buildOmpHookModule();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-hook-'));
+    const tmp = path.join(dir, 'impeccable.mjs');
+    fs.writeFileSync(tmp, src);
+    try {
+      const { default: hook } = await import(pathToFileURL(tmp));
+      // Capture the tool_result handler so we can exercise it directly.
+      const handlers = {};
+      const pi = {
+        on(eventName, handler) { handlers[eventName] = handler; },
+      };
+      hook(pi);
+      // URI scheme: adapter must exit before spawning hook.mjs
+      const uriResult = await handlers.tool_result({ toolName: 'edit', tool_input: { file_path: 'xd://probe.tsx' } }, { cwd: process.cwd() });
+      assert.equal(uriResult, undefined, 'xd:// target must be rejected before spawn');
+      // Filesystem path: adapter must not early-exit
+      const fsResult = await handlers.tool_result({ toolName: 'edit', tool_input: { file_path: 'src/App.tsx' } }, { cwd: process.cwd() });
+      // fsResult may be undefined if hook.mjs produces no findings, but must not be a thrown error
+      assert.ok(fsResult === undefined || typeof fsResult === 'object', 'filesystem path must reach runHook');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 });

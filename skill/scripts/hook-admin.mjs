@@ -181,11 +181,51 @@ function runHook(payload, timeoutMs) {
   }
 }
 
+// RFC 3986 authority-style scheme ("scheme://..."): essentially no real
+// filename is shaped exactly like this, so it alone safely catches xd://,
+// http://, file://, and similar with no false positives.
+const URI_AUTHORITY_SCHEME_RE = /^[a-z][a-z0-9+.-]*:\\/\\//i;
+
+// A short allowlist of specific virtual-document identifiers with no
+// authority part at all -- an editor's unsaved-buffer and notebook-cell
+// pseudo-paths, never a real filesystem target. Deliberately NOT a generic
+// "identifier followed by a colon" pattern: POSIX filenames may legally
+// contain a colon anywhere (a real "release:notes.tsx" is syntactically
+// indistinguishable from a scheme prefix by shape alone), and a Windows
+// drive letter uses a colon too, both absolute ("C:\\...") and
+// drive-relative ("C:foo", no separator right after the colon) -- matching
+// on shape alone rejected real filesystem targets that happened to share
+// it. This list only grows for a concretely observed virtual scheme.
+const KNOWN_SCHEMELESS_VIRTUAL_PREFIXES = ["untitled:", "vscode-notebook-cell:"];
+
+// A single-letter scheme is indistinguishable from a Windows drive letter by
+// shape alone, and the authority regex above requires only ":" + "//" right
+// after it -- so "C://Users/dev/App.tsx" (a drive path with a doubled,
+// merely redundant separator) matches the same as "xd://" does. Checked
+// before the authority regex so a real drive path is exempted regardless of
+// which separator form follows the colon (single "\\", single "/", or the
+// doubled "//" the authority regex would otherwise catch).
+const WINDOWS_DRIVE_PATH_RE = /^[a-z]:[\\\\/]/i;
+
+function hasUriScheme(value) {
+  if (WINDOWS_DRIVE_PATH_RE.test(value)) return false;
+  if (URI_AUTHORITY_SCHEME_RE.test(value)) return true;
+  return KNOWN_SCHEMELESS_VIRTUAL_PREFIXES.some((prefix) => value.startsWith(prefix));
+}
+
 export default function impeccableHook(pi) {
   pi.on("tool_result", async (event, ctx) => {
     if (event.toolName !== "edit" && event.toolName !== "write") return;
-    const filePath = event.input && typeof event.input.path === "string" ? event.input.path : null;
+    const filePath =
+      (event.tool_input && typeof event.tool_input.file_path === 'string' && event.tool_input.file_path) ||
+      (event.input && typeof event.input.path === 'string' && event.input.path) ||
+      null;
     if (!filePath) return;
+    // Some tool surfaces carry a scheme-prefixed identifier that is not a
+    // real filesystem target. Spawning hook.mjs on them is wasted work —
+    // hook-lib.mjs downstream file-missing skip is the only thing keeping
+    // it cheap. Reject at the adapter so the spawn never happens.
+    if (hasUriScheme(filePath)) return;
     const text = runHook({
       hook_event_name: "PostToolUse",
       tool_name: event.toolName,
@@ -952,7 +992,9 @@ function reset(cwd) {
   if (stillShared.length) {
     removeHookStateFiles(cwd);
     const done = pruned.length ? ` Removed hook entries from: ${pruned.join(', ')}.` : '';
-    const disabled = mergeHookConfig(readRawHookConfig(cwd)).enabled === false;
+    // readConfig() merges config.local.json on top of config.json, so a
+    // local-only disable (same gap uiState() had) is reflected here too.
+    const disabled = readConfig(cwd).enabled === false;
     const state = disabled
       ? 'The existing config still disables the hook here, so it was left in place.'
       : 'The hook is still armed here: run `off` to disable it.';
@@ -1001,14 +1043,21 @@ function reset(cwd) {
    writer added after that read is never silently clobbered.
    ============================================================ */
 
+// readConfig() merges config.json then config.local.json, local winning,
+// the same as the hook actually sees at runtime. Reading only the shared
+// file here (as an earlier version of this function did, via
+// readRawHookConfig/readRawDetectorConfig with no opts.local) reported
+// `enabled: true` for a project that had disabled the hook in
+// config.local.json alone: the UI showed it on, and toggling it back
+// "on" was then a silent no-op, since the desired value already matched
+// what uiState() (wrongly) reported as current.
 function uiState(cwd) {
-  const detector = readRawDetectorConfig(cwd) || mergeDetectorConfig(null);
-  const hook = readRawHookConfig(cwd);
+  const config = readConfig(cwd);
   return {
-    enabled: !(hook && hook.enabled === false),
-    ignoreRules: Array.isArray(detector.ignoreRules) ? detector.ignoreRules : [],
-    ignoreFiles: Array.isArray(detector.ignoreFiles) ? detector.ignoreFiles : [],
-    ignoreValues: normalizeIgnoreValueEntries(detector.ignoreValues || []),
+    enabled: config.enabled,
+    ignoreRules: Array.isArray(config.ignoreRules) ? config.ignoreRules : [],
+    ignoreFiles: Array.isArray(config.ignoreFiles) ? config.ignoreFiles : [],
+    ignoreValues: normalizeIgnoreValueEntries(config.ignoreValues || []),
   };
 }
 
@@ -1091,6 +1140,62 @@ function canonState(state) {
   return JSON.stringify([state.enabled === true, list(state.ignoreRules), list(state.ignoreFiles), values]);
 }
 
+// uiState() reads the merged (shared + local, local winning) view so the
+// document's Hooks page shows what the hook actually does, not just the
+// shared file. setEnabled()/setDetectorExact() below only ever write shared
+// config.json, so applying a change through this page left a conflicting
+// local override in place: a local `enabled: false` made a "turn on" apply
+// a silent no-op, and a local-only ignore entry could never be removed
+// through the page, because readConfig() unions it back in on every read.
+// The page presents these keys as one complete set the user has full
+// authority over ("what it sends back is the whole managed set and
+// removals are as deliberate as additions" -- the comment above this
+// section), so after writing the desired state to shared, clear any local
+// override of the same keys: shared alone then determines the merged
+// result. Other local-only keys (consent, quiet, an ignore entry never
+// surfaced through this page) are untouched.
+function clearLocalScope(cwd, { hookKeys = [], detectorKeys = [] } = {}) {
+  const filePath = getLocalConfigPath(cwd);
+  const existingRaw = readRawConfigFile(filePath).raw;
+  if (!existingRaw || typeof existingRaw !== 'object' || Array.isArray(existingRaw)) return;
+  let changed = false;
+  const next = { ...existingRaw };
+  // hookKeys (enabled) live only under `hook`; detectorKeys can live there
+  // too -- a config written before the hook/detector split stored
+  // ignoreRules/ignoreFiles/ignoreValues directly under `hook`, and
+  // readConfig()'s applyDetectorConfigSource() still reads that shape for
+  // back-compat (applyConfigSource() folds the whole hook section into it).
+  // Clearing only the canonical `detector` section below would leave a
+  // legacy local override in place, merged straight back in on every read.
+  const existingHook = hookSection(existingRaw);
+  const hookScopedKeys = [...hookKeys, ...detectorKeys];
+  if (hookScopedKeys.length && existingHook) {
+    const hook = { ...existingHook };
+    for (const key of hookScopedKeys) {
+      if (key in hook) {
+        delete hook[key];
+        changed = true;
+      }
+    }
+    if (Object.keys(hook).length > 0) next.hook = hook;
+    else delete next.hook;
+  }
+  const existingDetector = detectorSection(existingRaw);
+  if (detectorKeys.length && existingDetector) {
+    const detector = { ...existingDetector };
+    for (const key of detectorKeys) {
+      if (key in detector) {
+        delete detector[key];
+        changed = true;
+      }
+    }
+    if (Object.keys(detector).length > 0) next.detector = detector;
+    else delete next.detector;
+  }
+  if (!changed) return;
+  fs.writeFileSync(filePath, JSON.stringify(next, null, 2) + '\n');
+}
+
 function applyUiState(cwd) {
   let payload;
   try {
@@ -1116,10 +1221,34 @@ function applyUiState(cwd) {
     ignoreFiles: cleanStringList(payload.ignoreFiles, 'ignoreFiles'),
     ignoreValues: cleanIgnoreValues(payload.ignoreValues),
   };
-  if (typeof payload.enabled === 'boolean' && payload.enabled !== uiState(cwd).enabled) {
-    setEnabled(cwd, payload.enabled);
+  if (typeof payload.enabled === 'boolean') {
+    // Compare against shared's own value, not only uiState()'s merged one: a
+    // local override can be masking a shared value that already differs
+    // from what the user asked for, and skipping the shared write because
+    // the merged read happened to match would leave shared wrong once the
+    // local override is cleared below.
+    const sharedEnabled = mergeHookConfig(readRawHookConfig(cwd)).enabled;
+    // But shared alone is not enough either: a local override can also mask
+    // a shared value that already matches what the user asked for, while
+    // the *effective* (merged, local-winning) state the user actually sees
+    // and experiences is the opposite. Read that before either write below
+    // changes it. Skipping setEnabled() in that case skips its side effects
+    // too (recording local consent, repairing hook manifests on enable), so
+    // a project could report "enabled" (once the local override is cleared)
+    // without the hook actually being installed anywhere.
+    const previouslyEffective = uiState(cwd).enabled;
+    if (payload.enabled !== sharedEnabled || payload.enabled !== previouslyEffective) setEnabled(cwd, payload.enabled);
+    // Only reconcile the local override when the payload actually asked to
+    // change `enabled`; an apply that only touches the ignore lists must
+    // not silently delete a local override the user never asked to change.
+    clearLocalScope(cwd, { hookKeys: ['enabled'] });
   }
   setDetectorExact(cwd, desired);
+  // Unlike `enabled`, the ignore lists are always a full-state write (a
+  // key missing from the payload is a removal, not "leave unchanged" --
+  // see the comment above this section), so clearing their local scope
+  // stays unconditional.
+  clearLocalScope(cwd, { detectorKeys: ['ignoreRules', 'ignoreFiles', 'ignoreValues'] });
   return JSON.stringify(uiState(cwd));
 }
 

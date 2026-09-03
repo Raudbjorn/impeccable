@@ -556,6 +556,191 @@ describe('loadContext (monorepo project context)', () => {
     assert.doesNotMatch(res.stdout, /REGISTER:/);
   });
 
+  it('reports the selected target\'s own design context, not the invoking root\'s', () => {
+    // Regression: appendDesignContextDirective used to check process.cwd()
+    // before ctx.projectRoot, so a store sitting at the monorepo root (cwd
+    // when --target selects a workspace child) won the DESIGN_CONTEXT
+    // directive over the target's own store, every root chain elsewhere in
+    // this file puts the resolved project first for exactly this reason.
+    writeMonorepo();
+    write('apps/dashboard/PRODUCT.md', '# Dashboard product\n');
+    write('.impeccable/design-context/answers.json', JSON.stringify({ 'palette-primary': '#ROOT000' }));
+    write('apps/dashboard/.impeccable/design-context/answers.json', JSON.stringify({ 'palette-primary': '#DASH000' }));
+
+    const res = spawnSync(process.execPath, [SCRIPT_PATH, '--target', 'apps/dashboard/src/App.jsx'], {
+      cwd: scratch,
+      encoding: 'utf8',
+      env: { ...process.env, IMPECCABLE_NO_UPDATE_CHECK: '1', IMPECCABLE_NO_STALENESS_CHECK: '1' },
+    });
+    assert.equal(res.status, 0);
+    assert.match(res.stdout, /DESIGN_CONTEXT:/);
+    assert.match(res.stdout, /apps\/dashboard\/\.impeccable\/design-context\/answers\.json/);
+    assert.doesNotMatch(
+      res.stdout,
+      /(?<!apps\/dashboard\/)\.impeccable\/design-context\/answers\.json/,
+      'the root store must not be the one reported once the target has its own',
+    );
+  });
+
+  it('reports the target\'s own context.json-only record instead of falling through to the root\'s answers', () => {
+    // Regression: the eligibility check that decides a root has nothing to
+    // report only tested cueExists/answersExist/assetNames -- not
+    // contextExists -- so a target whose only managed state is context.json
+    // (the shape an imported `answers: null` bundle with no files and an
+    // unwritten DESIGN.md leaves behind) read as empty and fell through to
+    // the next root, reporting the invoking root's own answers instead.
+    writeMonorepo();
+    write('apps/dashboard/PRODUCT.md', '# Dashboard product\n');
+    write('.impeccable/design-context/answers.json', JSON.stringify({ 'palette-primary': '#ROOT000' }));
+    write('apps/dashboard/.impeccable/design-context/context.json', JSON.stringify({ schemaVersion: 1 }));
+
+    const res = spawnSync(process.execPath, [SCRIPT_PATH, '--target', 'apps/dashboard/src/App.jsx'], {
+      cwd: scratch,
+      encoding: 'utf8',
+      env: { ...process.env, IMPECCABLE_NO_UPDATE_CHECK: '1', IMPECCABLE_NO_STALENESS_CHECK: '1' },
+    });
+    assert.equal(res.status, 0);
+    assert.match(res.stdout, /DESIGN_CONTEXT:/);
+    assert.match(res.stdout, /apps\/dashboard\/\.impeccable\/design-context\/context\.json/);
+    assert.doesNotMatch(
+      res.stdout,
+      /(?<!apps\/dashboard\/)\.impeccable\/design-context\/answers\.json/,
+      'the root\'s answers.json must not surface once the target has its own (context-only) record',
+    );
+    // Regression: the directive text unconditionally told the agent to open
+    // the cue image and every staged asset, even for this context-only
+    // shape, where neither exists -- an instruction it cannot follow.
+    assert.doesNotMatch(
+      res.stdout,
+      /open the cue image and every staged asset/,
+      'a context-only record has no pixel truth to open; the directive must not claim otherwise',
+    );
+  });
+
+  it('reports the target\'s own font-manifest-only record instead of falling through to the root\'s answers', () => {
+    // Regression: the eligibility check never tested fontsDir, cuesJson, or
+    // fontsManifestJson at all, even though hasManagedState()
+    // (design-context-import.mjs) and buildBundle() (portability.mjs) both
+    // treat any of those alone as real managed state. A monorepo target
+    // whose only retained state was one of them read as empty here and fell
+    // through to the next root, reporting the invoking root's own answers.
+    writeMonorepo();
+    write('apps/dashboard/PRODUCT.md', '# Dashboard product\n');
+    write('.impeccable/design-context/answers.json', JSON.stringify({ 'palette-primary': '#ROOT000' }));
+    write('apps/dashboard/.impeccable/visual-cues/fonts.json', JSON.stringify({ heading: 'Inter', body: 'Inter' }));
+
+    const res = spawnSync(process.execPath, [SCRIPT_PATH, '--target', 'apps/dashboard/src/App.jsx'], {
+      cwd: scratch,
+      encoding: 'utf8',
+      env: { ...process.env, IMPECCABLE_NO_UPDATE_CHECK: '1', IMPECCABLE_NO_STALENESS_CHECK: '1' },
+    });
+    assert.equal(res.status, 0);
+    assert.match(res.stdout, /DESIGN_CONTEXT:/);
+    assert.match(res.stdout, /apps\/dashboard\/\.impeccable\/visual-cues\/fonts\.json/);
+    assert.doesNotMatch(
+      res.stdout,
+      /(?<!apps\/dashboard\/)\.impeccable\/design-context\/answers\.json/,
+      'the root\'s answers.json must not surface once the target has its own (font-manifest-only) record',
+    );
+    assert.doesNotMatch(
+      res.stdout,
+      /open the cue image|open every staged asset/,
+      'a manifest-only record has no pixel truth to open; the directive must not claim otherwise',
+    );
+  });
+
+  it('tells the agent to open staged assets, not a nonexistent cue image, for an asset-only pickerless seed', () => {
+    // Regression: the directive's pixel-truth clause fired on
+    // `cueExists || assetNames.length > 0`, so an asset-only record (a
+    // staged logo with no cue.png -- the pickerless interview never writes
+    // one) still told the agent to open "the cue image", a file that does
+    // not exist on this record.
+    write('PRODUCT.md', '# Root product\n');
+    write('.impeccable/design-context/assets/logo.svg', '<svg></svg>');
+
+    const res = spawnSync(process.execPath, [SCRIPT_PATH], {
+      cwd: scratch,
+      encoding: 'utf8',
+      env: { ...process.env, IMPECCABLE_NO_UPDATE_CHECK: '1', IMPECCABLE_NO_STALENESS_CHECK: '1' },
+    });
+    assert.equal(res.status, 0);
+    assert.match(res.stdout, /DESIGN_CONTEXT:/);
+    assert.match(res.stdout, /open every staged asset/);
+    assert.doesNotMatch(res.stdout, /open the cue image/, 'no cue.png exists on this record; the directive must not claim there is one to open');
+  });
+
+  it('does not list names from a symlinked assets/ or fonts/ directory', () => {
+    // Regression: readdirSync() follows a symlink the same as a real
+    // directory. A cloned project can point assets/ or fonts/ outside the
+    // repo; without an lstat guard first, this directive listed those
+    // external names and told the agent to open them as staged material --
+    // exactly the follow portability.mjs's export side already refuses for
+    // the same two directories.
+    write('PRODUCT.md', '# Root product\n');
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-outside-assets-'));
+    fs.writeFileSync(path.join(outsideDir, 'secret-logo.svg'), '<svg></svg>');
+    fs.mkdirSync(path.join(scratch, '.impeccable', 'design-context'), { recursive: true });
+    fs.symlinkSync(outsideDir, path.join(scratch, '.impeccable', 'design-context', 'assets'));
+
+    const res = spawnSync(process.execPath, [SCRIPT_PATH], {
+      cwd: scratch,
+      encoding: 'utf8',
+      env: { ...process.env, IMPECCABLE_NO_UPDATE_CHECK: '1', IMPECCABLE_NO_STALENESS_CHECK: '1' },
+    });
+    assert.equal(res.status, 0);
+    assert.doesNotMatch(res.stdout, /secret-logo\.svg/, 'a symlinked assets/ must never be listed as staged material');
+    fs.rmSync(outsideDir, { recursive: true, force: true });
+  });
+
+  it('does not list names reached through a symlinked design-context/ ancestor', () => {
+    // Regression: a leaf-only lstatSync(store.assetsDir) check misses a
+    // symlinked ancestor -- if `.impeccable/design-context` itself is a
+    // link, the leaf lookup for .../design-context/assets resolves through
+    // it and reports an ordinary directory, so readdirSync() lists whatever
+    // the link's target actually holds under an assets/ subdirectory.
+    write('PRODUCT.md', '# Root product\n');
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-outside-design-context-'));
+    fs.mkdirSync(path.join(outsideDir, 'assets'), { recursive: true });
+    fs.writeFileSync(path.join(outsideDir, 'assets', 'secret-logo.svg'), '<svg></svg>');
+    fs.mkdirSync(path.join(scratch, '.impeccable'), { recursive: true });
+    fs.symlinkSync(outsideDir, path.join(scratch, '.impeccable', 'design-context'));
+
+    const res = spawnSync(process.execPath, [SCRIPT_PATH], {
+      cwd: scratch,
+      encoding: 'utf8',
+      env: { ...process.env, IMPECCABLE_NO_UPDATE_CHECK: '1', IMPECCABLE_NO_STALENESS_CHECK: '1' },
+    });
+    assert.equal(res.status, 0);
+    assert.doesNotMatch(res.stdout, /secret-logo\.svg/, 'a symlinked design-context/ ancestor must never surface staged material from outside the repo');
+    fs.rmSync(outsideDir, { recursive: true, force: true });
+  });
+
+  it('does not list a symlinked file inside an otherwise real assets/ directory', () => {
+    // Regression: guarding the assets/ directory itself (leaf and ancestor)
+    // says nothing about an individual entry inside it. readdirSync() still
+    // returns a symlinked file's name unchanged, and the directive would
+    // tell the agent to open it as staged material, letting Read follow the
+    // link to wherever it points outside the repo.
+    write('PRODUCT.md', '# Root product\n');
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-outside-asset-file-'));
+    const secretFile = path.join(outsideDir, 'secret.env');
+    fs.writeFileSync(secretFile, 'API_KEY=shh');
+    const assetsDir = path.join(scratch, '.impeccable', 'design-context', 'assets');
+    fs.mkdirSync(assetsDir, { recursive: true });
+    fs.writeFileSync(path.join(assetsDir, 'real-logo.svg'), '<svg></svg>');
+    fs.symlinkSync(secretFile, path.join(assetsDir, 'linked-secret.svg'));
+
+    const res = spawnSync(process.execPath, [SCRIPT_PATH], {
+      cwd: scratch,
+      encoding: 'utf8',
+      env: { ...process.env, IMPECCABLE_NO_UPDATE_CHECK: '1', IMPECCABLE_NO_STALENESS_CHECK: '1' },
+    });
+    assert.equal(res.status, 0);
+    assert.doesNotMatch(res.stdout, /linked-secret\.svg/, 'a symlinked entry inside assets/ must never be listed as staged material');
+    assert.match(res.stdout, /real-logo\.svg/, 'a real, non-symlinked entry must still be listed');
+    fs.rmSync(outsideDir, { recursive: true, force: true });
+  });
+
   it('asks for an app when the CLI runs from a monorepo root without selection', () => {
     writeMonorepo();
     const res = spawnSync(process.execPath, [SCRIPT_PATH], {

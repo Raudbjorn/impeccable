@@ -109,7 +109,7 @@ function readSkillScripts(scriptsDir) {
       if (PER_PROJECT_SCRIPT_ARTIFACTS.has(entry.name)) continue;
 
       const relPath = path.relative(scriptsDir, entryPath).split(path.sep).join('/');
-      const isBinary = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.woff', '.woff2']
+      const isBinary = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.ico', '.woff', '.woff2', '.ttf', '.otf']
         .includes(path.extname(entry.name).toLowerCase());
       scripts.push({
         name: relPath,

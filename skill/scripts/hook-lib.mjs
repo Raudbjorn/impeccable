@@ -1240,12 +1240,53 @@ function relativize(filePath, cwd) {
 // https://developers.openai.com/codex/hooks#posttooluse
 const APPLY_PATCH_FILE_RE = /^\*\*\* (?:Update|Add) File: (.+)$/gm;
 
+// RFC 3986 authority-style scheme ("scheme://..."): anchored at the string
+// start, same as the OMP adapter's own device-URI guard, so a real
+// filesystem path that merely contains "://" somewhere past the start is
+// never mistaken for one. Safe on its own: essentially no real filename is
+// shaped exactly like this, so it alone catches xd://, http://, file://,
+// and similar without any false positives.
+const URI_AUTHORITY_SCHEME_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
+
+// A short allowlist of specific virtual-document identifiers that carry no
+// authority part at all -- an editor's unsaved-buffer and notebook-cell
+// pseudo-paths, never a real filesystem target. Deliberately NOT a generic
+// "identifier followed by a colon" pattern: POSIX filenames may legally
+// contain a colon anywhere (a real "release:notes.tsx" is syntactically
+// indistinguishable from a scheme prefix by shape alone), and a Windows
+// drive letter uses a colon too, both absolute ("C:\...") and
+// drive-relative ("C:foo", no separator right after the colon) -- matching
+// on shape alone rejected real filesystem targets that happened to share
+// it. This list only grows for a concretely observed virtual scheme.
+const KNOWN_SCHEMELESS_VIRTUAL_PREFIXES = ['untitled:', 'vscode-notebook-cell:'];
+
+// A single-letter scheme is indistinguishable from a Windows drive letter by
+// shape alone, and the authority regex above requires only ":" + "//" right
+// after it -- so "C://Users/dev/App.tsx" (a drive path with a doubled,
+// merely redundant separator) matches the same as "xd://" does. Checked
+// before the authority regex so a real drive path is exempted regardless of
+// which separator form follows the colon (single "\", single "/", or the
+// doubled "//" the authority regex would otherwise catch).
+const WINDOWS_DRIVE_PATH_RE = /^[a-z]:[\\/]/i;
+
+function hasUriScheme(value) {
+  if (WINDOWS_DRIVE_PATH_RE.test(value)) return false;
+  if (URI_AUTHORITY_SCHEME_RE.test(value)) return true;
+  return KNOWN_SCHEMELESS_VIRTUAL_PREFIXES.some((prefix) => value.startsWith(prefix));
+}
+
 export function parseApplyPatchPaths(command, projectCwd) {
   if (!command || typeof command !== 'string') return [];
   const out = [];
   for (const m of command.matchAll(APPLY_PATCH_FILE_RE)) {
     let p = (m[1] || '').trim();
     if (!p) continue;
+    // Checked on the raw patch path, before path.resolve() below: resolve()
+    // collapses "://" to a single "/" ("xd://probe.tsx" becomes
+    // "<cwd>/xd:/probe.tsx"), so resolveTargetFiles()'s own URI-scheme guard
+    // -- which only ever sees this caller's already-resolved output -- never
+    // gets the chance to see the scheme prefix it is looking for.
+    if (hasUriScheme(p)) continue;
     if (!path.isAbsolute(p)) p = path.resolve(projectCwd, p);
     out.push(p);
   }
@@ -1257,6 +1298,7 @@ export function resolveTargetFiles(event, projectCwd) {
   const out = [];
   const add = (filePath) => {
     if (typeof filePath !== 'string' || !filePath) return;
+    if (hasUriScheme(filePath)) return; // reject non-filesystem URI schemes before path resolution
     if (!out.includes(filePath)) out.push(filePath);
   };
 

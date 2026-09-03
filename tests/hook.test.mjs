@@ -1608,6 +1608,161 @@ describe('hook-admin.mjs', () => {
     assert.equal(fs.existsSync(getConfigPath(cwd)), false, 'reset must not create a config file');
     assert.equal(fs.existsSync(getLocalConfigPath(cwd)), false);
   });
+
+  // Regression for PR #15 review threads: `state`/`apply` (the design-context
+  // document's Hooks page) read the merged shared+local view via uiState(),
+  // but only ever wrote shared config.json. A conflicting local override
+  // then survived the write and got unioned/overridden right back in on the
+  // next merged read, so the page's toggle or removal silently failed to
+  // take effect.
+  describe('state/apply local-scope reconciliation', () => {
+    it('apply turning the hook on clears a local `enabled: false` that would otherwise keep it off', () => {
+      fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
+      fs.writeFileSync(getLocalConfigPath(cwd), JSON.stringify({ hook: { enabled: false, consent: 'accepted' } }));
+
+      assert.equal(JSON.parse(runAdmin(['state'])).enabled, false, 'the merged state must show local\'s override');
+
+      const applied = JSON.parse(
+        execFileSync(process.execPath, [script, 'apply'], {
+          cwd,
+          input: JSON.stringify({ enabled: true, ignoreRules: [], ignoreFiles: [], ignoreValues: [] }),
+          encoding: 'utf-8',
+        }),
+      );
+      assert.equal(applied.enabled, true, 'the requested turn-on must be reflected immediately');
+
+      const local = JSON.parse(fs.readFileSync(getLocalConfigPath(cwd), 'utf-8'));
+      assert.equal(local.hook.enabled, undefined, 'the stale local override must be cleared, not left to win the next merge');
+      assert.equal(local.hook.consent, 'accepted', 'unrelated local hook keys survive');
+
+      assert.equal(JSON.parse(runAdmin(['state'])).enabled, true, 'a fresh merged read confirms the hook is actually on');
+    });
+
+    it('apply removing an ignore entry clears its local-only copy instead of unioning it back in', () => {
+      fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
+      fs.writeFileSync(getLocalConfigPath(cwd), JSON.stringify({ detector: { ignoreRules: ['overused-font'] } }));
+      assert.deepEqual(JSON.parse(runAdmin(['state'])).ignoreRules, ['overused-font']);
+
+      const applied = JSON.parse(
+        execFileSync(process.execPath, [script, 'apply'], {
+          cwd,
+          input: JSON.stringify({ ignoreRules: [], ignoreFiles: [], ignoreValues: [] }),
+          encoding: 'utf-8',
+        }),
+      );
+      assert.deepEqual(applied.ignoreRules, [], 'the removal must be reflected immediately');
+
+      const local = JSON.parse(fs.readFileSync(getLocalConfigPath(cwd), 'utf-8'));
+      assert.equal(local.detector?.ignoreRules?.length ?? 0, 0, 'the local-only entry must be cleared, not survive to union back in');
+
+      assert.deepEqual(JSON.parse(runAdmin(['state'])).ignoreRules, [], 'a fresh merged read confirms the removal held');
+    });
+
+    // Regression for a round-2 PR #15 review thread on the fix above: the
+    // first version cleared the local `enabled` override unconditionally,
+    // even when the payload never mentioned `enabled` at all.
+    it('apply that omits enabled leaves a local enabled override untouched', () => {
+      fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
+      fs.writeFileSync(getLocalConfigPath(cwd), JSON.stringify({ hook: { enabled: false } }));
+
+      execFileSync(process.execPath, [script, 'apply'], {
+        cwd,
+        input: JSON.stringify({ ignoreRules: ['side-tab'], ignoreFiles: [], ignoreValues: [] }),
+        encoding: 'utf-8',
+      });
+
+      const local = JSON.parse(fs.readFileSync(getLocalConfigPath(cwd), 'utf-8'));
+      assert.equal(local.hook.enabled, false, 'an apply that never mentioned `enabled` must not delete this machine\'s override');
+      assert.equal(JSON.parse(runAdmin(['state'])).enabled, false, 'the merged state must still reflect the untouched local override');
+    });
+
+    // Regression for the same thread: comparing the requested value against
+    // uiState()'s *merged* value (rather than shared's own) skipped
+    // setEnabled() whenever the local override already made the merged read
+    // match what was requested -- even when shared itself held the opposite
+    // value. Clearing the masking local override then flipped the effective
+    // state to shared's stale value, the opposite of what was just applied.
+    it('apply resolves an opposing shared/local enabled pair to the requested value, not the value the clear exposes', () => {
+      fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
+      fs.writeFileSync(getConfigPath(cwd), JSON.stringify({ hook: { enabled: false } }));
+      fs.writeFileSync(getLocalConfigPath(cwd), JSON.stringify({ hook: { enabled: true } }));
+      // Merged (local wins) already reads as "on", matching the apply below.
+      assert.equal(JSON.parse(runAdmin(['state'])).enabled, true);
+
+      const applied = JSON.parse(
+        execFileSync(process.execPath, [script, 'apply'], {
+          cwd,
+          input: JSON.stringify({ enabled: true, ignoreRules: [], ignoreFiles: [], ignoreValues: [] }),
+          encoding: 'utf-8',
+        }),
+      );
+      assert.equal(applied.enabled, true, 'the requested "on" must hold after this apply, not flip once the local override clears');
+
+      const shared = JSON.parse(fs.readFileSync(getConfigPath(cwd), 'utf-8'));
+      assert.equal(shared.hook.enabled, true, 'shared must be brought in line with the request, since the local override that will be cleared was the only thing making it look right');
+      assert.equal(JSON.parse(runAdmin(['state'])).enabled, true, 'a fresh merged read confirms it stayed on');
+    });
+
+    // Regression: the mirror image of the case above. Comparing only
+    // against shared's own value skipped setEnabled() whenever shared
+    // already matched the request, even when a local override was masking
+    // shared and making the *effective* (merged) state the opposite of what
+    // was requested. Skipping setEnabled() here skips its side effects too
+    // (recording local consent, repairing hook manifests), so the project
+    // ends up reporting "enabled" once the masking override clears, without
+    // the hook ever actually having been installed.
+    it('apply still runs setEnabled\'s side effects when shared already matches the request but a local override was masking it', () => {
+      fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
+      fs.writeFileSync(getConfigPath(cwd), JSON.stringify({ hook: { enabled: true } }));
+      fs.writeFileSync(getLocalConfigPath(cwd), JSON.stringify({ hook: { enabled: false } }));
+      // Merged (local wins) reads as "off", the opposite of shared and of
+      // the request about to be applied.
+      assert.equal(JSON.parse(runAdmin(['state'])).enabled, false);
+
+      const applied = JSON.parse(
+        execFileSync(process.execPath, [script, 'apply'], {
+          cwd,
+          input: JSON.stringify({ enabled: true, ignoreRules: [], ignoreFiles: [], ignoreValues: [] }),
+          encoding: 'utf-8',
+        }),
+      );
+      assert.equal(applied.enabled, true, 'the requested turn-on must be reflected immediately');
+
+      const local = JSON.parse(fs.readFileSync(getLocalConfigPath(cwd), 'utf-8'));
+      assert.equal(local.hook.enabled, undefined, 'the stale local override must be cleared');
+      assert.equal(
+        local.hook.consent,
+        'accepted',
+        'setEnabled(true)\'s consent recording must have run, proving the enable actually executed rather than being skipped because shared already matched',
+      );
+
+      assert.equal(JSON.parse(runAdmin(['state'])).enabled, true, 'a fresh merged read confirms the hook is actually on');
+    });
+
+    // Regression for a round-2 PR #15 review thread: readConfig() reads
+    // detector keys (ignoreRules/ignoreFiles/ignoreValues) from a config's
+    // `hook` section too, for back-compat with configs written before the
+    // hook/detector split. Clearing only the canonical `detector` section
+    // left a legacy local override in place, merged straight back in.
+    it('apply removing an ignore entry also clears a legacy copy stored under local hook (not detector)', () => {
+      fs.mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
+      fs.writeFileSync(getLocalConfigPath(cwd), JSON.stringify({ hook: { ignoreRules: ['overused-font'] } }));
+      assert.deepEqual(JSON.parse(runAdmin(['state'])).ignoreRules, ['overused-font']);
+
+      const applied = JSON.parse(
+        execFileSync(process.execPath, [script, 'apply'], {
+          cwd,
+          input: JSON.stringify({ ignoreRules: [], ignoreFiles: [], ignoreValues: [] }),
+          encoding: 'utf-8',
+        }),
+      );
+      assert.deepEqual(applied.ignoreRules, [], 'the removal must be reflected immediately');
+
+      const local = JSON.parse(fs.readFileSync(getLocalConfigPath(cwd), 'utf-8'));
+      assert.equal(local.hook?.ignoreRules?.length ?? 0, 0, 'the legacy hook-scoped entry must be cleared too');
+      assert.deepEqual(JSON.parse(runAdmin(['state'])).ignoreRules, [], 'a fresh merged read confirms the removal held');
+    });
+  });
 });
 
 describe('renderTemplate()', () => {
@@ -2344,6 +2499,18 @@ rounded:
     const file = writeFixture('docs/README.md', 'noop');
     const r = await runHook({ stdinJson: JSON.stringify(eventFor(file)), env: {}, cwd });
     assert.equal(r.audit.skipped, 'extension');
+  });
+
+  it('rejects non-filesystem URI targets before path resolution', async () => {
+    writeFixture('xd:/probe.tsx', 'export const probe = true;');
+    const r = await runHook({
+      stdinJson: JSON.stringify(eventFor('xd://probe.tsx')),
+      env: {},
+      cwd,
+    });
+    assert.equal(r.stdout, '');
+    assert.equal(r.audit.skipped, 'no-file-path');
+    assert.ok(!fs.existsSync(path.join(cwd, '.impeccable')));
   });
 
   it('config ignoreFiles glob suppresses', async () => {
@@ -3180,6 +3347,20 @@ describe('parseApplyPatchPaths()', () => {
     const abs = parseApplyPatchPaths('*** Add File: /tmp/x.css\n*** Update File: src/y.html\n', cwd);
     assert.deepEqual(abs, ['/tmp/x.css', '/proj/src/y.html']);
   });
+
+  // Regression: path.resolve() collapses "://" to a single "/"
+  // ("xd://probe.tsx" becomes "<cwd>/xd:/probe.tsx"), so a URI-scheme guard
+  // that only ever sees this function's resolved output never gets the
+  // chance to see the "://" it is looking for. The raw patch path must be
+  // checked before resolution, not only after.
+  it('rejects a URI-shaped patch path instead of resolving it into a plain-looking one', () => {
+    const cwd = '/proj';
+    assert.deepEqual(parseApplyPatchPaths('*** Update File: xd://probe.tsx\n', cwd), []);
+    assert.deepEqual(
+      parseApplyPatchPaths('*** Update File: xd://probe.tsx\n*** Update File: src/real.tsx\n', cwd),
+      ['/proj/src/real.tsx'],
+    );
+  });
 });
 
 describe('resolveTargetFiles()', () => {
@@ -3207,6 +3388,65 @@ describe('resolveTargetFiles()', () => {
 
   it('accepts a top-level file_path', () => {
     assert.deepEqual(resolveTargetFiles({ file_path: '/a/c.css' }, '/proj'), ['/a/c.css']);
+  });
+
+  // Regression: a bare `.includes('://')` check rejected any path
+  // containing that substring anywhere, not only a URI scheme prefix, so a
+  // real (if unusual) filesystem path naming a URL in its own path was
+  // silently dropped from the scan.
+  it('does not mistake a real path containing "://" past the start for a URI', () => {
+    assert.deepEqual(
+      resolveTargetFiles({ tool_input: { file_path: '/tmp/snapshots/http://card.tsx' } }, '/proj'),
+      ['/tmp/snapshots/http://card.tsx'],
+    );
+  });
+
+  it('still rejects a URI-shaped tool_input.file_path', () => {
+    assert.deepEqual(resolveTargetFiles({ tool_input: { file_path: 'xd://probe.tsx' } }, '/proj'), []);
+  });
+
+  // Regression: the guard used to require "scheme://" (an authority part),
+  // so a scheme-prefixed virtual document with no "//" at all sailed
+  // through as if it were a real filesystem path. Plenty of common editor
+  // targets are exactly this shape.
+  it('rejects scheme-prefixed virtual documents that have no "//" authority part', () => {
+    assert.deepEqual(resolveTargetFiles({ tool_input: { file_path: 'untitled:Untitled-1' } }, '/proj'), []);
+    assert.deepEqual(
+      resolveTargetFiles({ tool_input: { file_path: 'vscode-notebook-cell:/path/to/notebook.ipynb#cell' } }, '/proj'),
+      [],
+    );
+  });
+
+  // Regression guard for the fix above: a Windows drive letter ("C:\..." or
+  // "D:/...") matches the same "letter, colon" syntax a URI scheme would,
+  // but is never a scheme in practice. The allowlist approach (rather than
+  // a generic "identifier followed by a colon" match) never matches these
+  // at all, so no explicit exemption is needed for them.
+  it('does not mistake a Windows drive letter for a URI scheme', () => {
+    assert.deepEqual(resolveTargetFiles({ tool_input: { file_path: 'C:/Users/dev/App.tsx' } }, '/proj'), ['C:/Users/dev/App.tsx']);
+    assert.deepEqual(resolveTargetFiles({ tool_input: { file_path: 'D:\\Users\\dev\\App.tsx' } }, '/proj'), ['D:\\Users\\dev\\App.tsx']);
+  });
+
+  // Regression: a doubled, merely redundant separator right after the drive
+  // letter ("C://...") matches the authority regex's "letter, colon, //"
+  // shape exactly, so the single-form drive check above did not catch it and
+  // it was silently dropped from the scan same as a real URI would be.
+  it('does not mistake a Windows drive letter with a doubled separator for a URI scheme', () => {
+    assert.deepEqual(resolveTargetFiles({ tool_input: { file_path: 'C://Users/dev/App.tsx' } }, '/proj'), ['C://Users/dev/App.tsx']);
+  });
+
+  // Regression: an earlier fix for the "scheme-prefixed virtual documents"
+  // case above matched any "identifier followed by a colon" generically,
+  // which also matched real filesystem paths that merely happen to share
+  // that shape: a POSIX filename may legally contain a colon anywhere, and
+  // a Windows drive-relative path ("C:foo", relative to the current
+  // directory on that drive, no separator right after the colon) is a
+  // valid path too, distinct from the absolute "C:\..." / "C:/..." forms
+  // above. Neither is a URI scheme; the allowlist approach never rejects
+  // either, since neither matches "://" nor the known virtual-scheme list.
+  it('does not mistake a real filename containing a colon, or a Windows drive-relative path, for a URI scheme', () => {
+    assert.deepEqual(resolveTargetFiles({ tool_input: { file_path: 'release:notes.tsx' } }, '/proj'), ['release:notes.tsx']);
+    assert.deepEqual(resolveTargetFiles({ tool_input: { file_path: 'C:src\\App.tsx' } }, '/proj'), ['C:src\\App.tsx']);
   });
 });
 

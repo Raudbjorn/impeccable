@@ -1369,10 +1369,49 @@ async function appendCompRoundOpenDirective(parts, ctx) {
 // error. Same reason `.impeccable/config.json` is spelled out below. If the
 // store ever moves, this list moves with it.
 const DESIGN_CONTEXT_DIR = '.impeccable/design-context';
+// The cue/font-pairing manifests live in a separate workspace dir, not
+// under DESIGN_CONTEXT_DIR: see the same split in store.mjs (STORE_DIR vs
+// WORKSPACE_DIR).
+const DESIGN_WORKSPACE_DIR = '.impeccable/visual-cues';
+
+// A leaf-only lstatSync check (fs.lstatSync(store.assetsDir).isSymbolicLink())
+// misses a symlinked ancestor: if `.impeccable` or `design-context` itself is
+// a link, the leaf lookup resolves through it and reports an ordinary
+// directory, and the readdirSync right after it then lists whatever the link
+// actually points at -- outside the project -- and tells the agent to open
+// those names as staged material. Sync mirror of portability.mjs's own
+// symlinkedAncestor()/assertNoneSymlinked(): this file boots every session
+// and stays on node builtins only (see DESIGN_CONTEXT_DIR above), so it
+// cannot import that async helper from design-context/portability.mjs. Walks
+// a handful of fixed, known-depth path segments (never an arbitrary
+// directory sweep), so it stays inside this file's Tier 1 cost budget.
+function symlinkedAncestorSync(targetPath, boundary) {
+  const boundaryAbs = path.resolve(boundary);
+  const resolved = path.resolve(targetPath);
+  const relative = path.relative(boundaryAbs, resolved);
+  if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`)) return null;
+  let cursor = boundaryAbs;
+  for (const segment of relative.split(path.sep).filter(Boolean)) {
+    cursor = path.join(cursor, segment);
+    let stat;
+    try {
+      stat = fs.lstatSync(cursor);
+    } catch {
+      return null;
+    }
+    if (stat.isSymbolicLink()) return cursor;
+  }
+  return null;
+}
 
 function appendDesignContextDirective(parts, ctx) {
+  // The resolved project decides first, same precedence every other root
+  // chain in this file uses: with --target selecting another workspace, cwd
+  // is the caller's app, not the target's, and a store found there first
+  // would report the wrong project's design context. cwd stands in only
+  // when no project resolved at all.
   const roots = [...new Set(
-    [process.cwd(), ctx.projectRoot, ctx.contextDir]
+    [ctx.projectRoot, ctx.contextDir, process.cwd()]
       .filter(Boolean)
       .map((dir) => path.resolve(dir)),
   )];
@@ -1382,30 +1421,116 @@ function appendDesignContextDirective(parts, ctx) {
       answersJson: path.join(root, DESIGN_CONTEXT_DIR, 'answers.json'),
       contextJson: path.join(root, DESIGN_CONTEXT_DIR, 'context.json'),
       assetsDir: path.join(root, DESIGN_CONTEXT_DIR, 'assets'),
+      fontsDir: path.join(root, DESIGN_CONTEXT_DIR, 'fonts'),
+      cuesJson: path.join(root, DESIGN_WORKSPACE_DIR, 'cues.json'),
+      fontsManifestJson: path.join(root, DESIGN_WORKSPACE_DIR, 'fonts.json'),
     };
     let cueExists = false;
     let answersExist = false;
     let contextExists = false;
+    let cuesJsonExists = false;
+    let fontsManifestExists = false;
     let assetNames = [];
+    let fontNames = [];
     try { cueExists = fs.existsSync(store.cuePng); } catch {}
     try { answersExist = fs.existsSync(store.answersJson); } catch {}
     try { contextExists = fs.existsSync(store.contextJson); } catch {}
+    try { cuesJsonExists = fs.existsSync(store.cuesJson); } catch {}
+    try { fontsManifestExists = fs.existsSync(store.fontsManifestJson); } catch {}
+    // symlinkedAncestorSync (not existsSync/stat, and not a leaf-only
+    // lstatSync) so a symlinked assets/ or fonts/ -- or a symlinked
+    // `.impeccable`/`design-context` above either of them; a cloned project
+    // can point either outside the repo -- is never followed into
+    // readdirSync(): portability.mjs's export side already refuses to walk a
+    // symlinked assets/ the same way (collectFiles()'s own directory-level
+    // skip, ancestor-checked via its own symlinkedAncestor()); listing
+    // external names here and telling the agent to open them as staged
+    // material would bypass that same no-follow policy from the read side
+    // instead of the write side.
+    // Guarding the directory itself is not enough: readdirSync() also
+    // returns an individual entry's name unchanged when that entry is
+    // itself a symlink (e.g. a staged assets/logo.svg pointing outside the
+    // repo), and the directive below would tell the agent to open it same
+    // as any other staged file, letting Read follow the link. Filter each
+    // name through its own lstatSync after the directory-level check above.
     try {
-      assetNames = fs.readdirSync(store.assetsDir).filter((name) => !name.startsWith('.'));
+      if (!symlinkedAncestorSync(store.assetsDir, root)) {
+        assetNames = fs.readdirSync(store.assetsDir)
+          .filter((name) => !name.startsWith('.'))
+          .filter((name) => {
+            try {
+              return !fs.lstatSync(path.join(store.assetsDir, name)).isSymbolicLink();
+            } catch {
+              return false;
+            }
+          });
+      }
     } catch {}
-    if (!cueExists && !answersExist && assetNames.length === 0) continue;
+    try {
+      if (!symlinkedAncestorSync(store.fontsDir, root)) {
+        fontNames = fs.readdirSync(store.fontsDir)
+          .filter((name) => !name.startsWith('.'))
+          .filter((name) => {
+            try {
+              return !fs.lstatSync(path.join(store.fontsDir, name)).isSymbolicLink();
+            } catch {
+              return false;
+            }
+          });
+      }
+    } catch {}
+    // A root imported from an `answers: null` bundle (the pickerless-seed
+    // signal) can carry only context.json -- no cue, no answers, no staged
+    // assets -- and still be the real managed record for this root. hasManagedState()
+    // (design-context-import.mjs) and buildBundle() (portability.mjs) both also
+    // treat a cue manifest or font manifest alone as real managed state; missing
+    // any of these here fell through to the next root, reporting the wrong
+    // project's design context (or none at all) instead.
+    const hasStagedMaterial = assetNames.length > 0 || fontNames.length > 0;
+    if (!cueExists && !answersExist && !contextExists && !cuesJsonExists && !fontsManifestExists && !hasStagedMaterial) continue;
 
     const rel = (target) => path.relative(process.cwd(), target) || target;
     const pieces = [];
     if (cueExists) pieces.push(`${rel(store.cuePng)} (the image the user picked the palette from)`);
     if (assetNames.length > 0) pieces.push(`${rel(store.assetsDir)}/ (staged brand material: ${assetNames.join(', ')})`);
+    if (fontNames.length > 0) pieces.push(`${rel(store.fontsDir)}/ (staged font files: ${fontNames.join(', ')})`);
     if (answersExist) pieces.push(`${rel(store.answersJson)} (every questionnaire decision, per surface)`);
     if (contextExists) pieces.push(`${rel(store.contextJson)} (the interview's chat half, with each staged file's kind and note under context.assets)`);
-    parts.push([
-      'DESIGN_CONTEXT: the visual world on record was chosen by the user in the design interview, and the interview record is files, not only prose: ' + pieces.join('; ') + '.',
-      "Before building or comping any surface on this world, open the cue image and every staged asset; they are the world's pixel truth, and a staged logo is the project's real mark.",
-      'reference/new-work.md names where each rides (comp reference, build material, reviewer calibration).',
-    ].join(' '));
+    if (cuesJsonExists) pieces.push(`${rel(store.cuesJson)} (generated cue/palette candidates, confirmed only where the interview's own answers or chat record points at one)`);
+    if (fontsManifestExists) pieces.push(`${rel(store.fontsManifestJson)} (six ranked candidate font pairings, generated reference material -- not a pick)`);
+    // cueExists/answersExist/contextExists/hasStagedMaterial are each a real
+    // user decision (a picked image, questionnaire answers, the chat
+    // interview's own record, or a file the user actually staged); cues.json
+    // and fonts.json alone are visual-cues.md's generated reference
+    // candidates, and document.md is explicit that nothing in a seed is
+    // picked from them automatically. Asserting "chosen by the user" when
+    // only those manifests are on record would tell the agent generated
+    // candidates are decisions, which is exactly the false signal this
+    // gates against.
+    const hasChoiceBackedRecord = cueExists || answersExist || contextExists || hasStagedMaterial;
+    const directive = [
+      hasChoiceBackedRecord
+        ? 'DESIGN_CONTEXT: the visual world on record was chosen by the user in the design interview, and the interview record is files, not only prose: ' + pieces.join('; ') + '.'
+        : 'DESIGN_CONTEXT: generated reference candidates exist for this world, not yet confirmed by any user choice: ' + pieces.join('; ') + '.',
+    ];
+    // A context-only or manifest-only record (no cue, no staged assets --
+    // possible now that the check above admits it) has no pixel truth to
+    // open; telling the model to open files that do not exist is an
+    // instruction it cannot follow. An asset-only record (staged
+    // logo/moodboard, no cue.png -- the pickerless interview never touches
+    // cue.png) needs its own wording too: the cue-image clause above named
+    // a file that would not exist. Staged font files count as staged
+    // material the same way staged assets do; the cue/font-pairing
+    // manifests do not -- they are metadata, not something to look at.
+    if (cueExists && hasStagedMaterial) {
+      directive.push("Before building or comping any surface on this world, open the cue image and every staged asset; they are the world's pixel truth, and a staged logo is the project's real mark.");
+    } else if (cueExists) {
+      directive.push("Before building or comping any surface on this world, open the cue image; it is the world's pixel truth.");
+    } else if (hasStagedMaterial) {
+      directive.push("Before building or comping any surface on this world, open every staged asset; they are the world's pixel truth, and a staged logo is the project's real mark.");
+    }
+    directive.push('reference/new-work.md names where each rides (comp reference, build material, reviewer calibration).');
+    parts.push(directive.join(' '));
     return;
   }
 }

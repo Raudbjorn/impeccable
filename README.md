@@ -43,7 +43,7 @@ All commands are accessed through `/impeccable`:
 | `/impeccable init` | One-time setup: gather durable product context, write PRODUCT.md, configure live mode when applicable, recommend next steps |
 | `/impeccable document` | Generate root DESIGN.md from existing project code |
 | `/impeccable extract` | Pull reusable components and tokens into the design system |
-| `/impeccable design-context` | Reopen, revise, export, or import the design interview and its design context document |
+| `/impeccable design-context` | Report status, export, or import the design context document (the no-argument form reports status; no interactive reopen flow exists yet) |
 | `/impeccable shape` | Plan UX/UI before writing code |
 | `/impeccable critique` | UX design review: hierarchy, clarity, emotional resonance |
 | `/impeccable audit` | Run technical quality checks (a11y, performance, responsive) |

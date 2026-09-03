@@ -44,6 +44,60 @@ const PRIMER_PROMPT =
 
 const VERBOSE = process.env.IMPECCABLE_SKILL_BEHAVIOR_VERBOSE === '1';
 
+// Scenario 16's own fixtures: a domain that carries an obvious cultural
+// palette (a nation's flag colors, a cuisine's stock hues, a holiday's
+// palette), so craft-floor.md's cultural-symbol-palette rule
+// (<!-- rule:skill-reflex-cultural-palette -->) actually applies. Kept
+// local to the scenario rather than added to fixtures.mjs: nothing else
+// needs a culturally-coded brief.
+const PRODUCT_MD_SAMPLE_DIWALI = `# Third Street Sweets
+
+## Platform
+web
+
+## Product Purpose
+Third Street Sweets is a fourth-generation Diwali sweets shop putting its
+storefront online for the first time. The site is the shop's own voice, not
+a generic festive template.
+
+## Users
+Longtime customers who grew up visiting the physical shop, plus new
+customers finding it online during the Diwali season.
+
+## Positioning
+The neighborhood mithai shop people already trust, now reachable online.
+
+## Cultural Context
+Diwali sweets retail: trays of ladoo and barfi, string lights over the
+storefront, the queue that forms every October.
+
+## Anti-reference
+Nothing stock-holiday: no clip-art diyas, no generic "festive sale" banner
+templates.
+`;
+
+const DESIGN_MD_SAMPLE_DIWALI = `# Third Street Sweets — Design
+
+## Palette
+The shop's own signage has used marigold orange (#E8871E) and deep red
+(#8C1D18) for forty years, hand-painted on the storefront awning. The brief
+is explicit: carry this exact palette onto the site. This is the client's
+own established identity, not a stock festive palette reached for by
+default — the override craft-floor.md's cultural-symbol-palette rule
+carves out for an explicit request.
+
+## Typography
+Warm, legible, no calligraphic "festive" script fonts.
+`;
+
+// Regex proxy for "the agent swapped the client's named palette for
+// something else because it read as the obvious cultural pull" -- the
+// failure mode the override exists to prevent. Not a hex check (too
+// brittle across model phrasing); a phrase like this is the shape a model
+// takes when it applies the general rule without registering the override.
+const CULTURAL_PALETTE_OVERRIDE_REFUSAL_RE =
+  /\b(reach(ing)? past|avoid(ing|s)? the (traditional|cultural|obvious|stock|expected)|instead of (the )?(marigold|traditional|expected)|a (different|less obvious|non-cultural) palette|let the cultural reading come from)\b/i;
+
 function logTrace(label, scenario, model, trace, extras = {}) {
   if (!VERBOSE) return;
   const summary = summarizeTrace(trace);
@@ -586,6 +640,86 @@ for (const modelId of resolveModelList()) {
           fileLoaded(trace, 'audit.native.md'),
           `agent should load audit.native.md (not just audit.md) when the platform is android.\n` +
             `Trace: ${JSON.stringify(summarizeTrace(trace), null, 2)}`,
+        );
+      } finally {
+        cleanupWorkspace(workspace);
+      }
+    });
+
+    it('scenario 16: explicit cultural-palette request survives craft-floor.md\'s guardrail', async () => {
+      // craft-floor.md's cultural-symbol-palette rule tells the agent to
+      // reach past a domain's obvious stock palette (a holiday's colors, a
+      // cuisine's, a flag's) *unless the brief explicitly names it* -- the
+      // override the rule itself carries. This is the inverse of the rule:
+      // proof the override is not a dead clause a later edit can silently
+      // drop. It only means anything if the agent actually reaches the
+      // rule, so the first assertion is reachability (craft-floor.md loads
+      // before implementation).
+      //
+      // The behavior itself needs more than reachability and narration: a
+      // run that made no implementation write at all, or silently swapped
+      // the requested colors for another palette while saying nothing about
+      // it, passed the older text-only check. The harness's only mutation
+      // tool is `write` (whole-file, no separate edit tool -- see
+      // harness.mjs), so the actual implementation write is asserted
+      // directly: an HTML/CSS file must be written, and it must carry both
+      // exact hex values DESIGN.md names, not a paraphrase or a nearby hue.
+      // The narration check stays as a secondary signal for the case where
+      // colors happen to survive by accident while the agent's own words
+      // still describe reaching past them.
+      const workspace = prepareWorkspace({
+        files: {
+          'PRODUCT.md': PRODUCT_MD_SAMPLE_DIWALI,
+          'DESIGN.md': DESIGN_MD_SAMPLE_DIWALI,
+          'index.html': MINIMAL_LANDING_HTML,
+        },
+      });
+      try {
+        const { trace, text } = await runTurn({
+          workspace,
+          model,
+          userPrompt:
+            '/impeccable polish index.html. Keep the marigold-and-deep-red palette from the storefront awning exactly as DESIGN.md describes it.',
+          maxSteps: 14,
+        });
+        logTrace('S16', 'cultural-palette-override', modelId, trace, { textSample: text.slice(0, 400) });
+        assert.ok(
+          bashCommandsMatching(trace, 'context.mjs').length >= 1,
+          `expected agent to run context.mjs at least once.\n` +
+            `Trace: ${JSON.stringify(summarizeTrace(trace), null, 2)}`,
+        );
+        assert.ok(
+          loadedBeforeImplementationWrite(trace, 'craft-floor.md'),
+          `craft-floor.md (which carries the cultural-symbol-palette rule and its explicit-brief override) should load before the agent edits index.html.\n` +
+            `Trace: ${JSON.stringify(summarizeTrace(trace), null, 2)}`,
+        );
+        const implementationWrites = trace.toolCalls.filter(
+          (call) => call.name === 'write' && /\.(html?|css)$/i.test(call.input?.path ?? ''),
+        );
+        assert.ok(
+          implementationWrites.length >= 1,
+          `expected the agent to write an HTML/CSS file implementing the requested palette, not only describe it.\n` +
+            `Trace: ${JSON.stringify(summarizeTrace(trace), null, 2)}`,
+        );
+        const writtenContent = implementationWrites.map((call) => call.input?.contents ?? '').join('\n');
+        assert.match(
+          writtenContent,
+          /#E8871E/i,
+          `the client's marigold orange (#E8871E) must appear verbatim in the implementation output, not a substituted hue.\n` +
+            `Trace: ${JSON.stringify(summarizeTrace(trace), null, 2)}\nwritten: ${writtenContent.slice(0, 2000)}`,
+        );
+        assert.match(
+          writtenContent,
+          /#8C1D18/i,
+          `the client's deep red (#8C1D18) must appear verbatim in the implementation output, not a substituted hue.\n` +
+            `Trace: ${JSON.stringify(summarizeTrace(trace), null, 2)}\nwritten: ${writtenContent.slice(0, 2000)}`,
+        );
+        const observedText = `${text}\n${writtenContent}`;
+        assert.doesNotMatch(
+          observedText,
+          CULTURAL_PALETTE_OVERRIDE_REFUSAL_RE,
+          `an explicit, client-history palette request must not be reached-past as if it were the unprompted default the rule targets.\n` +
+            `Trace: ${JSON.stringify(summarizeTrace(trace), null, 2)}\ntext: ${text}`,
         );
       } finally {
         cleanupWorkspace(workspace);

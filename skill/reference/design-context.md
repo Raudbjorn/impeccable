@@ -33,7 +33,7 @@ Report status in two lines, then act:
 - Whether `answers.json` exists, and when it was last written.
 - Whether a draft is waiting (`runtime/draft.json`), whether DESIGN.md is seeded, and whether a session is live (`runtime/session.json` naming a running process).
 
-With answers on disk, report the status above and stop; offer `export` if the user wants a portable copy. Without them, say the design context is created by the questionnaire and offer `{{command_prefix}}impeccable document`. Never start the questionnaire unasked, and never claim the interview can be reopened or re-run in place; it can't right now.
+A design context exists whenever any of the store is: `answers.json`, `context.json`, staged `assets/`/`fonts/`, or the cue/font manifests under `.impeccable/visual-cues/`. A pickerless seed can carry any subset of these (or a DESIGN.md and nothing else) without ever writing `answers.json`; export and import both already treat that state as real, so status reporting must too. With any of it on disk, report the status above and stop; offer `export` if the user wants a portable copy. Only when none of it exists (and DESIGN.md is unseeded) say the design context is created by the questionnaire and offer `{{command_prefix}}impeccable document`. Never start the questionnaire unasked, and never claim the interview can be reopened or re-run in place; it can't right now.
 
 ## export
 
