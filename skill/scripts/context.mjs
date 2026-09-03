@@ -1447,14 +1447,36 @@ function appendDesignContextDirective(parts, ctx) {
     // external names here and telling the agent to open them as staged
     // material would bypass that same no-follow policy from the read side
     // instead of the write side.
+    // Guarding the directory itself is not enough: readdirSync() also
+    // returns an individual entry's name unchanged when that entry is
+    // itself a symlink (e.g. a staged assets/logo.svg pointing outside the
+    // repo), and the directive below would tell the agent to open it same
+    // as any other staged file, letting Read follow the link. Filter each
+    // name through its own lstatSync after the directory-level check above.
     try {
       if (!symlinkedAncestorSync(store.assetsDir, root)) {
-        assetNames = fs.readdirSync(store.assetsDir).filter((name) => !name.startsWith('.'));
+        assetNames = fs.readdirSync(store.assetsDir)
+          .filter((name) => !name.startsWith('.'))
+          .filter((name) => {
+            try {
+              return !fs.lstatSync(path.join(store.assetsDir, name)).isSymbolicLink();
+            } catch {
+              return false;
+            }
+          });
       }
     } catch {}
     try {
       if (!symlinkedAncestorSync(store.fontsDir, root)) {
-        fontNames = fs.readdirSync(store.fontsDir).filter((name) => !name.startsWith('.'));
+        fontNames = fs.readdirSync(store.fontsDir)
+          .filter((name) => !name.startsWith('.'))
+          .filter((name) => {
+            try {
+              return !fs.lstatSync(path.join(store.fontsDir, name)).isSymbolicLink();
+            } catch {
+              return false;
+            }
+          });
       }
     } catch {}
     // A root imported from an `answers: null` bundle (the pickerless-seed

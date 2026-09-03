@@ -715,6 +715,32 @@ describe('loadContext (monorepo project context)', () => {
     fs.rmSync(outsideDir, { recursive: true, force: true });
   });
 
+  it('does not list a symlinked file inside an otherwise real assets/ directory', () => {
+    // Regression: guarding the assets/ directory itself (leaf and ancestor)
+    // says nothing about an individual entry inside it. readdirSync() still
+    // returns a symlinked file's name unchanged, and the directive would
+    // tell the agent to open it as staged material, letting Read follow the
+    // link to wherever it points outside the repo.
+    write('PRODUCT.md', '# Root product\n');
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-outside-asset-file-'));
+    const secretFile = path.join(outsideDir, 'secret.env');
+    fs.writeFileSync(secretFile, 'API_KEY=shh');
+    const assetsDir = path.join(scratch, '.impeccable', 'design-context', 'assets');
+    fs.mkdirSync(assetsDir, { recursive: true });
+    fs.writeFileSync(path.join(assetsDir, 'real-logo.svg'), '<svg></svg>');
+    fs.symlinkSync(secretFile, path.join(assetsDir, 'linked-secret.svg'));
+
+    const res = spawnSync(process.execPath, [SCRIPT_PATH], {
+      cwd: scratch,
+      encoding: 'utf8',
+      env: { ...process.env, IMPECCABLE_NO_UPDATE_CHECK: '1', IMPECCABLE_NO_STALENESS_CHECK: '1' },
+    });
+    assert.equal(res.status, 0);
+    assert.doesNotMatch(res.stdout, /linked-secret\.svg/, 'a symlinked entry inside assets/ must never be listed as staged material');
+    assert.match(res.stdout, /real-logo\.svg/, 'a real, non-symlinked entry must still be listed');
+    fs.rmSync(outsideDir, { recursive: true, force: true });
+  });
+
   it('asks for an app when the CLI runs from a monorepo root without selection', () => {
     writeMonorepo();
     const res = spawnSync(process.execPath, [SCRIPT_PATH], {
