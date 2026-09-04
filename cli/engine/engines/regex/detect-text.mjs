@@ -501,9 +501,11 @@ function isNeutralBorderColor(str) {
 const TW_SOLID_CHROMATIC_BG_RE = /\bbg-(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d+(?!\/)\b/;
 
 // A '/' opens a regex literal (not division) unless it follows an identifier,
-// number, string-ish close, `)`, `]`, or `.` — the same heuristic tokenizers
-// use for the ASI-adjacent regex/divide ambiguity.
-function canPrecedeRegex(char) {
+// number, string-ish close, `)`, `]`, `.`, or an expression-closing `}` —
+// the same heuristic tokenizers use for the ASI-adjacent regex/divide
+// ambiguity. A block-closing `}` remains a valid regex prefix.
+function canPrecedeRegex(char, lastClosedBraceKind = '') {
+  if (char === '}') return lastClosedBraceKind === 'block';
   return char === undefined || !/[A-Za-z0-9_$)\].'"`]/.test(char);
 }
 
@@ -514,7 +516,37 @@ function scanJs(text, start, onChar) {
   let inRegexClass = false;
   let paren = 0;
   let brace = 0;
+  let lastSignificant = '';
+  let previousSignificant = '';
+  let currentWord = '';
+  let wordSeparated = false;
+  let lastClosedBraceKind = '';
+  const braceKinds = [];
   const interpBrace = [];
+
+  const braceKind = () => (
+    !lastSignificant ||
+      lastSignificant === ')' ||
+      lastSignificant === ';' ||
+      lastSignificant === '}' ||
+      (previousSignificant === '=' && lastSignificant === '>') ||
+      BLOCK_BRACE_PREFIX_KEYWORDS.has(currentWord)
+      ? 'block'
+      : 'expression'
+  );
+
+  const recordSignificant = (char) => {
+    if (/\s/.test(char)) {
+      wordSeparated = true;
+      return;
+    }
+    const isWordChar = /[\w$]/.test(char);
+    if (isWordChar && (wordSeparated || !currentWord)) currentWord = '';
+    wordSeparated = false;
+    previousSignificant = lastSignificant;
+    lastSignificant = char;
+    currentWord = isWordChar ? currentWord + char : '';
+  };
 
   for (let i = start; i < text.length; i++) {
     const char = text[i];
@@ -523,30 +555,51 @@ function scanJs(text, start, onChar) {
 
     if (stringQuote) {
       if (char === '\\') { i++; continue; }
-      if (char === stringQuote) stringQuote = '';
+      if (char === stringQuote) {
+        stringQuote = '';
+        recordSignificant(char);
+      }
       continue;
     }
     if (inTemplate && interpBrace.length === 0) {
       if (char === '\\') { i++; continue; }
       if (char === '$' && next === '{') {
         brace++;
+        braceKinds.push('expression');
         interpBrace.push(brace);
+        recordSignificant(char);
+        recordSignificant(next);
         i++;
         continue;
       }
-      if (char === '`') { inTemplate = false; continue; }
+      if (char === '`') {
+        inTemplate = false;
+        recordSignificant(char);
+        continue;
+      }
       continue;
     }
     if (inRegex) {
       if (char === '\\') { i++; continue; }
       if (char === '[') { inRegexClass = true; continue; }
       if (char === ']') { inRegexClass = false; continue; }
-      if (char === '/' && !inRegexClass) inRegex = false;
+      if (char === '/' && !inRegexClass) {
+        inRegex = false;
+        recordSignificant(char);
+      }
       continue;
     }
 
-    if (char === "'" || char === '"') { stringQuote = char; continue; }
-    if (char === '`') { inTemplate = true; continue; }
+    if (char === "'" || char === '"') {
+      stringQuote = char;
+      recordSignificant(char);
+      continue;
+    }
+    if (char === '`') {
+      inTemplate = true;
+      recordSignificant(char);
+      continue;
+    }
     // `/>` closes a JSX tag only outside any `{...}` expression (brace 0) --
     // a bare `}` right before it would otherwise pass canPrecedeRegex and
     // read it as opening a regex. Inside an expression, `/>` can be a real
@@ -556,21 +609,37 @@ function scanJs(text, start, onChar) {
     if (char === '/' && next !== '/' && next !== '*' && !jsxSelfClose) {
       let j = i - 1;
       while (j >= start && /\s/.test(text[j])) j--;
-      if (canPrecedeRegex(j >= start ? text[j] : undefined)) {
+      if (canPrecedeRegex(j >= start ? text[j] : undefined, lastClosedBraceKind)) {
         inRegex = true;
         inRegexClass = false;
         continue;
       }
     }
-    if (char === '(') { paren++; continue; }
-    if (char === ')') { paren--; continue; }
-    if (char === '{') { brace++; continue; }
+    if (char === '(') {
+      paren++;
+      recordSignificant(char);
+      continue;
+    }
+    if (char === ')') {
+      paren--;
+      recordSignificant(char);
+      continue;
+    }
+    if (char === '{') {
+      braceKinds.push(braceKind());
+      brace++;
+      recordSignificant(char);
+      continue;
+    }
     if (char === '}') {
       brace--;
+      lastClosedBraceKind = braceKinds.pop() ?? '';
       if (interpBrace.length && brace < interpBrace[interpBrace.length - 1]) interpBrace.pop();
+      recordSignificant(char);
       continue;
     }
     if (onChar(char, i, prev, next, { paren, brace })) return;
+    recordSignificant(char);
   }
 }
 

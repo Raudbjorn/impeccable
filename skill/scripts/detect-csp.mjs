@@ -99,7 +99,6 @@ const META_TAG_HINT = /http-equiv\s*=\s*["']Content-Security-Policy["']/i;
 
 function hasNextProjectMarker(projectRoot) {
   if (NEXT_CONFIG_FILES.some(name => fs.existsSync(path.join(projectRoot, name)))) return true;
-  if (['app', 'pages', 'src/app', 'src/pages'].some(rel => fs.existsSync(path.join(projectRoot, rel)))) return true;
   try {
     const pkg = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
     return ['dependencies', 'devDependencies', 'peerDependencies']

@@ -24,7 +24,7 @@ describe('skill detector bundle', () => {
     expect(scriptNames.has('detector/vendor/NOTICE.md')).toBe(true);
   });
 
-  test('the vendored bundle NOTICE.md names every package it actually bundles', () => {
+  test('every shipped NOTICE.md has a section for each bundled package', () => {
     // The shipped bundle has its module-path comments stripped for build
     // reproducibility (see build-static-html-parsers.js), so the package
     // list is read from --list-packages (a throwaway, unstripped rebuild)
@@ -38,10 +38,15 @@ describe('skill detector bundle', () => {
       throw new Error(result.stderr || result.stdout || `--list-packages exited ${result.status}`);
     }
     const bundledPackages = JSON.parse(result.stdout);
-    const notice = fs.readFileSync(path.join(ROOT, 'cli/engine/vendor/NOTICE.md'), 'utf8');
     expect(bundledPackages.length).toBeGreaterThan(0);
-    for (const name of bundledPackages) {
-      expect(notice).toContain(name);
+    for (const noticePath of ['NOTICE.md', 'cli/engine/vendor/NOTICE.md']) {
+      const notice = fs.readFileSync(path.join(ROOT, noticePath), 'utf8');
+      const noticePackages = [...notice.matchAll(/^### (.+?) \([^)]+\)$/gm)]
+        .flatMap(([, names]) => names.split(', '));
+      expect(noticePackages).toHaveLength(bundledPackages.length);
+      for (const name of bundledPackages) {
+        expect(noticePackages).toContain(name);
+      }
     }
   });
 
@@ -60,6 +65,38 @@ describe('skill detector bundle', () => {
       throw new Error(result.stderr || result.stdout || `--check exited ${result.status}`);
     }
     expect(result.status).toBe(0);
+  });
+  test('cleans the temporary parser build directory when bun fails', () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-bun-failure-root-'));
+    const fakeBin = path.join(tmpRoot, 'bin');
+    const fakeBun = path.join(fakeBin, 'bun');
+    fs.mkdirSync(fakeBin);
+    fs.writeFileSync(fakeBun, '#!/bin/sh\nexit 7\n');
+    fs.chmodSync(fakeBun, 0o755);
+    const prefix = 'impeccable-static-html-parsers-';
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [path.join(ROOT, 'scripts/build-static-html-parsers.js'), '--check'],
+        {
+          cwd: ROOT,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`,
+            TMPDIR: tmpRoot,
+            TMP: tmpRoot,
+            TEMP: tmpRoot,
+          },
+        },
+      );
+      expect(result.status).toBe(7);
+      const leaked = fs.readdirSync(tmpRoot)
+        .filter(name => name.startsWith(prefix));
+      expect(leaked).toEqual([]);
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
   });
 
   // Both tampering tests below use --output to point --check at a disposable
@@ -82,7 +119,11 @@ describe('skill detector bundle', () => {
     // The digest line is documentation only now; --check rebuilds and
     // compares bytes, so a body-preserving edit to it must not matter.
     const result = withTamperedCopy(
-      (original) => original.replace(/Source digest: [0-9a-f]+/, 'Source digest: deadbeefdeadbeef'),
+      (original) => {
+        const mutated = original.replace(/Source digest: [0-9a-f]+/, 'Source digest: deadbeefdeadbeef');
+        expect(mutated).not.toBe(original);
+        return mutated;
+      },
       (copy) => spawnSync(
         process.execPath,
         [path.join(ROOT, 'scripts/build-static-html-parsers.js'), '--check', '--output', copy],
@@ -90,6 +131,18 @@ describe('skill detector bundle', () => {
       ),
     );
     expect(result.status).toBe(0);
+  });
+  test('static HTML parser --check rejects a missing generated header', () => {
+    const result = withTamperedCopy(
+      (original) => original.replace(/^\/\*\*[\s\S]*?\*\/\n/, '/** unrelated comment */\n'),
+      (copy) => spawnSync(
+        process.execPath,
+        [path.join(ROOT, 'scripts/build-static-html-parsers.js'), '--check', '--output', copy],
+        { cwd: ROOT, encoding: 'utf8' },
+      ),
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('missing its generated header');
   });
 
   test('static HTML parser --check fails when the bundle body no longer matches a fresh rebuild', () => {

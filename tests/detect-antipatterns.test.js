@@ -370,6 +370,16 @@ describe('detectText — gray-on-color (issue #633)', () => {
       '<div className={/>/.test(value) ? "bg-amber-500" : "text-slate-400"} />',
     )).toHaveLength(0);
   });
+  test('division after an object literal does not swallow the real ternary — no finding', () => {
+    expect(grayOnColor(
+      '<div className={({ weight: 1 } / value) ? "text-slate-400" : "bg-red-500"} />',
+    )).toHaveLength(0);
+  });
+  test('regex after a block brace remains recognized — no finding', () => {
+    expect(grayOnColor(
+      '<div className={(() => { if (value) {} /a?b/.test(value); return value; })() ? "text-slate-400" : "bg-red-500"} />',
+    )).toHaveLength(0);
+  });
 });
 
 describe('detectText — broken images in source comments', () => {

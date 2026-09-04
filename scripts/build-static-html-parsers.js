@@ -26,6 +26,9 @@ const ENTRY = path.join(__dirname, 'lib/static-html-parsers.entry.mjs');
 const OUT_DIR = path.join(ROOT, 'cli/engine/vendor');
 const OUTPUT = path.join(OUT_DIR, 'static-html-parsers.mjs');
 const HEADER_END = '*/\n';
+const HEADER_PREFIX = `/**
+ * GENERATED -- do not edit. Source: scripts/lib/static-html-parsers.entry.mjs
+`;
 
 // bun's bundler prefixes each concatenated module with a comment naming its
 // path relative to wherever node_modules physically resolves to (through
@@ -53,8 +56,9 @@ function rawBuild(outfile) {
     { cwd: ROOT, encoding: 'utf8' },
   );
   if (result.status !== 0) {
-    process.stderr.write(result.stderr || result.stdout || 'bun build failed\n');
-    process.exit(result.status ?? 1);
+    const error = new Error(result.stderr || result.stdout || 'bun build failed');
+    error.exitCode = result.status ?? 1;
+    throw error;
   }
   return fs.readFileSync(outfile, 'utf8');
 }
@@ -100,7 +104,9 @@ function header(digest) {
 
 function splitHeader(content, sourcePath) {
   const end = content.indexOf(HEADER_END);
-  if (end === -1) throw new Error(`${path.relative(ROOT, sourcePath)} is missing its generated header`);
+  if (end === -1 || !content.startsWith(HEADER_PREFIX)) {
+    throw new Error(`${path.relative(ROOT, sourcePath)} is missing its generated header`);
+  }
   return content.slice(end + HEADER_END.length);
 }
 
@@ -109,26 +115,32 @@ function outputOverride() {
   return flagIndex === -1 ? OUTPUT : process.argv[flagIndex + 1];
 }
 
-if (process.argv.includes('--list-packages')) {
-  console.log(JSON.stringify(listBundledPackages()));
-  process.exit(0);
-}
-
-if (process.argv.includes('--check')) {
-  const target = outputOverride();
-  const committedBody = splitHeader(fs.readFileSync(target, 'utf8'), target);
-  const freshBody = buildBody();
-  if (freshBody !== committedBody) {
-    process.stderr.write(
-      `${path.relative(ROOT, target)} is stale (a fresh rebuild differs byte-for-byte). Run: node scripts/build-static-html-parsers.js\n`,
-    );
-    process.exit(1);
+try {
+  if (process.argv.includes('--list-packages')) {
+    console.log(JSON.stringify(listBundledPackages()));
+    process.exit(0);
   }
-  process.exit(0);
-}
 
-const body = buildBody();
-const output = header(digestOf(body)) + body;
-fs.mkdirSync(OUT_DIR, { recursive: true });
-fs.writeFileSync(OUTPUT, output);
-console.log(`Generated ${path.relative(ROOT, OUTPUT)} (${(Buffer.byteLength(output) / 1024).toFixed(1)} KB)`);
+  if (process.argv.includes('--check')) {
+    const target = outputOverride();
+    const committedBody = splitHeader(fs.readFileSync(target, 'utf8'), target);
+    const freshBody = buildBody();
+    if (freshBody !== committedBody) {
+      process.stderr.write(
+        `${path.relative(ROOT, target)} is stale (a fresh rebuild differs byte-for-byte). Run: node scripts/build-static-html-parsers.js\n`,
+      );
+      process.exit(1);
+    }
+    process.exit(0);
+  }
+
+  const body = buildBody();
+  const output = header(digestOf(body)) + body;
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+  fs.writeFileSync(OUTPUT, output);
+  console.log(`Generated ${path.relative(ROOT, OUTPUT)} (${(Buffer.byteLength(output) / 1024).toFixed(1)} KB)`);
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  process.stderr.write(message.endsWith('\n') ? message : `${message}\n`);
+  process.exit(error?.exitCode ?? 1);
+}

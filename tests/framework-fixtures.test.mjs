@@ -293,16 +293,17 @@ describe('detectCsp — Next.js proxy placement', () => {
     for (const [relPath, expectedShape, markers = []] of [
       ['proxy.ts', 'middleware'],
       ['src/proxy.ts', 'middleware'],
-      ['apps/web/proxy.ts', 'middleware', ['apps/web/app']],
-      ['apps/docs/src/proxy.ts', 'middleware', ['apps/docs/src/pages']],
+      ['apps/web/proxy.ts', 'middleware', ['apps/web/package.json']],
+      ['apps/docs/src/proxy.ts', 'middleware', ['apps/docs/next.config.mjs']],
       ['apps/store/proxy.ts', 'middleware', ['apps/store/package.json']],
       ['lib/network/proxy.ts', null],
-      ['apps/web/lib/proxy.ts', null, ['apps/web/app']],
+      ['apps/web/lib/proxy.ts', null, ['apps/web/package.json']],
       // next.config.cjs/.cts are not Next.js config filenames; a nested
       // proxy.ts next to one is not a Next.js project and must not be
       // classified as middleware.
       ['apps/legacy/proxy.ts', null, ['apps/legacy/next.config.cjs']],
       ['apps/legacy-ts/proxy.ts', null, ['apps/legacy-ts/next.config.cts']],
+      ['apps/non-next/src/proxy.ts', null, ['apps/non-next/src/pages']],
     ]) {
       const tmp = mkdtempSync(join(tmpdir(), 'impeccable-proxy-placement-'));
       try {
