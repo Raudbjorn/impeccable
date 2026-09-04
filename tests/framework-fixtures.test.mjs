@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { basename, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { isGeneratedFile } from '../skill/scripts/lib/is-generated.mjs';
@@ -282,3 +282,48 @@ for (const name of listFixtures()) {
     });
   });
 }
+
+describe('detectCsp — Next.js proxy placement', () => {
+  it('accepts proxy files at app roots and src roots but ignores same-named helpers', () => {
+    const source = `export function proxy() {
+  const response = new Response();
+  response.headers.set('Content-Security-Policy', "script-src 'self'");
+  return response;
+}\n`;
+    for (const [relPath, expectedShape, markers = []] of [
+      ['proxy.ts', 'middleware'],
+      ['src/proxy.ts', 'middleware'],
+      ['apps/web/proxy.ts', 'middleware', ['apps/web/package.json']],
+      ['apps/docs/src/proxy.ts', 'middleware', ['apps/docs/next.config.mjs']],
+      ['apps/store/proxy.ts', 'middleware', ['apps/store/package.json']],
+      ['lib/network/proxy.ts', null],
+      ['apps/web/lib/proxy.ts', null, ['apps/web/package.json']],
+      // next.config.cjs/.cts are not Next.js config filenames; a nested
+      // proxy.ts next to one is not a Next.js project and must not be
+      // classified as middleware.
+      ['apps/legacy/proxy.ts', null, ['apps/legacy/next.config.cjs']],
+      ['apps/legacy-ts/proxy.ts', null, ['apps/legacy-ts/next.config.cts']],
+      ['apps/non-next/src/proxy.ts', null, ['apps/non-next/src/pages']],
+    ]) {
+      const tmp = mkdtempSync(join(tmpdir(), 'impeccable-proxy-placement-'));
+      try {
+        mkdirSync(dirname(join(tmp, relPath)), { recursive: true });
+        for (const marker of markers) {
+          if (marker.endsWith('package.json')) {
+            mkdirSync(dirname(join(tmp, marker)), { recursive: true });
+            writeFileSync(join(tmp, marker), JSON.stringify({ dependencies: { next: '^16.0.0' } }));
+          } else if (basename(marker).startsWith('next.config.')) {
+            mkdirSync(dirname(join(tmp, marker)), { recursive: true });
+            writeFileSync(join(tmp, marker), 'export default {};\n');
+          } else {
+            mkdirSync(join(tmp, marker), { recursive: true });
+          }
+        }
+        writeFileSync(join(tmp, relPath), source);
+        assert.equal(detectCsp(tmp).shape, expectedShape, relPath);
+      } finally {
+        rmSync(tmp, { recursive: true, force: true });
+      }
+    }
+  });
+});

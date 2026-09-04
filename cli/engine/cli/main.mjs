@@ -84,6 +84,16 @@ function formatAdvisorySection(advisory) {
   return lines.join('\n');
 }
 
+// Primary findings always win, degraded or not -- a scan that found real
+// defects must never be indistinguishable from a plain tool/environment
+// failure. Degraded-but-clean still exits 1 so CI can tell "trust this
+// less" apart from a genuine pass.
+function detectionExitCode(primaryCount, degraded) {
+  if (primaryCount > 0) return 2;
+  if (degraded) return 1;
+  return 0;
+}
+
 // Text/JSON formatter. `findings` is the full set; advisory items are separated
 // out into their own section and excluded from the failure summary count. JSON
 // output keeps every finding (each advisory one flagged) in a single array.
@@ -423,10 +433,10 @@ async function detectCli() {
       }
     }
     else process.stderr.write(formatFindings(allFindings, false) + '\n');
-    process.exit(primary.length > 0 ? 2 : 0);
+  } else if (jsonMode) {
+    process.stdout.write('[]\n');
   }
-  if (jsonMode) process.stdout.write('[]\n');
-  process.exit(0);
+  process.exit(detectionExitCode(primary.length, globalThis.__impeccableStaticHtmlDegraded));
 }
 
-export { formatFindings, handleStdin, confirm, printUsage, detectCli };
+export { formatFindings, detectionExitCode, handleStdin, confirm, printUsage, detectCli };

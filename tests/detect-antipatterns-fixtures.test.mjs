@@ -13,6 +13,7 @@ import {
   detectHtml,
   detectText,
   formatFindings,
+  detectionExitCode,
   normalizeDesignSystem,
 } from '../cli/engine/detect-antipatterns.mjs';
 import { checkEmDashOveruse } from '../cli/engine/rules/checks.mjs';
@@ -1454,6 +1455,21 @@ describe('formatFindings — advisory partitioning', () => {
     assert.equal(json.length, 2);
     assert.equal(json.find((f) => f.antipattern === 'em-dash-overuse').advisory, true);
     assert.equal(json.find((f) => f.antipattern === 'side-tab').advisory, undefined);
+  });
+});
+
+describe('detectionExitCode — primary findings vs. degraded-parser signal', () => {
+  it('exits 0 for a clean, non-degraded scan', () => {
+    assert.equal(detectionExitCode(0, false), 0);
+  });
+
+  it('exits 1 for a clean scan the static-HTML parser degraded', () => {
+    assert.equal(detectionExitCode(0, true), 1);
+  });
+
+  it('exits 2 when primary findings exist, degraded or not', () => {
+    assert.equal(detectionExitCode(1, false), 2);
+    assert.equal(detectionExitCode(1, true), 2);
   });
 });
 
