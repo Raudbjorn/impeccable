@@ -98,7 +98,7 @@ describe('skill detector bundle', () => {
     }
   });
 
-  // Both tampering tests below use --output to point --check at a disposable
+  // The tampering tests below use --output to point --check at a disposable
   // copy in the OS temp dir, rather than editing the committed vendor bundle
   // in place -- an interrupted test run or a concurrent reader must never see
   // a corrupted cli/engine/vendor/static-html-parsers.mjs.
