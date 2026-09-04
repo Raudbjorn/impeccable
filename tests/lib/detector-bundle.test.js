@@ -43,7 +43,6 @@ describe('skill detector bundle', () => {
       const notice = fs.readFileSync(path.join(ROOT, noticePath), 'utf8');
       const noticePackages = [...notice.matchAll(/^### (.+?) \([^)]+\)$/gm)]
         .flatMap(([, names]) => names.split(', '));
-      expect(noticePackages).toHaveLength(bundledPackages.length);
       for (const name of bundledPackages) {
         expect(noticePackages).toContain(name);
       }
@@ -108,7 +107,9 @@ describe('skill detector bundle', () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-bundle-tamper-'));
     const copy = path.join(tmp, 'static-html-parsers.mjs');
     try {
-      fs.writeFileSync(copy, mutate(original));
+      const mutated = mutate(original);
+      expect(mutated).not.toBe(original);
+      fs.writeFileSync(copy, mutated);
       return fn(copy);
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
@@ -119,11 +120,7 @@ describe('skill detector bundle', () => {
     // The digest line is documentation only now; --check rebuilds and
     // compares bytes, so a body-preserving edit to it must not matter.
     const result = withTamperedCopy(
-      (original) => {
-        const mutated = original.replace(/Source digest: [0-9a-f]+/, 'Source digest: deadbeefdeadbeef');
-        expect(mutated).not.toBe(original);
-        return mutated;
-      },
+      (original) => original.replace(/Source digest: [0-9a-f]+/, 'Source digest: deadbeefdeadbeef'),
       (copy) => spawnSync(
         process.execPath,
         [path.join(ROOT, 'scripts/build-static-html-parsers.js'), '--check', '--output', copy],

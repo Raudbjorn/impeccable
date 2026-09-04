@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { basename, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { isGeneratedFile } from '../skill/scripts/lib/is-generated.mjs';
@@ -312,9 +312,9 @@ describe('detectCsp — Next.js proxy placement', () => {
           if (marker.endsWith('package.json')) {
             mkdirSync(dirname(join(tmp, marker)), { recursive: true });
             writeFileSync(join(tmp, marker), JSON.stringify({ dependencies: { next: '^16.0.0' } }));
-          } else if (marker.endsWith('.cjs') || marker.endsWith('.cts')) {
+          } else if (basename(marker).startsWith('next.config.')) {
             mkdirSync(dirname(join(tmp, marker)), { recursive: true });
-            writeFileSync(join(tmp, marker), 'module.exports = {};\n');
+            writeFileSync(join(tmp, marker), 'export default {};\n');
           } else {
             mkdirSync(join(tmp, marker), { recursive: true });
           }
