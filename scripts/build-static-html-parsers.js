@@ -112,7 +112,10 @@ function splitHeader(content, sourcePath) {
 
 function outputOverride() {
   const flagIndex = process.argv.indexOf('--output');
-  return flagIndex === -1 ? OUTPUT : process.argv[flagIndex + 1];
+  if (flagIndex === -1) return OUTPUT;
+  const value = process.argv[flagIndex + 1];
+  if (!value || value.startsWith('-')) throw new Error('--output requires a path');
+  return value;
 }
 
 try {

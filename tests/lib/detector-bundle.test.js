@@ -156,6 +156,18 @@ describe('skill detector bundle', () => {
     );
     expect(result.status).toBe(1);
   });
+  test('static HTML parser --check rejects --output without a path', () => {
+    for (const args of [['--check', '--output'], ['--output', '--check']]) {
+      const result = spawnSync(
+        process.execPath,
+        [path.join(ROOT, 'scripts/build-static-html-parsers.js'), ...args],
+        { cwd: ROOT, encoding: 'utf8' },
+      );
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('--output requires a path');
+    }
+  });
+
 
   test('critique references the bundled detector command', () => {
     const critique = fs.readFileSync(path.join(ROOT, 'skill/reference/critique.md'), 'utf-8');
