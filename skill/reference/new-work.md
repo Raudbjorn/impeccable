@@ -28,6 +28,12 @@ Across modes, ask what success looks like, what must remain untouched, and what 
 
 ## 3. Choose the right amount of invention
 
+When `.impeccable/config.local.json` configures `retrieval.command`, use the local catalog for challengers and composition inputs. Before the first round, write `.impeccable/retrieval/brief.md`: a compact task brief naming audience, task, real content, constraints, and the established-world commitments that must survive. Pass `--brief-file .impeccable/retrieval/brief.md` with the concept-seed command below. Send the task brief, not a concatenation of PRODUCT.md and DESIGN.md.
+
+The response prints a retrieval session ID. Continue with `--session <id> --reroll <n>`; add `--register safer|bolder` only for an explicitly steered direction round. Use `--session <id> --reroll <n> --replay` to read a saved round without Voyage. The session freezes its brief, catalog, rankings, and settings. To change them, start with a new brief and no session ID. Follow the printed choice command: choices are recorded locally against that exact round before building. A backend failure stops new candidates; repair the reported problem or replay a saved round. Do not quietly substitute an unreranked draw.
+
+Retrieved source references live under `.impeccable/retrieval/<session>/`. Open actual recorded images when present; source pages document an origin, and generated specimen drafts still need review. Never manufacture a public card URL from an entry ID. Keep retrieved entry IDs, evidence references, and the session/round alongside the direction contract in the surface brief, outside browser-delivered artifacts.
+
 ### Extend an existing surface
 
 Inherit its world and composition. Resolve only the new purpose, content, hierarchy, states, interaction, and how the addition joins the surrounding experience. No concept tournament, and no DESIGN.md change unless the user approves a durable system change.

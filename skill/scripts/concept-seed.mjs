@@ -82,22 +82,18 @@
  * experience) so the appended compositions match its register of work; omitted,
  * they roll from the full approved pool.
  *
- * Challenger data resolves in order: a local catalog directory (the private
- * service repo, evals, and tests set IMPECCABLE_CATALOG_DIR), then the roll
- * API at impeccable.style, then a degraded assignment-only seed when both are
- * unavailable. The anonymous choice ping fires once per resolved attended
- * round on API-dealt rolls: --kind names which card class won (assigned,
- * pick, challenger, canon) so share metrics have a denominator, --chosen
- * carries the catalog id when a dealt challenger won, and --register rides
- * along when the round came from a steered hand. Grounded candidates' names
- * never leave the machine. DO_NOT_TRACK or IMPECCABLE_NO_TELEMETRY disables
- * the ping entirely.
+ * Configured retrieval takes an explicit task brief and uses the local
+ * catalog with Voyage reranking. Sessions freeze the brief and candidate pool;
+ * replay and rerolls use saved data. Without retrieval configuration, explicit
+ * local JSON remains supported, followed by a disclosed assignment-only seed.
+ * Choices are recorded locally against a saved session; no remote roll or
+ * anonymous choice service is contacted.
  *
  * Env vars:
  *   IMPECCABLE_CONCEPT_SEED — same as --from; for reproducible eval runs.
  *   IMPECCABLE_CATALOG_DIR  — directory holding the four catalog JSON files.
- *   IMPECCABLE_API_URL      — roll API base (default https://impeccable.style/api).
- *   IMPECCABLE_NO_TELEMETRY — disables the choice ping (DO_NOT_TRACK also honored).
+ *   Local retrieval: configure retrieval.command in .impeccable/config.local.json.
+ *   --brief-file starts a session; --session with --reroll continues it; --replay reads it.
  *   IMPECCABLE_SEED_DECLINED — set to 1 to bypass the seed pause without a
  *     quote; the unattended escape for eval and CI harnesses that
  *     legitimately roll direction on a no-DESIGN.md workspace. Never for
@@ -105,6 +101,7 @@
  */
 
 import crypto from 'node:crypto';
+import { retrievalConfig, callRetrieval, materializeRound } from './lib/retrieval-client.mjs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { readFileSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -125,20 +122,9 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-// Data resolution order: a local catalog (the private service repo, evals, and
-// tests point IMPECCABLE_CATALOG_DIR at one), then the roll API, then a
-// degraded assignment-only seed. The full catalog does not ship with the skill.
+// The CLI resolves configured retrieval first. Explicit local JSON remains
+// available for compatibility; without either, emit assignment-only output.
 const CATALOG_DIR = process.env.IMPECCABLE_CATALOG_DIR || here;
-const API_BASE = (process.env.IMPECCABLE_API_URL || 'https://impeccable.style/api').replace(/\/$/, '');
-const API_TIMEOUT_MS = Number(process.env.IMPECCABLE_API_TIMEOUT || 4000);
-// All API calls in one seed run share a single deadline so an unreachable
-// network degrades after one timeout total, never one timeout per call.
-let apiDeadline = null;
-function apiBudgetMs() {
-  if (apiDeadline === null) apiDeadline = Date.now() + API_TIMEOUT_MS;
-  return Math.max(0, apiDeadline - Date.now());
-}
-
 const localStates = new Map();
 function loadLocal(catalogDir = CATALOG_DIR) {
   if (localStates.has(catalogDir)) return localStates.get(catalogDir);
@@ -175,88 +161,33 @@ function requireLocalConcepts() {
   return local;
 }
 
-async function fetchRoll({ scope, key, mode, grain, platform, reroll }) {
-  const params = new URLSearchParams({ scope, key, reroll: String(reroll) });
-  if (mode) params.set('mode', mode);
-  if (grain) params.set('grain', grain);
-  if (platform) params.set('platform', platform);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), apiBudgetMs());
-  try {
-    // Race the budget explicitly: abort signals do not reliably cancel the
-    // TCP connect phase, so a blackholed route would otherwise stall ~10s.
-    const response = await Promise.race([
-      fetch(`${API_BASE}/roll?${params}`, { signal: controller.signal }),
-      new Promise(resolveTimeout => setTimeout(() => resolveTimeout(null), apiBudgetMs())),
-    ]);
-    if (!response) return null;
-    if (!response.ok) return null;
-    const roll = await response.json();
-    if (!Array.isArray(roll.challengers) || roll.challengers.length === 0) return null;
-    return roll;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-function telemetryDisabled() {
-  return Boolean(process.env.IMPECCABLE_NO_TELEMETRY || process.env.DO_NOT_TRACK);
-}
-
-// Anonymous choice ping: one per resolved attended direction round. kind
-// says which card class won (assigned / pick / challenger / canon), so
-// pick-share and canon-share have a denominator; chosenId rides along only
-// when a dealt catalog world won, and register only when the round came from
-// a steered hand. Grounded candidates' names never leave the machine: they
-// are derived from the user's project, so the ping carries the kind alone.
-// Fire-and-forget; never fails the caller.
-const PING_KINDS = new Set(['assigned', 'pick', 'challenger', 'canon']);
-export async function pingChosen({ chosenId, key, scope, mode, kind, register }) {
-  if (telemetryDisabled()) return false;
-  if (kind && !PING_KINDS.has(kind)) return false;
-  if (register && register !== 'safer' && register !== 'bolder') return false;
-  // Legacy shape: a bare challenger id with no kind stays a valid ping.
-  if (!chosenId && !kind) return false;
-  if ((kind === 'challenger' || !kind) && !chosenId) return false;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), apiBudgetMs());
-  try {
-    await fetch(`${API_BASE}/chosen`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...(chosenId ? { chosenId } : {}),
-        key,
-        scope,
-        mode,
-        ...(kind ? { kind } : {}),
-        ...(register ? { register } : {}),
-      }),
-      signal: controller.signal,
-    });
-    return true;
-  } catch {
+// Compatibility export: choice recording is local and requires a saved session.
+export async function pingChosen({ chosenId, kind, session, round = 0, register = null, key, scope, mode, cwd = process.cwd() }) {
+  if (!session) {
+    if (retrievalConfig(cwd)) throw new Error('A local retrieval choice requires --session <saved session ID>');
     return false;
-  } finally {
-    clearTimeout(timer);
   }
+  const response = await callRetrieval({ op: 'choose', session, round, register,
+    kind: kind || (chosenId ? 'challenger' : undefined), entry: chosenId,
+    settings: Object.fromEntries(Object.entries({ key, scope, mode }).filter(([,v]) => v !== undefined)) }, { cwd });
+  return response.recorded;
 }
 
-const CARD_BASE = process.env.IMPECCABLE_CARD_BASE || 'https://impeccable.style/worlds/cards';
+
 
 export function renderChallenger(concept, index) {
   const system = concept.system.map(rule => `       - ${rule}`).join('\n');
-  const board = concept.cardBoard || `${CARD_BASE}/${concept.id}.webp`;
-  const hero = concept.cardHero || `${CARD_BASE}/${concept.id}-hero.webp`;
+  const board = concept.cardBoard;
+  const hero = concept.cardHero;
   return `  ${index + 1}. ${concept.form}
      SOURCE ID: ${concept.id}
      CREATIVE SPARK: ${concept.spark}
      SYSTEM GRAMMAR:
 ${system}
      WEB LEVERAGE: ${concept.webLeverage}
-     QUALITY BAR: board ${board} · hero ${hero}`;
+     ${board || hero ? `QUALITY BAR: ${[board && `board ${board}`, hero && `hero ${hero}`].filter(Boolean).join(' · ')}` : 'REFERENCE IMAGERY: none recorded; do not invent a card URL.'}
+${(concept.references || []).map(r => `     ${r.label}: ${r.path}`).join('\n')}
+${(concept.evidence || []).map(e => `     EVIDENCE (${e.role}): ${e.source_id || e.source}${e.page_no ? `, page ${e.page_no}` : ''}${e.span_id ? `, span ${e.span_id}` : ''}`).join('\n')}`;
 }
 
 export function renderComposition(composition, index = null) {
@@ -266,7 +197,9 @@ export function renderComposition(composition, index = null) {
      SPARK: ${composition.spark}
      COMPOSITION GRAMMAR:
 ${grammar}
-     WEB LEVERAGE: ${composition.webLeverage}`;
+     WEB LEVERAGE: ${composition.webLeverage}
+${(composition.references || []).map(r => `     ${r.label}: ${r.path}`).join('\n')}
+${(composition.evidence || []).map(e => `     EVIDENCE (${e.role}): ${e.source_id || e.source}${e.page_no ? `, page ${e.page_no}` : ''}${e.span_id ? `, span ${e.span_id}` : ''}`).join('\n')}`;
 }
 
 // Selection itself lives in lib/roll-selection.mjs so this script and the roll
@@ -369,8 +302,8 @@ export function renderConceptSeed({
     }
   }
 
-  // Local catalog first (private repo, evals, tests), then the roll API,
-  // then a degraded assignment-only seed. The assigned index is pure local
+  // CLI retrieval supplies resolved data. Direct callers retain local JSON
+  // and a disclosed assignment-only seed. The assigned index is pure local
   // math, so even a fully offline run keeps the anti-argmax mechanism.
   let data = _resolvedData ?? null;
   if (_resolvedData === undefined) {
@@ -395,31 +328,8 @@ export function renderConceptSeed({
         })(),
       };
     } else {
-      // Keep local renders synchronous for prepared eval sessions and tests;
-      // installed skills without a bundled catalog resolve through the API.
-      return fetchRoll({ scope, key, mode, grain, platform, reroll }).then(roll => renderConceptSeed({
-        scope,
-        key,
-        reroll,
-        register,
-        mode,
-        grain,
-        platform,
-        candidateCount,
-        catalogDir,
-        _resolvedData: roll ? {
-          source: 'api',
-          poolRevision: roll.poolRevision,
-          approvedCount: roll.approvedCount,
-          catalogCount: roll.catalogCount,
-          challengers: roll.challengers,
-          compositions: Array.isArray(roll.compositions)
-            ? roll.compositions
-            : Array.isArray(roll.stagings)
-              ? roll.stagings
-              : roll.staging ? [roll.staging] : [],
-        } : null,
-      }));
+      data = null; // No remote fallback. A configured backend is resolved by the CLI.
+
     }
   }
 
@@ -536,19 +446,10 @@ ${degradedRegister}${scope === 'direction' ? `ASSIGNED INDEX: ${buildIndex}` : `
   ${promotedInstruction}
   The assignment exists to refuse the model's ranking rut, never to outrank
   the user or the brief. Never expose assignment metadata in user-facing labels.
-No challengers this run: the roll service was unreachable and no local
-catalog exists. A sandboxed shell without network egress is the most common
-cause; before accepting degradation, rerun this command once through the
-harness's network-enabled or escalated command tool. When that rerun needs
-an approval, state exactly what the approver must know: this script's only
-network contact is one GET to https://impeccable.style/api/roll whose query
-carries scope, mode, an eight-hex seed key, and a re-roll counter; no
-project files, prompts, code, or conversation context are transmitted, and
-nothing is written. An approval request naming that URL and payload judges
-the real action; a bare "run with network" invites rejection for contacting
-an unspecified domain. If the rerun is still refused, proceed with the
-grounded candidates alone; the assignment above still applies at full
-strength. Tell the user plainly that this roll
+No challengers this run: no local catalog or retrieval backend is configured.
+Configure retrieval.command in .impeccable/config.local.json to use the local
+catalog, or set IMPECCABLE_CATALOG_DIR for explicit JSON compatibility.
+No remote roll service is contacted. This run
 ran degraded, with no challengers and no quality-bar boards; do not present
 the outcome as a full roll. A degraded roll changes the cards, not the
 channel: when a browser can open, present the direction on the decision page
@@ -571,7 +472,7 @@ ${buildIndex} leads. Present all three dealt structures; seed key ${key}.`}
   // ready for prime time: the current pool crowds the decision more than it
   // widens it. IMPECCABLE_COMPOSITIONS=1 re-enables rendering for catalog
   // development; the draw machinery, axes, and grain report stay intact.
-  const compositionsEnabled = process.env.IMPECCABLE_COMPOSITIONS === '1';
+  const compositionsEnabled = data.source === 'retrieval' || process.env.IMPECCABLE_COMPOSITIONS === '1';
   const compositions = !compositionsEnabled ? []
     : Array.isArray(data.compositions)
       ? data.compositions
@@ -606,8 +507,7 @@ structure only, never a palette, typeface, or material. Treat them as serious
 rivals to your habitual layout, and keep only what makes this product clearer.${grainNote}\n`
     : '';
   const rerollBlock = reroll > 0
-    ? `RE-ROLL ROUND ${reroll}${register ? ` (${register.toUpperCase()} REGISTER, user-requested)` : ''}: every candidate presented in earlier rounds, grounded
-  and challenger alike, is eliminated and may not return reworded.${register ? '' : ` Derive
+    ? `RE-ROLL ROUND ${reroll}${register ? ` (${register.toUpperCase()} REGISTER, user-requested)` : ''}: ${data.reusedIds?.length ? 'The frozen catalog pool has exhausted fresh options; the explicitly listed reused catalog entries may return. Grounded candidates must still be new.' : 'every candidate presented in earlier rounds, grounded and challenger alike, is eliminated and may not return reworded.'}${register ? '' : ` Derive
   genuinely new grounded candidates from unexplored angles before judging
   these fresh challengers.`}\n`
     : '';
@@ -629,22 +529,17 @@ rivals to your habitual layout, and keep only what makes this product clearer.${
   assignment by deal order, so the dice still choose. Verdicts and donations
   apply between the challengers, weighed against the leader. The pick card
   sits out; the canon stays, as always.`;
-  // The one command that follows a resolved choice. It records the choice
-  // (anonymous telemetry on API-dealt rolls; skipped under DO_NOT_TRACK /
-  // IMPECCABLE_NO_TELEMETRY) and opens the build's phase machine, whose
-  // first gate is the comp round on a comp-led build. Every run that skipped
-  // the comp round did so by treating a separate "telemetry ping" as
-  // bookkeeping: suppressed with >/dev/null, run after the page was written,
-  // or never run. So there is no separate ping; the start command is the
-  // ping, and it is not optional.
+  // A retrieved direction records its choice before opening build phases.
+  const sessionArgs = data.session ? ` --session ${data.session} --reroll ${reroll}` : '';
+  const registerArgs = register ? ` --register ${register}` : '';
   const nextCommand = scope === 'direction'
     ? `AFTER THE CHOICE, run exactly one command and follow what it prints (do not suppress its output; do not write page code before it):
-  node ${relative(process.cwd(), here) || '.'}/build-phase.mjs start --direction ${key} --kind <assigned|pick|challenger|canon>${data.source === 'api' ? ' [--chosen <challenger-id>]' : ''}${register ? ` --register ${register}` : ''}
-  It records the choice${data.source === 'api' ? ' (anonymous: card kind plus catalog id; skipped under DO_NOT_TRACK / IMPECCABLE_NO_TELEMETRY)' : ''} and opens the build phases: on a comp-led build the comp round is the first gate (three comps, one approved) and no page code is written before it closes; on a code-led build it prints the contract step. A build without this state file is a build the finish reviewer treats as having skipped the round.\n`
-    : (data.source === 'api'
-      ? `AFTER THE CHOICE, run once: node ${relative(process.cwd(), here) || '.'}/concept-seed.mjs --kind <assigned|pick|challenger|canon> --from ${key} --scope ${scope}${mode ? ` --mode ${mode}` : ''} (records the choice; the locked card's comp is the approved comp, so then: node ${relative(process.cwd(), here) || '.'}/build-phase.mjs start --comp <that comp>).\n`
-      : `AFTER THE CHOICE: the locked card's comp is the approved comp; run node ${relative(process.cwd(), here) || '.'}/build-phase.mjs start --comp <that comp> and follow what it prints.\n`);
-  const telemetryBlock = nextCommand;
+  node ${relative(process.cwd(), here) || '.'}/build-phase.mjs start --direction ${key} --kind <assigned|pick|challenger|canon>${data.session ? ' [--chosen <challenger-id>]' : ''}${sessionArgs}${registerArgs}
+  It records a retrieved choice locally and opens the build phases: on a comp-led build the comp round is the first gate (three comps, one approved); on a code-led build it prints the contract step.\n`
+    : data.session
+      ? `AFTER THE CHOICE, record it locally: node ${relative(process.cwd(), here) || '.'}/concept-seed.mjs --kind <assigned|pick|challenger|canon> [--chosen <challenger-id>]${sessionArgs}${registerArgs}. Follow its NEXT instruction.\n`
+      : `AFTER THE CHOICE: the locked card's comp is the approved comp; run node ${relative(process.cwd(), here) || '.'}/build-phase.mjs start --comp <that comp> and follow what it prints.\n`;
+  const choiceBlock = nextCommand;
   const assignedBlock = register === null
     ? `${scope === 'direction' ? `ASSIGNED INDEX: ${buildIndex}` : `DEALT INDICES: ${dealtIndices.join(', ')} (index ${buildIndex} leads)`}
   ${promotedInstruction}
@@ -666,10 +561,10 @@ rivals to your habitual layout, and keep only what makes this product clearer.${
     : `CHALLENGERS:
 ${data.challengers.map(renderChallenger).join('\n')}
 ${compositionBlock}${roundChallengerInstruction}
-When you can view images, open the QUALITY BAR board and hero for any
-challenger you weigh seriously and for the world you build. They exist as a
-craft bar, the finish level and commitment the build is expected to reach,
-never as a mockup to copy; your surface serves this product, not that render.
+Open recorded QUALITY BAR imagery or source references for the challengers
+you weigh seriously. Source pages document an origin; generated specimen
+drafts still require review. Neither is an approved mockup of this product.
+When no imagery is recorded, work from the supplied text and evidence.
 `;
   const restated = register === null
     ? (scope === 'direction'
@@ -679,11 +574,11 @@ ${buildIndex} of your own grounded list; seed key ${key}.`
 ${buildIndex} leads. Present all three dealt structures; seed key ${key}.`)
     : `REGISTER (restated for truncated readers): ${register}, user-requested; the
 assigned index is suspended this round; seed key ${key}.`;
-  return `${scope.toUpperCase()} CONCEPT SEED (key: ${key}; mode: ${mode ?? 'unscoped'}; source: ${data.source}; approved pool: ${data.poolRevision}; ${data.approvedCount}/${data.catalogCount} human-approved; rerun with --scope ${scope}${mode ? ` --mode ${mode}` : ''} --from ${key}${reroll > 0 ? ` --reroll ${reroll}` : ''}${register ? ` --register ${register}` : ''} --candidate-count ${candidateCount} to reproduce this roll against this catalog revision)
+  return `${scope.toUpperCase()} CONCEPT SEED (key: ${key}; mode: ${mode ?? 'unscoped'}; source: ${data.source}; approved pool: ${data.poolRevision}; ${data.approvedCount}/${data.catalogCount} human-approved; rerun with ${data.session ? `--session ${data.session} --reroll ${reroll}${registerArgs} --replay` : `--scope ${scope}${mode ? ` --mode ${mode}` : ''} --from ${key}${reroll > 0 ? ` --reroll ${reroll}` : ''}${registerArgs} --candidate-count ${candidateCount}`} to reproduce this roll against this catalog revision)
 ${rerollBlock}${assignedBlock}
 ${challengerSection}${authorityInstruction}
 ${richnessInstruction}
-${telemetryBlock}A user- or brief-pinned decision beats the roll, always.
+${choiceBlock}A user- or brief-pinned decision beats the roll, always.
 ${restated}
 `;
 }
@@ -741,6 +636,9 @@ if (isMainModule()) {
   const candidateCountIdx = args.indexOf('--candidate-count');
   const chosenIdx = args.indexOf('--chosen');
   const kindIdx = args.indexOf('--kind');
+  const value = name => args.indexOf(name) < 0 ? undefined : args[args.indexOf(name) + 1];
+  const session = value('--session');
+  const replay = args.includes('--replay');
   // --seed-declined carries evidence: the user's verbatim skip answer, in
   // either --seed-declined="<answer>" or --seed-declined <answer> form. A
   // bare or empty flag does not count; a live session self-passed the
@@ -758,10 +656,9 @@ if (isMainModule()) {
   const seedDeclined = Boolean(seedDeclinedAnswer && seedDeclinedAnswer.trim()) || seedDeclinedByEnv;
   try {
     if (chosenIdx !== -1 || kindIdx !== -1) {
-      // Choice ping: always exits 0, telemetry must never fail a design flow.
-      // --kind alone pings a non-challenger outcome (assigned/pick/canon);
-      // --chosen alone stays the legacy challenger-win ping.
+      // Choice records are local. A failed write must not report success.
       const sent = await pingChosen({
+        session, round: Number(value('--reroll') || 0),
         chosenId: chosenIdx !== -1 ? args[chosenIdx + 1] : undefined,
         key: fromIdx !== -1 ? args[fromIdx + 1] : undefined,
         scope: scopeIdx !== -1 ? args[scopeIdx + 1] : undefined,
@@ -776,18 +673,19 @@ if (isMainModule()) {
       // to "direction locked, building now". So the ping prints the next
       // mandatory step from the recorded build path, and the phase machine
       // takes it from there.
+      const savedChoice = session ? await callRetrieval({ op: 'replay', session, round: Number(value('--reroll') || 0), register: value('--register') || null }) : null;
       process.stdout.write(nextStepAfterChoice({
-        key: fromIdx !== -1 ? args[fromIdx + 1] : undefined,
-        scope: scopeIdx !== -1 ? args[scopeIdx + 1] : undefined,
+        key: savedChoice?.settings.key ?? (fromIdx !== -1 ? args[fromIdx + 1] : undefined),
+        scope: savedChoice?.settings.scope ?? (scopeIdx !== -1 ? args[scopeIdx + 1] : undefined),
       }));
     } else {
       // Mechanical init gate: prose alone does not keep a model from dealing
       // before init, and fresh repos produced exactly that skip (the model
       // rolled directions with no PRODUCT.md, so nothing grounded the fusion).
-      // The --chosen branch above stays ungated; telemetry never blocks.
+      // Choice recording above does not require product initialization.
       const { loadContext } = await import('./context.mjs');
       const ctx = loadContext(process.cwd());
-      if (!ctx.hasProduct) {
+      if (!ctx.hasProduct && !replay) {
         process.stdout.write([
           'NO_PRODUCT_MD: the dice stay in the cup until product truth exists.',
           'Complete the init ask round and write PRODUCT.md first (reference/init.md), then re-run this exact command.',
@@ -803,7 +701,9 @@ if (isMainModule()) {
       // project with no DESIGN.md the user gets the choice first; a seed
       // DESIGN.md counts as present, so a post-questionnaire re-entry never
       // re-asks. The flag now carries the user's verbatim skip answer.
-      if (scopeIdx !== -1 && args[scopeIdx + 1] === 'direction' && !ctx.hasDesign && !seedDeclined) {
+      const sessionInfo = session && !replay ? await callRetrieval({ op: 'replay', session, round: 0 }) : null;
+      const effectiveScope = sessionInfo?.settings.scope || value('--scope');
+      if (effectiveScope === 'direction' && !ctx.hasDesign && !seedDeclined && !replay) {
         process.stdout.write([
           'NO_DESIGN_MD: the dice stay in the cup until the user answers the seed question.',
           'First action: create a tracked todo "Ask user: document --seed or skip" with the harness todo tool and start no other todo until it is answered; with no todo tool, state this gate to the user in chat before anything else.',
@@ -819,6 +719,35 @@ if (isMainModule()) {
         // output clean for the agent.
         process.stderr.write('seed pause bypassed via IMPECCABLE_SEED_DECLINED (unattended harness escape)\n');
       }
+      let retrieved = null;
+      if (retrievalConfig() || session || replay || value('--brief-file')) {
+        const request = { op: replay ? 'replay' : session ? 'round' : 'start', session,
+          round: Number(value('--reroll') || 0), register: value('--register') || null };
+        const provided = Object.fromEntries(Object.entries({ key: value('--from'), scope: value('--scope'), mode: value('--mode'), grain: value('--grain'), platform: value('--platform'), candidateCount: value('--candidate-count') === undefined ? undefined : Number(value('--candidate-count')) }).filter(([,v]) => v !== undefined));
+        if (!session) {
+          if (!value('--brief-file')) throw new Error('Local retrieval requires --brief-file <task brief> for the first round');
+          request.brief = readFileSync(resolve(value('--brief-file')), 'utf8');
+          request.settings = { ...provided, key: provided.key || process.env.IMPECCABLE_CONCEPT_SEED || crypto.randomBytes(4).toString('hex') };
+        } else {
+          if (value('--brief-file')) throw new Error('A session brief is fixed; omit --session to start with a new brief');
+          request.settings = provided;
+        }
+        retrieved = materializeRound(await callRetrieval(request));
+      }
+      const output = await renderConceptSeed({
+
+        _resolvedData: retrieved ? { ...retrieved, ...retrieved.record } : undefined,
+        scope: retrieved?.settings.scope ?? (scopeIdx !== -1 ? args[scopeIdx + 1] : 'surface'),
+        key: retrieved?.settings.key ?? (fromIdx !== -1
+          ? args[fromIdx + 1]
+          : (process.env.IMPECCABLE_CONCEPT_SEED || crypto.randomBytes(4).toString('hex'))),
+        reroll: rerollIdx !== -1 ? Number(args[rerollIdx + 1]) : 0,
+        register: registerIdx !== -1 ? args[registerIdx + 1] : null,
+        mode: retrieved?.settings.mode ?? (modeIdx !== -1 ? args[modeIdx + 1] : null),
+        grain: retrieved?.settings.grain ?? (grainIdx !== -1 ? args[grainIdx + 1] : null),
+        platform: retrieved?.settings.platform ?? (platformIdx !== -1 ? args[platformIdx + 1] : null),
+        candidateCount: retrieved?.settings.candidateCount ?? (candidateCountIdx !== -1 ? Number(args[candidateCountIdx + 1]) : 7),
+      });
       // A dealt roll leaves a marker the build phase clears: context.mjs and
       // detect.mjs read it and refuse to treat page work as done while a
       // direction is chosen but the build never started (COMP_ROUND_OPEN).
@@ -829,23 +758,13 @@ if (isMainModule()) {
       // never happened.
       try {
         const { mkdirSync, writeFileSync: wf } = await import('node:fs');
-        if (scopeIdx !== -1 && args[scopeIdx + 1] === 'direction') {
+        if (!replay && (retrieved?.settings.scope || value('--scope')) === 'direction') {
           mkdirSync(resolve(process.cwd(), '.impeccable', 'build'), { recursive: true });
           wf(resolve(process.cwd(), '.impeccable', 'build', 'pending.json'), JSON.stringify({ scope: 'direction', at: new Date().toISOString() }, null, 2));
         }
       } catch { /* marker is best-effort */ }
-      process.stdout.write(await renderConceptSeed({
-        scope: scopeIdx !== -1 ? args[scopeIdx + 1] : 'surface',
-        key: fromIdx !== -1
-          ? args[fromIdx + 1]
-          : (process.env.IMPECCABLE_CONCEPT_SEED || crypto.randomBytes(4).toString('hex')),
-        reroll: rerollIdx !== -1 ? Number(args[rerollIdx + 1]) : 0,
-        register: registerIdx !== -1 ? args[registerIdx + 1] : null,
-        mode: modeIdx !== -1 ? args[modeIdx + 1] : null,
-        grain: grainIdx !== -1 ? args[grainIdx + 1] : null,
-        platform: platformIdx !== -1 ? args[platformIdx + 1] : null,
-        candidateCount: candidateCountIdx !== -1 ? Number(args[candidateCountIdx + 1]) : 7,
-      }));
+      if (retrieved) process.stdout.write(`RETRIEVAL SESSION: ${retrieved.session}; round ${retrieved.round}; catalog ${retrieved.poolRevision}\nRERUN: --session ${retrieved.session} --reroll ${retrieved.round} --replay\n${retrieved.reusedIds.length ? `POOL EXHAUSTION: reused ${retrieved.reusedIds.join(', ')}\n` : ''}`);
+      process.stdout.write(output);
     }
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);

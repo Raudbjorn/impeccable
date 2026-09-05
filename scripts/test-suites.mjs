@@ -25,7 +25,7 @@ export const SUITES = {
     triggers: [
       ...COMMON_INFRA_PATTERNS,
       /^scripts\/(?!benchmark-detector|build-browser-detector|build-static-html-parsers|build-extension|lib\/static-html-parsers\.entry)/,
-      /^skill\/(SKILL\.src\.md|agents\/|reference\/|scripts\/(cleanup-deprecated|comp-diff|comp-spec|build-phase|font-match|generate-image|data\/(font-index|critique-evidence)|concept-seed|context|context-signals|critique-storage|design-context|score-evidence|design-parser|doctor|hook|impeccable-paths|is-generated|lib\/(artifact-schema|png|raster|image-metrics|font-fingerprint|font-index|hero-checks|composition-catalog|concept-catalog|provider|staleness|staleness-deep|staleness-notice|surface-briefs|target-slug|template-extensions)|pin|surface-brief))/,
+      /^skill\/(SKILL\.src\.md|agents\/|reference\/|scripts\/(cleanup-deprecated|comp-diff|comp-spec|build-phase|font-match|generate-image|data\/(font-index|critique-evidence)|concept-seed|context|context-signals|critique-storage|design-context|score-evidence|design-parser|doctor|hook|impeccable-paths|is-generated|lib\/(artifact-schema|png|raster|image-metrics|font-fingerprint|font-index|hero-checks|composition-catalog|concept-catalog|retrieval-client|provider|staleness|staleness-deep|staleness-notice|surface-briefs|target-slug|template-extensions)|pin|surface-brief))/,
       /^README(\.npm)?\.md$/,
       /^cli\/bin\//,
       /^cli\/engine\/registry\//,
@@ -53,6 +53,7 @@ export const SUITES = {
         files: [
           'tests/cli-args.test.mjs',
           'tests/concept-seed.test.mjs',
+          'tests/retrieval-client.test.mjs',
           'tests/generate-image-embed.test.mjs',
           'tests/comp-diff.test.mjs',
           'tests/build-phase.test.mjs',

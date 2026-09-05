@@ -1,7 +1,7 @@
-import { describe, it } from 'node:test';
+import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { readFileSync, copyFileSync, existsSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -10,8 +10,9 @@ import {
   readConceptCatalog,
   validateConceptCatalog,
   validateConceptEntry,
+  conceptContentHash,
 } from '../skill/scripts/lib/concept-catalog.mjs';
-import { readCompositionCatalog } from '../skill/scripts/lib/composition-catalog.mjs';
+import { readCompositionCatalog, compositionContentHash } from '../skill/scripts/lib/composition-catalog.mjs';
 import { dealCompositions, pingChosen, renderChallenger, selectApprovedChallengers, selectApprovedComposition, selectApprovedCompositions } from '../skill/scripts/concept-seed.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -19,11 +20,21 @@ const SCRIPT = path.join(ROOT, 'skill', 'scripts', 'concept-seed.mjs');
 // The live catalog is service-side (impeccable-site); the public repo tests
 // the seed mechanics against this fixture catalog, which passes the same
 // validators the real one does.
-const FIXTURE_DIR = path.join(ROOT, 'tests', 'fixtures', 'concept-catalog');
+const FIXTURE_DIR = mkdtempSync(path.join(tmpdir(), 'concept-review-fixture-'));
+after(() => rmSync(FIXTURE_DIR, { recursive: true, force: true }));
+writeFileSync(path.join(FIXTURE_DIR, 'PRODUCT.md'), '# Synthetic product fixture\n\nEngineering reference.\n');
+writeFileSync(path.join(FIXTURE_DIR, 'DESIGN.md'), '# Synthetic design fixture\n\nA precise graphic identity.\n');
+for (const kind of ['concept', 'composition']) {
+  const name = `${kind}-ingredients.json`;
+  copyFileSync(path.join(ROOT, 'tests/fixtures/concept-catalog', name), path.join(FIXTURE_DIR, name));
+  const data = JSON.parse(readFileSync(path.join(FIXTURE_DIR, name), 'utf8'));
+  const entries = kind === 'concept' ? data.families.flatMap(f => f.concepts) : data.compositions;
+  const hash = kind === 'concept' ? conceptContentHash : compositionContentHash;
+  writeFileSync(path.join(FIXTURE_DIR, `${kind}-reviews.json`), JSON.stringify({ schemaVersion: 2,
+    reviews: Object.fromEntries(entries.map(c => [c.id, { status: 'approved', reviewedBy: 'synthetic test fixture', reviewedAt: '2026-01-01T00:00:00Z', formHash: hash(c) }])) }));
+}
 
-// TEMP: concept-reviews.json / composition-reviews.json were deleted from the
-// fixture dir; guard the load so the rest of this file can still register
-// and run. Tests that need these fixtures are commented out below.
+// Reviews above are synthetic fixtures, never production approvals.
 let fixtureState = { concepts: [], catalog: [], reviewData: {} };
 let fixtureConcepts = [];
 let fixtureCompositions = [];
@@ -43,7 +54,7 @@ try {
 
 function run(scope, extraArgs = [], env = {}) {
   return spawnSync(process.execPath, [SCRIPT, '--scope', scope, '--from', 'stable-test', ...extraArgs], {
-    cwd: ROOT,
+    cwd: FIXTURE_DIR,
     encoding: 'utf-8',
     env: { ...process.env, IMPECCABLE_CATALOG_DIR: FIXTURE_DIR, ...env },
   });
@@ -59,7 +70,7 @@ describe('concept seed scopes', () => {
         path.join(linkedSkill, 'scripts', 'concept-seed.mjs'),
         '--scope', 'surface', '--mode', 'persuade', '--from', 'symlink-test',
       ], {
-        cwd: ROOT,
+        cwd: FIXTURE_DIR,
         encoding: 'utf-8',
         env: { ...process.env, IMPECCABLE_CATALOG_DIR: FIXTURE_DIR },
       });
@@ -103,7 +114,7 @@ describe('concept seed scopes', () => {
     for (const count of [5, 6, 7]) {
       for (let index = 0; index < 30; index += 1) {
         const result = spawnSync(process.execPath, [SCRIPT, '--scope', 'direction', '--from', `count-${count}-${index}`, '--candidate-count', String(count)], {
-          cwd: ROOT,
+          cwd: FIXTURE_DIR,
           encoding: 'utf-8',
           env: { ...process.env, IMPECCABLE_CATALOG_DIR: FIXTURE_DIR },
         });
@@ -659,38 +670,13 @@ describe('init gate', () => {
     assert.match(kindOnly.stdout, /choice ping skipped/, 'telemetry-disabled kind ping reports skipped, not an error');
   });
 
-  it('pingChosen validates kinds, requires ids only for challenger wins, and honors opt-out', async () => {
-    const calls = [];
+  it('choice calls without a local session never contact a remote service', async () => {
     const realFetch = globalThis.fetch;
-    globalThis.fetch = async (url, opts) => { calls.push(JSON.parse(opts.body)); return { ok: true }; };
-    // telemetryDisabled() honors DO_NOT_TRACK too, so a developer shell with
-    // it set must not fail the success-path assertions below.
-    const savedDnt = process.env.DO_NOT_TRACK;
-    const savedNoTelemetry = process.env.IMPECCABLE_NO_TELEMETRY;
+    globalThis.fetch = () => { throw new Error('unexpected remote request'); };
     try {
-      delete process.env.DO_NOT_TRACK;
-      process.env.IMPECCABLE_NO_TELEMETRY = '1';
-      assert.equal(await pingChosen({ kind: 'assigned', key: 'k' }), false, 'opt-out wins over everything');
-      delete process.env.IMPECCABLE_NO_TELEMETRY;
-      assert.equal(await pingChosen({ kind: 'assigned', key: 'k', scope: 'direction' }), true, 'kind-only ping for a non-challenger outcome');
-      assert.equal(await pingChosen({ kind: 'challenger', key: 'k' }), false, 'a challenger win without an id is not a ping');
-      assert.equal(await pingChosen({ kind: 'weird', chosenId: 'x', key: 'k' }), false, 'unknown kinds are dropped');
-      assert.equal(await pingChosen({ kind: 'assigned', register: 'wilder', key: 'k' }), false, 'unknown registers are dropped');
-      assert.equal(await pingChosen({ chosenId: 'legacy-id', key: 'k' }), true, 'legacy id-only shape stays valid');
-      assert.equal(await pingChosen({ kind: 'canon', register: 'safer', key: 'k' }), true, 'register rides along on a steered round');
-      const bodies = calls;
-      assert.equal(bodies[0].kind, 'assigned');
-      assert.equal(bodies[0].chosenId, undefined, 'no id field on kind-only pings');
-      assert.equal(bodies[1].chosenId, 'legacy-id');
-      assert.equal(bodies[1].kind, undefined, 'legacy pings carry no kind');
-      assert.equal(bodies[2].register, 'safer');
-    } finally {
-      globalThis.fetch = realFetch;
-      if (savedDnt === undefined) delete process.env.DO_NOT_TRACK;
-      else process.env.DO_NOT_TRACK = savedDnt;
-      if (savedNoTelemetry === undefined) delete process.env.IMPECCABLE_NO_TELEMETRY;
-      else process.env.IMPECCABLE_NO_TELEMETRY = savedNoTelemetry;
-    }
+      assert.equal(await pingChosen({ kind: 'assigned', key: 'k', cwd: FIXTURE_DIR }), false);
+      assert.equal(await pingChosen({ chosenId: 'legacy-id', key: 'k', cwd: FIXTURE_DIR }), false);
+    } finally { globalThis.fetch = realFetch; }
   });
 
   // Mode eligibility on worlds. Before this, selectApprovedChallengers never
@@ -839,7 +825,7 @@ describe('init gate', () => {
 // destroys fetch's global dispatcher before exiting, so the teardown cannot
 // silently regress. The teardown is Node fetch internals, so the CLI is
 // spawned with node even when the suite itself runs under bun.
-describe('API roll path', () => {
+describe('removed API roll path', () => {
   const NODE = process.versions.bun ? 'node' : process.execPath;
 
   const ROLL_PAYLOAD = {
@@ -874,7 +860,7 @@ describe('API roll path', () => {
     '',
   ].join('\n');
 
-  it('resolves a successful roll and destroys the fetch dispatcher before the explicit exit', async () => {
+  it('never calls the old service when no local backend is configured', async () => {
     const requests = [];
     const server = createServer((req, res) => {
       requests.push(req.url);
@@ -913,14 +899,8 @@ describe('API roll path', () => {
         child.on('close', status => resolveRun({ status, stdout, stderr }));
       });
       assert.equal(result.status, 0, `stderr: ${result.stderr}`);
-      assert.equal(requests.some(url => url.startsWith('/api/roll?')), true, 'the CLI must hit the roll endpoint');
-      assert.match(result.stdout, /source: api/);
-      assert.match(result.stdout, /letterpress print shop/);
-      // The choice-recording command rides on build-phase start now (the
-      // separate TELEMETRY ping was the step every comp-round-skipping run
-      // suppressed); an API roll names it with the --chosen slot.
-      assert.match(result.stdout, /AFTER THE CHOICE, run exactly one command/);
-      assert.match(result.stdout, /build-phase\.mjs start --direction [\w-]+ --kind <assigned\|pick\|challenger\|canon> \[--chosen <challenger-id>\]/);
+      assert.deepEqual(requests, ['/api/warmup'], 'only the test preload may contact the server');
+      assert.match(result.stdout, /source: degraded/);
       assert.match(result.stderr, /DISPATCHER_DESTROY_CALLED/, 'the dispatcher must be destroyed before process.exit');
     } finally {
       server.close();
