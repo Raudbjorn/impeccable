@@ -34,6 +34,7 @@ export const SUITES = {
       /^ENGINE_VERSION$/,
       /^README(\.npm)?\.md$/,
       /^cli\/bin\//,
+      /^cli\/engine\/registry\//,
     ],
     commands: [
       {
@@ -65,7 +66,12 @@ export const SUITES = {
           'tests/ci-test-plan.test.mjs',
           'tests/cli-shim.test.mjs',
           'tests/publish-platform-packages.test.mjs',
-          'tests/github-sheriff.test.mjs',
+          'tests/github-issue-gate.test.mjs',
+          'tests/design-context-export.test.mjs',
+          'tests/design-context-import.test.mjs',
+          'tests/design-context-portability.test.mjs',
+          'tests/score-evidence.test.mjs',
+          'tests/visual-cues.test.mjs',
           'tests/hook-build.test.mjs',
           'tests/openai-plugin.test.mjs',
           'tests/process-group.test.mjs',
@@ -120,7 +126,7 @@ export const SUITES = {
     commands: [
       {
         runner: 'node',
-        files: ['tests/extension-build.test.mjs'],
+        files: ['tests/extension-build.test.mjs', 'tests/detect-static-html-skill-install.test.mjs'],
       },
     ],
   },
@@ -182,6 +188,7 @@ export const SUITES = {
       /^skill\/agents\//,
       /^scripts\/build\.js$/,
       /^scripts\/lib\/validate-plugin-manifest\.js$/,
+      /^scripts\/lib\/plugin-paths\.js$/,
       /^tests\/plugin-e2e\.test\.mjs$/,
     ],
     commands: [

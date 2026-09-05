@@ -36,6 +36,7 @@ pub fn provider_hook_artifacts(provider: &str) -> &'static [HookArtifactSpec] {
         ".cursor" => &[HookArtifactSpec { source_provider: ".cursor", rel: "hooks.json", dest_provider: ".cursor", dest_rel: None }],
         ".agents" => &[HookArtifactSpec { source_provider: ".codex", rel: "hooks.json", dest_provider: ".codex", dest_rel: None }],
         ".github" => &[HookArtifactSpec { source_provider: ".github", rel: "hooks/impeccable.json", dest_provider: ".github", dest_rel: None }],
+        ".omp" => &[HookArtifactSpec { source_provider: ".omp", rel: "hooks/post/impeccable.js", dest_provider: ".omp", dest_rel: None }],
         ".grok" => &[HookArtifactSpec { source_provider: ".grok", rel: "hooks/impeccable.json", dest_provider: ".grok", dest_rel: None }],
         _ => &[],
     }
@@ -268,6 +269,9 @@ pub fn file_has_impeccable_hook_marker(file: &str) -> bool {
         return false;
     }
     let Ok(text) = util::read_text(file) else { return false };
+    if file.ends_with("/hooks/post/impeccable.js") {
+        return text.contains("export default function impeccableHook(");
+    }
     let Ok(parsed) = serde_json::from_str::<Value>(&text) else { return false };
     let Value::Object(map) = parsed else { return false };
     match map.get("hooks") {
@@ -432,6 +436,26 @@ pub fn copy_provider_hooks(sys: &crate::providers::Sys, bundle_dir: &str, root: 
                     prune_impeccable_hook_from_manifest(&artifact.dest)?;
                     continue;
                 }
+            }
+            if *provider == ".omp" {
+                if util::exists(&artifact.dest) && !file_has_impeccable_hook_marker(&artifact.dest) {
+                    if !force {
+                        return Err(format!("Existing hook module is not Impeccable-owned: {}. Re-run with --force to replace it.", artifact.dest));
+                    }
+                    util::write_bytes(&format!("{}.bak", artifact.dest), &util::read_bytes(&artifact.dest)?)?;
+                }
+                let mut module = util::read_text(&artifact.src)?;
+                if skill_root != root {
+                    let launcher = jsp::join(&[skill_root, ".omp/skills/impeccable/scripts/impeccable"]);
+                    let declaration = format!("const HOOK_SCRIPT = {} + (process.platform === \"win32\" ? \".cmd\" : \"\");", json_string(&launcher));
+                    module = module.lines().map(|line| {
+                        if line.starts_with("const HOOK_SCRIPT =") { declaration.as_str() } else { line }
+                    }).collect::<Vec<_>>().join("\n") + "\n";
+                }
+                util::mkdir_p(&jsp::dirname(&artifact.dest))?;
+                util::write_bytes(&artifact.dest, module.as_bytes())?;
+                written.push(provider);
+                continue;
             }
             let fresh_manifest = read_json_file(&artifact.src, "Bundled hook manifest")?;
             let absolute = skill_root != root || sys.is_home_dir(root);

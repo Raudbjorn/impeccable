@@ -15,6 +15,7 @@ import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import {
   rewritePluginMarkdown,
   rewritePluginAgentMarkdown,
@@ -23,6 +24,7 @@ import {
   verifyPluginAgentRewrite,
   CLAUDE_PROJECT_SCRIPTS_PATH,
   AGENT_EMBED_FALLBACK,
+  AGENT_PATH_NOTE,
 } from '../scripts/lib/plugin-paths.js';
 
 describe('rewritePluginMarkdown', () => {
@@ -135,6 +137,30 @@ describe('rewritePluginAgentMarkdown', () => {
     expect(output).not.toContain('<skill-base-dir>');
     expect(output).not.toContain(CLAUDE_PROJECT_SCRIPTS_PATH);
   });
+
+  test('closes the file with the path note, exactly once', () => {
+    // The plugin subtree ships two path forms on purpose. A reader who only
+    // ever opens plugin/agents/*.md sees no reason for the difference, and
+    // reads it as drift against the skill references (review finding).
+    const output = rewritePluginAgentMarkdown(sourceStep);
+    expect(output).toContain(AGENT_PATH_NOTE.trim());
+    expect(output.split('Script paths above resolve').length - 1).toBe(1);
+    expect(output.endsWith(AGENT_PATH_NOTE)).toBe(true);
+  });
+
+  test('the path note survives verifyPluginAgentRewrite', () => {
+    // The note explains the skill-base-dir contrast without naming the token,
+    // because the verifier rejects that string in an agent file. Naming it
+    // would fail the build on the note itself.
+    const output = rewritePluginAgentMarkdown(sourceStep);
+    const notePath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-agent-note-')), 'agent.md');
+    fs.writeFileSync(notePath, output);
+    expect(() => verifyPluginAgentRewrite(notePath)).not.toThrow();
+  });
+
+  test('does not add the path note to skill reference files', () => {
+    expect(rewritePluginMarkdown(sourceStep)).not.toContain('Script paths above resolve');
+  });
 });
 
 describe('verifyPluginAgentRewrite', () => {
@@ -177,6 +203,54 @@ describe('verifyPluginAgentRewrite', () => {
     );
     const p = writeAgent(rewritePluginAgentMarkdown(reworded));
     expect(() => verifyPluginAgentRewrite(p)).toThrow(/sidecar/);
+  });
+  test('rejects a script path a replacement truncated mid-command', () => {
+    // The embed fallback anchors on "closing backtick, then up to the first
+    // period". A second `node ...` command in the same sentence puts that
+    // period inside its own `.mjs`, so the fallback lands mid-command and
+    // eats the script name. The fallback is still present, so the check for
+    // it passes; only a path-shape check catches this.
+    const file = path.join(root, 'truncated.md');
+    fs.writeFileSync(
+      file,
+      'run `node "${CLAUDE_PLUGIN_ROOT}/skills/impeccable/scripts/embed-prompt.mjs" <a>`, then '
+      + '`node "${CLAUDE_PLUGIN_ROOT}/skills/impeccable/scripts/generate-image.'
+      + AGENT_EMBED_FALLBACK,
+    );
+    expect(() => verifyPluginAgentRewrite(file)).toThrow(/truncated script path/);
+  });
+
+  test('asset producer keeps cwd at the project root (no cd into scripts path)', () => {
+    // The asset producer (and any future agent) must use the resolved
+    // scripts path only as the prefix of every `impeccable <verb>` command.
+    // A `cd` (or any other cwd change) into the plugin cache would make
+    // `.impeccable/...` paths and comp/plate file locations resolve under
+    // the plugin directory instead of the consuming project root, which
+    // would silently break every script the agent runs. Read the real
+    // source agent file (after the rewrite pipeline runs, the committed
+    // plugin copy carries the same contract): the input-contract paragraph
+    // must say so verbatim, and the step list must not say to cd.
+    const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+    const srcPath = path.join(ROOT, 'skill/agents/impeccable-asset-producer.md');
+    const committedPath = path.join(ROOT, 'plugin/agents/impeccable-asset-producer.md');
+    expect(fs.existsSync(srcPath)).toBe(true);
+    const src = fs.readFileSync(srcPath, 'utf-8');
+    expect(src).toContain('only as the prefix of every `impeccable <verb>` command');
+    expect(src).toContain('do not `cd` into it');
+    expect(src).toContain('stays at the consuming project root');
+    expect(src).not.toMatch(/Run every `node ...` command below from that scripts path/);
+    // The committed plugin copy carries the same cwd contract after the
+    // rewrite pipeline runs; the source agent file is the input and the
+    // committed copy is the artifact, and they MUST agree. If the
+    // committed copy is ever missing, that is itself a contract failure
+    // (a generated-output drift must not be silently absorbed) — assert
+    // its existence up front, then assert the same wording against both.
+    expect(fs.existsSync(committedPath)).toBe(true);
+    const committed = fs.readFileSync(committedPath, 'utf-8');
+    expect(committed).toContain('only as the prefix of every `impeccable <verb>` command');
+    expect(committed).toContain('do not `cd` into it');
+    expect(committed).toContain('stays at the consuming project root');
+    expect(committed).not.toMatch(/Run every `node ...` command below from that scripts path/);
   });
 });
 
@@ -229,7 +303,8 @@ describe('rewritePluginMarkdownTree', () => {
     rewritePluginMarkdownTree(agentsDir, rewritePluginAgentMarkdown);
 
     expect(fs.readFileSync(path.join(agentsDir, 'impeccable-asset-producer.md'), 'utf-8')).toBe(
-      'run `node "${CLAUDE_PLUGIN_ROOT}/skills/impeccable/scripts/embed-prompt.mjs" <asset>`',
+      'run `node "${CLAUDE_PLUGIN_ROOT}/skills/impeccable/scripts/embed-prompt.mjs" <asset>`'
+      + AGENT_PATH_NOTE,
     );
   });
 

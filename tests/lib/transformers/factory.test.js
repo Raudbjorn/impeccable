@@ -6,9 +6,9 @@ import { parseFrontmatter } from '../../../scripts/lib/utils.js';
 
 const TEST_DIR = path.join(process.cwd(), 'test-tmp-factory');
 
-// Minimal config using 'cursor' as provider (has existing PROVIDER_PLACEHOLDERS)
+// Minimal config using 'gemini' as provider (has existing PROVIDER_PLACEHOLDERS)
 const baseConfig = {
-  provider: 'cursor',
+  provider: 'gemini',
   configDir: '.test',
   displayName: 'Test Provider',
   frontmatterFields: [],
@@ -30,7 +30,7 @@ describe('createTransformer factory', () => {
   test('should create correct directory structure', () => {
     const transform = createTransformer(baseConfig);
     transform([], TEST_DIR);
-    expect(fs.existsSync(path.join(TEST_DIR, 'cursor/.test/skills'))).toBe(true);
+    expect(fs.existsSync(path.join(TEST_DIR, 'gemini/.test/skills'))).toBe(true);
   });
 
   test('should always emit name and description', () => {
@@ -38,7 +38,7 @@ describe('createTransformer factory', () => {
     const skills = [{ name: 'test', description: 'A test skill', body: 'Body.' }];
     transform(skills, TEST_DIR);
 
-    const content = fs.readFileSync(path.join(TEST_DIR, 'cursor/.test/skills/test/SKILL.md'), 'utf-8');
+    const content = fs.readFileSync(path.join(TEST_DIR, 'gemini/.test/skills/test/SKILL.md'), 'utf-8');
     const parsed = parseFrontmatter(content);
     expect(parsed.frontmatter.name).toBe('test');
     expect(parsed.frontmatter.description).toBe('A test skill');
@@ -58,7 +58,7 @@ describe('createTransformer factory', () => {
     }];
     transform(skills, TEST_DIR);
 
-    const content = fs.readFileSync(path.join(TEST_DIR, 'cursor/.test/skills/test/SKILL.md'), 'utf-8');
+    const content = fs.readFileSync(path.join(TEST_DIR, 'gemini/.test/skills/test/SKILL.md'), 'utf-8');
     const parsed = parseFrontmatter(content);
     expect(parsed.frontmatter.license).toBe('MIT');
     expect(parsed.frontmatter.compatibility).toBeUndefined();
@@ -71,7 +71,7 @@ describe('createTransformer factory', () => {
     const skills = [{ name: 'test', description: 'Test', license: '', body: 'Body' }];
     transform(skills, TEST_DIR);
 
-    const content = fs.readFileSync(path.join(TEST_DIR, 'cursor/.test/skills/test/SKILL.md'), 'utf-8');
+    const content = fs.readFileSync(path.join(TEST_DIR, 'gemini/.test/skills/test/SKILL.md'), 'utf-8');
     const parsed = parseFrontmatter(content);
     expect(parsed.frontmatter.license).toBeUndefined();
   });
@@ -82,7 +82,7 @@ describe('createTransformer factory', () => {
     const skills = [{ name: 'test', description: 'Test', userInvocable: true, body: 'Body' }];
     transform(skills, TEST_DIR);
 
-    const content = fs.readFileSync(path.join(TEST_DIR, 'cursor/.test/skills/test/SKILL.md'), 'utf-8');
+    const content = fs.readFileSync(path.join(TEST_DIR, 'gemini/.test/skills/test/SKILL.md'), 'utf-8');
     const parsed = parseFrontmatter(content);
     expect(parsed.frontmatter['user-invocable']).toBe(true);
   });
@@ -93,7 +93,7 @@ describe('createTransformer factory', () => {
     const skills = [{ name: 'test', description: 'Test', userInvocable: false, body: 'Body' }];
     transform(skills, TEST_DIR);
 
-    const content = fs.readFileSync(path.join(TEST_DIR, 'cursor/.test/skills/test/SKILL.md'), 'utf-8');
+    const content = fs.readFileSync(path.join(TEST_DIR, 'gemini/.test/skills/test/SKILL.md'), 'utf-8');
     const parsed = parseFrontmatter(content);
     expect(parsed.frontmatter['user-invocable']).toBeUndefined();
   });
@@ -105,7 +105,7 @@ describe('createTransformer factory', () => {
     // User-invocable with hint
     const skills1 = [{ name: 'test', description: 'Test', userInvocable: true, argumentHint: '[target]', body: 'Body' }];
     transform(skills1, TEST_DIR);
-    let content = fs.readFileSync(path.join(TEST_DIR, 'cursor/.test/skills/test/SKILL.md'), 'utf-8');
+    let content = fs.readFileSync(path.join(TEST_DIR, 'gemini/.test/skills/test/SKILL.md'), 'utf-8');
     let parsed = parseFrontmatter(content);
     expect(parsed.frontmatter['argument-hint']).toBe('[target]');
 
@@ -113,7 +113,7 @@ describe('createTransformer factory', () => {
     fs.rmSync(TEST_DIR, { recursive: true, force: true });
     const skills2 = [{ name: 'test', description: 'Test', userInvocable: false, argumentHint: '[target]', body: 'Body' }];
     transform(skills2, TEST_DIR);
-    content = fs.readFileSync(path.join(TEST_DIR, 'cursor/.test/skills/test/SKILL.md'), 'utf-8');
+    content = fs.readFileSync(path.join(TEST_DIR, 'gemini/.test/skills/test/SKILL.md'), 'utf-8');
     parsed = parseFrontmatter(content);
     expect(parsed.frontmatter['argument-hint']).toBeUndefined();
   });
@@ -127,7 +127,7 @@ describe('createTransformer factory', () => {
     const skills = [{ name: 'test', description: 'Test', body: 'PLACEHOLDER content' }];
     transform(skills, TEST_DIR);
 
-    const content = fs.readFileSync(path.join(TEST_DIR, 'cursor/.test/skills/test/SKILL.md'), 'utf-8');
+    const content = fs.readFileSync(path.join(TEST_DIR, 'gemini/.test/skills/test/SKILL.md'), 'utf-8');
     expect(content).toContain('TRANSFORMED content');
   });
 
@@ -144,9 +144,9 @@ describe('createTransformer factory', () => {
     }];
     transform(skills, TEST_DIR);
 
-    expect(fs.existsSync(path.join(TEST_DIR, 'cursor/.test/skills/test/reference/ref1.md'))).toBe(true);
-    expect(fs.existsSync(path.join(TEST_DIR, 'cursor/.test/skills/test/reference/ref2.md'))).toBe(true);
-    const ref1 = fs.readFileSync(path.join(TEST_DIR, 'cursor/.test/skills/test/reference/ref1.md'), 'utf-8');
+    expect(fs.existsSync(path.join(TEST_DIR, 'gemini/.test/skills/test/reference/ref1.md'))).toBe(true);
+    expect(fs.existsSync(path.join(TEST_DIR, 'gemini/.test/skills/test/reference/ref2.md'))).toBe(true);
+    const ref1 = fs.readFileSync(path.join(TEST_DIR, 'gemini/.test/skills/test/reference/ref1.md'), 'utf-8');
     expect(ref1).toBe('Reference 1 content');
   });
 
@@ -192,15 +192,15 @@ describe('createTransformer factory', () => {
 
   test('should clean existing directory before writing', () => {
     const transform = createTransformer(baseConfig);
-    const existingDir = path.join(TEST_DIR, 'cursor/.test/skills/old');
+    const existingDir = path.join(TEST_DIR, 'gemini/.test/skills/old');
     fs.mkdirSync(existingDir, { recursive: true });
     fs.writeFileSync(path.join(existingDir, 'SKILL.md'), 'old');
 
     const skills = [{ name: 'new', description: 'New', body: 'New' }];
     transform(skills, TEST_DIR);
 
-    expect(fs.existsSync(path.join(TEST_DIR, 'cursor/.test/skills/old/SKILL.md'))).toBe(false);
-    expect(fs.existsSync(path.join(TEST_DIR, 'cursor/.test/skills/new/SKILL.md'))).toBe(true);
+    expect(fs.existsSync(path.join(TEST_DIR, 'gemini/.test/skills/old/SKILL.md'))).toBe(false);
+    expect(fs.existsSync(path.join(TEST_DIR, 'gemini/.test/skills/new/SKILL.md'))).toBe(true);
   });
 
   test('should log correct summary', () => {
@@ -225,7 +225,7 @@ describe('createTransformer factory', () => {
     const transform = createTransformer(baseConfig);
     transform([], TEST_DIR);
 
-    const skillDirs = fs.readdirSync(path.join(TEST_DIR, 'cursor/.test/skills'));
+    const skillDirs = fs.readdirSync(path.join(TEST_DIR, 'gemini/.test/skills'));
     expect(skillDirs).toHaveLength(0);
   });
 
@@ -234,8 +234,8 @@ describe('createTransformer factory', () => {
     const skills = [{ name: 'test', description: 'Test', body: 'Ask {{model}} for help.' }];
     transform(skills, TEST_DIR);
 
-    const content = fs.readFileSync(path.join(TEST_DIR, 'cursor/.test/skills/test/SKILL.md'), 'utf-8');
-    expect(content).toContain('Ask the model for help.');
+    const content = fs.readFileSync(path.join(TEST_DIR, 'gemini/.test/skills/test/SKILL.md'), 'utf-8');
+    expect(content).toContain('Ask Gemini for help.');
   });
 
   test('should replace {{config_file}} placeholder', () => {
@@ -243,8 +243,8 @@ describe('createTransformer factory', () => {
     const skills = [{ name: 'test', description: 'Test', body: 'See {{config_file}}.' }];
     transform(skills, TEST_DIR);
 
-    const content = fs.readFileSync(path.join(TEST_DIR, 'cursor/.test/skills/test/SKILL.md'), 'utf-8');
-    expect(content).toContain('See .cursorrules.');
+    const content = fs.readFileSync(path.join(TEST_DIR, 'gemini/.test/skills/test/SKILL.md'), 'utf-8');
+    expect(content).toContain('See GEMINI.md.');
   });
 
   test('should handle multiple skills', () => {
@@ -255,8 +255,8 @@ describe('createTransformer factory', () => {
     ];
     transform(skills, TEST_DIR);
 
-    expect(fs.existsSync(path.join(TEST_DIR, 'cursor/.test/skills/skill1/SKILL.md'))).toBe(true);
-    expect(fs.existsSync(path.join(TEST_DIR, 'cursor/.test/skills/skill2/SKILL.md'))).toBe(true);
+    expect(fs.existsSync(path.join(TEST_DIR, 'gemini/.test/skills/skill1/SKILL.md'))).toBe(true);
+    expect(fs.existsSync(path.join(TEST_DIR, 'gemini/.test/skills/skill2/SKILL.md'))).toBe(true);
   });
 
   test('should preserve multiline body content', () => {
@@ -268,7 +268,7 @@ describe('createTransformer factory', () => {
     }];
     transform(skills, TEST_DIR);
 
-    const content = fs.readFileSync(path.join(TEST_DIR, 'cursor/.test/skills/test/SKILL.md'), 'utf-8');
+    const content = fs.readFileSync(path.join(TEST_DIR, 'gemini/.test/skills/test/SKILL.md'), 'utf-8');
     const parsed = parseFrontmatter(content);
     expect(parsed.body).toContain('First paragraph.');
     expect(parsed.body).toContain('Second paragraph.');
@@ -294,7 +294,7 @@ describe('createTransformer factory', () => {
     }];
     transform(skills, TEST_DIR);
 
-    const content = fs.readFileSync(path.join(TEST_DIR, 'cursor/.test/skills/test/SKILL.md'), 'utf-8');
+    const content = fs.readFileSync(path.join(TEST_DIR, 'gemini/.test/skills/test/SKILL.md'), 'utf-8');
     expect(content).toContain('user-invocable: true');
     expect(content).toContain('argument-hint:');
     expect(content).toContain('license: MIT');

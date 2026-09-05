@@ -53,6 +53,10 @@ Thumbs.db
 # skill dirs (**/skills/impeccable/scripts/.impeccable/). Anchored patterns
 # would miss the nested copies the build/hook writes.
 **/.impeccable/hook.cache.json
+# Local review/question runtime state, same as the canonical block README.md
+# hands to installing projects.
+.impeccable/review/
+.impeccable/questions/
 .impeccable/live/sessions/
 .impeccable/live/previews/
 .impeccable/live/annotations/
@@ -68,6 +72,14 @@ Thumbs.db
 .impeccable/live/deferred-svelte-component-accepts.json
 .impeccable/history/
 .impeccable/config.local.json
+# API keys for optional image-generation cues (document seed mode).
+.impeccable/.env
+# Generated visual-cue images + cues.json (document seed Step 4).
+.impeccable/visual-cues/
+# The design-context store itself is the user's own record and is trackable;
+# only its session state and its generated exports stay local.
+.impeccable/design-context/runtime/
+.impeccable/design-context/exports/
 **/.impeccable/hook.pending.json
 .impeccable/provider-smoke/
 src/__impeccable_provider_smoke_*.html
@@ -141,3 +153,9 @@ tmp/
 # PNGs, the old card backup). The canonical generator is `bun run og-image`
 # (scripts/generate-og-image.js); this dir is throwaway and safe to delete.
 .og-build/
+
+
+# Intermediate and generated output for the picker build. Release builds sync
+# the generated picker into the tracked provider harness directories.
+build-picker/
+skill/scripts/picker/

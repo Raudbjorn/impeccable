@@ -78,6 +78,16 @@ pub fn automatic_hook_mode(ctx: &Ctx, cwd: &str, env: &Env, provider: &Provider)
     if !hook_enabled_at(&active_root, env) {
         return "none";
     }
+    if provider.id == "omp" {
+        for root in hook_manifest_search_roots(ctx, cwd, env) {
+            if hook_enabled_at(&root, env)
+                && safe_read(&jsp::join(&[&root, ".omp/hooks/post/impeccable.js"]))
+                    .is_some_and(|s| s.contains("export default function impeccableHook(") && s.contains("\"impeccable.cmd\""))
+            {
+                return "stop";
+            }
+        }
+    }
     let manifests = hook_manifests_for(&provider.id);
     for root in hook_manifest_search_roots(ctx, cwd, env) {
         // A manifest can live above the resolved product. Honor the hook

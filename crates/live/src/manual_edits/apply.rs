@@ -1832,3 +1832,49 @@ pub fn rollback_transaction(
 pub fn now() -> i64 {
     now_i64()
 }
+
+/// Make file watchers observe the final state after a batch of rapid source writes.
+pub fn retrigger_manual_apply_files(files: &[Value], cwd: &str) -> Vec<Value> {
+    let mut failures = Vec::new();
+    let root = match std::fs::canonicalize(cwd) {
+        Ok(root) => root,
+        Err(e) => return vec![json!({"file": cwd, "reason": "hmr_retrigger_failed", "message": e.to_string()})],
+    };
+    for file in collect_manual_apply_files(&json!({"entries": []}), files, cwd) {
+        let touch = || -> std::io::Result<()> {
+            let path = std::fs::canonicalize(root.join(&file))?;
+            if !path.starts_with(&root) || path == root { return Ok(()); }
+            let handle = std::fs::OpenOptions::new().write(true).open(&path)?;
+            let meta = handle.metadata()?;
+            if !meta.is_file() { return Ok(()); }
+            let modified = std::cmp::max(
+                std::time::SystemTime::now(),
+                meta.modified()? + Duration::from_millis(1),
+            );
+            handle.set_times(std::fs::FileTimes::new().set_modified(modified))
+        };
+        if let Err(e) = touch() {
+            failures.push(json!({"file": file, "reason": "hmr_retrigger_failed", "message": e.to_string()}));
+        }
+    }
+    failures
+}
+
+#[cfg(test)]
+mod retrigger_tests {
+    use super::*;
+
+    #[test]
+    fn retrigger_advances_mtime_without_changing_contents() {
+        let root = std::env::temp_dir().join(format!("impeccable-retrigger-{}", random_id8()));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("App.jsx");
+        std::fs::write(&path, "final text").unwrap();
+        let before = std::fs::metadata(&path).unwrap().modified().unwrap();
+        assert!(retrigger_manual_apply_files(&[json!("App.jsx")], &root.to_string_lossy()).is_empty());
+        assert!(std::fs::metadata(&path).unwrap().modified().unwrap() > before);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "final text");
+        assert!(retrigger_manual_apply_files(&[json!("../outside")], &root.to_string_lossy()).is_empty());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}

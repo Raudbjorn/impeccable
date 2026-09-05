@@ -1720,3 +1720,22 @@ fn codex_stop_emits_decision_block() {
     assert!(out["reason"].as_str().unwrap().contains("[side-tab]"));
     assert!(out.get("hookSpecificOutput").is_none());
 }
+
+#[test]
+fn omp_hook_lifecycle_and_reset_preserves_disabled_config_on_error() {
+    let t = Tmp::new();
+    let cwd = t.path();
+    let r = rt(&cwd);
+    t.write(".omp/skills/impeccable/SKILL.md", "---\nname: impeccable\n---\n");
+    let (_, err, code) = admin_run(&r, &["on"]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(t.read(".omp/hooks/post/impeccable.js"), impeccable_context::provider::OMP_HOOK_MODULE);
+    admin_run(&r, &["off"]);
+    let disabled = t.read(".impeccable/config.local.json");
+    t.write(".codex/hooks.json", "{invalid");
+    assert_eq!(admin_run(&r, &["reset"]).2, 1);
+    assert_eq!(t.read(".impeccable/config.local.json"), disabled);
+    t.write(".codex/hooks.json", "{}");
+    assert_eq!(admin_run(&r, &["reset"]).2, 0);
+    assert!(!t.exists(".omp/hooks/post/impeccable.js"));
+}

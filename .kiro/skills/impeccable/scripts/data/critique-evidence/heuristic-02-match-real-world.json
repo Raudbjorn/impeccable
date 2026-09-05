@@ -1,0 +1,80 @@
+{
+  "heuristic_id": "mrw",
+  "heuristic_name": "Match Between System and Real World",
+  "nielsen_index": 2,
+  "short_description": "Speak the user's language. Follow real-world conventions. Information appears in natural, logical order.",
+  "catalog": {
+    "positive": [
+      {
+        "id": "mrw-pos-plain-language",
+        "impact": 2,
+        "definition": "UI copy uses domain-appropriate plain language without unexplained jargon",
+        "evidence_required": "cite a passage and why it lands for the audience"
+      },
+      {
+        "id": "mrw-pos-recognizable-icons",
+        "impact": 1,
+        "definition": "Icons follow recognizable conventions (search lens, trash for delete, gear for settings)",
+        "evidence_required": "name the icon and its action"
+      },
+      {
+        "id": "mrw-pos-natural-order",
+        "impact": 2,
+        "definition": "Information order matches how a user thinks about the task",
+        "evidence_required": "name the surface and the order"
+      },
+      {
+        "id": "mrw-pos-domain-tone",
+        "impact": 1,
+        "definition": "Tone fits the audience (formal for enterprise, warm for consumer, playful for entertainment)",
+        "evidence_required": "cite the copy and the inferred audience"
+      },
+      {
+        "id": "mrw-pos-real-world-metaphor",
+        "impact": 2,
+        "definition": "Layout uses a real-world metaphor that aids comprehension (calendar grid, file folder)",
+        "evidence_required": "name the metaphor and where it appears"
+      }
+    ],
+    "negative": [
+      {
+        "id": "mrw-neg-jargon-leak",
+        "impact": -2,
+        "definition": "Domain or technical jargon appears without explanation in user-facing copy",
+        "evidence_required": "cite the term and where it appears"
+      },
+      {
+        "id": "mrw-neg-tech-error",
+        "impact": -2,
+        "definition": "Error or status message reads as raw system output (codes, stack traces, API responses)",
+        "evidence_required": "cite the message"
+      },
+      {
+        "id": "mrw-neg-unfamiliar-icon",
+        "impact": -1,
+        "definition": "Icon-only control uses an unconventional symbol that requires guessing",
+        "evidence_required": "name the icon and the action it triggers"
+      },
+      {
+        "id": "mrw-neg-illogical-order",
+        "impact": -2,
+        "definition": "Information appears in an order that conflicts with how users would naturally think about the task",
+        "evidence_required": "name the surface and the misordered elements"
+      },
+      {
+        "id": "mrw-neg-tonal-mismatch",
+        "impact": -1,
+        "definition": "Tone clashes with the audience or context (corporate stiffness on a consumer app, etc.)",
+        "evidence_required": "cite a passage and the inferred audience"
+      }
+    ],
+    "critical_negative": [
+      {
+        "id": "mrw-neg-untranslated-system",
+        "impact": -5,
+        "definition": "Critical user-facing surface is in machine-language only (raw JSON, untranslated locale, full stack trace)",
+        "evidence_required": "cite the surface"
+      }
+    ]
+  }
+}

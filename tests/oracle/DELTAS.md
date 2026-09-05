@@ -164,3 +164,8 @@ installed. The binary's `CLI_VERSION` moves from `3.6.0` to `4.0.0` with the
 CLI 4.0.0 release; it is what the binary prints when run directly.
 
 - `cli-version`.
+
+## Recorded 2026-09-05: main merge
+
+- `pin-usage-one-arg`, `pin-bad-command`, `pin-bad-command-teach`: append the restored `design-context` command to the available-command list; all other output and exit behavior is unchanged.
+- `context-native-ios`, `context-adaptive`, `context-android`, `context-adaptive-word`: reflect main's removal of the iOS guide and its revised Android guidance. Only the reviewed guide prose changed.

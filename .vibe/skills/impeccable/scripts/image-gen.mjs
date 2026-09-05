@@ -1,0 +1,460 @@
+#!/usr/bin/env node
+// image-gen.mjs — image generation for keyless harnesses.
+// Playbook: skill/reference/image-api.md (canonical; this help text is not).
+//
+//   node image-gen.mjs --prompt "..." --out /abs/path.png
+//       [--ref /abs/ref.png] [--width 1408] [--height 1408]
+//
+// One CLI, several providers. IMAGE_GEN_PROVIDER in .impeccable/.env picks
+// the backend:
+//   bfl     FLUX (Black Forest Labs). No ref: flux-pro-1.1 text-to-image;
+//           with ref: flux-kontext-max image-to-image, aspect ratio 1:1.
+//   gemini  Google Nano Banana (Gemini image models), always square 1:1.
+//   <else>  delegates to a project-local .impeccable/image-gen.mjs that
+//           implements this same CLI (see image-api.md for the contract).
+// When the provider line is missing it is inferred from the key's shape
+// (Google keys start with "AIza"; anything else is treated as bfl).
+//
+// Prints the absolute output path on success; exits non-zero with the
+// error on stderr on failure. Dependency-free; needs curl and (as a DNS
+// fallback) dig on PATH.
+//
+// Reads IMAGE_GEN_API_KEY from the environment, falling back to
+// ./.impeccable/.env relative to the working directory, so callers never
+// need to `source` anything: run it from the project root and it finds
+// the key itself.
+
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import dns from "node:dns";
+import { execFileSync, spawnSync } from "node:child_process";
+import { isPng } from "./lib/png.mjs";
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ------------------------------------------------------------------ env
+
+// The key lives in .impeccable/.env per the document seed flow. Loading it
+// here (instead of requiring the caller to export it) removes the one setup
+// step subagents historically forgot, which cost a failed call each time.
+// IMAGE_API_KEY is accepted as a legacy alias: early seed runs wrote that
+// name, and those .env files are still in the wild.
+function loadEnv(...names) {
+  for (const name of names) if (process.env[name]) return process.env[name];
+  const envPath = path.join(process.cwd(), ".impeccable", ".env");
+  if (!fs.existsSync(envPath)) return undefined;
+  const vars = {};
+  for (const line of fs.readFileSync(envPath, "utf8").split("\n")) {
+    // The trailing `\s*$` here never trims anything on its own: `(.*)` is
+    // greedy and already consumes the trailing whitespace, so an explicit
+    // .trim() is what actually strips a copy-pasted trailing space from an
+    // unquoted value before the quote strip runs (which needs the quote at
+    // the very end to match, so it has to run after the trim, not before).
+    const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)\s*$/);
+    if (m) vars[m[1]] = m[2].trim().replace(/^["']|["']$/g, "");
+  }
+  for (const name of names) if (vars[name]) return vars[name];
+  return undefined;
+}
+
+// ------------------------------------------------------------------ DNS
+
+// Sandboxed harnesses (Claude Code among them) often block the default
+// resolver for the providers' hosts while the hosts stay reachable by IP.
+// So every request resolves the host here — system resolver first, then
+// dig against the default, Google, and Cloudflare resolvers — and pins
+// curl to the IP with --resolve. fetch() is never used; it dies at the
+// DNS stage.
+async function resolveIp(hostname) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { address } = await dns.promises.lookup(hostname, { family: 4 });
+      if (address) return address;
+    } catch {
+      // fall through to dig
+    }
+    for (const server of [null, "8.8.8.8", "1.1.1.1"]) {
+      try {
+        const args = ["+short", "+time=3", "A", hostname];
+        if (server) args.push(`@${server}`);
+        const ips = execFileSync("dig", args, { encoding: "utf8" })
+          .trim()
+          .split("\n")
+          .map((l) => l.trim())
+          .filter((l) => /^\d+\.\d+\.\d+\.\d+$/.test(l));
+        if (ips.length > 0) return ips[ips.length - 1];
+      } catch {
+        // next resolver
+      }
+    }
+    await sleep(1000);
+  }
+  throw new Error(`cannot resolve ${hostname} via system resolver, dig, 8.8.8.8, or 1.1.1.1`);
+}
+
+// Creates `filePath` exclusively (O_CREAT|O_EXCL via the "wx" flag: refuses
+// a pre-existing symlink or file) and writes `data` to it. `onCreated`
+// fires the instant the exclusive open succeeds -- before the write -- so
+// a caller's cleanup-ownership flag is set even if the write itself later
+// fails partway (e.g. ENOSPC): the file exists on disk and is this
+// process's to remove regardless of whether the write completed. Setting
+// the flag only after writeFileSync(path, ...) returned in full (the prior
+// approach) missed exactly that case: the exception from a failed write
+// skips the assignment, leaking a partial file no cleanup ever owns.
+function writeFileExclusive(filePath, data, mode, onCreated) {
+  const fd = fs.openSync(filePath, "wx", mode);
+  onCreated();
+  try {
+    fs.writeFileSync(fd, data);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+// ----------------------------------------------------------------- curl
+
+// Returns { status, json, text } instead of throwing on HTTP errors, so
+// callers can branch on 402 (credits) and 429 (rate/quota) rather than
+// seeing one opaque curl failure. Request bodies always travel via a temp
+// file: a base64 reference image passed as a literal -d argument overflows
+// argv (E2BIG) and kills the call before it reaches the network.
+async function curlJson(url, { method = "GET", headers = {}, body } = {}) {
+  const { hostname } = new URL(url);
+  const ip = await resolveIp(hostname);
+  const args = ["-sS", "--max-time", "180", "--resolve", `${hostname}:443:${ip}`, "-X", method, "-w", "\n%{http_code}"];
+  // Auth headers (the provider API key) travel in a mode-0600 curl config
+  // file, never argv: an argv header is visible to any same-user process
+  // via /proc/<pid>/cmdline or ps while curl runs, and to command telemetry
+  // that logs argv. -K reads one "header = ..." line per header.
+  // Declared outside the try so `finally` can always see them, and the
+  // try starts before the first write below: `flag: "wx"` (see the header
+  // file's own comment) is meant to handle exactly the case where a
+  // pre-created path collides and the write throws, and a try/finally that
+  // only wrapped the curl call would leak the header file on that exact
+  // failure -- the temp file that already landed, holding the provider API
+  // key, never gets cleaned up.
+  let headerFile;
+  let bodyFile;
+  // Set only after each write actually succeeds: on an exclusive-create
+  // collision, headerFile/bodyFile already names a file this call did not
+  // create, and cleanup must never remove a path it didn't write -- that
+  // would delete the very pre-existing file or symlink `wx` was meant to
+  // leave untouched.
+  let headerCreated = false;
+  let bodyCreated = false;
+  try {
+    if (Object.keys(headers).length) {
+      headerFile = path.join(os.tmpdir(), `image-gen-headers-${process.pid}-${Date.now()}.txt`);
+      const lines = Object.entries(headers).map(([k, v]) => `header = "${k}: ${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`);
+      // `mode: 0o600` only takes effect on a fresh create; on a shared,
+      // predictable tmpdir path, another local user could pre-create a
+      // symlink (or a plain file) there, and a plain writeFileSync would
+      // follow the link or truncate the existing file without ever touching
+      // its mode. The exclusive open refuses to write unless this call
+      // creates the file itself.
+      writeFileExclusive(headerFile, lines.join("\n") + "\n", 0o600, () => { headerCreated = true; });
+      args.push("-K", headerFile);
+    }
+    if (body !== undefined) {
+      bodyFile = path.join(os.tmpdir(), `image-gen-body-${process.pid}-${Date.now()}.json`);
+      // Same reasoning as the header file above: the body can carry the full
+      // prompt and a base64 reference image, and a shared tmpdir under a
+      // normal 022 umask would otherwise leave it world-readable for curl's
+      // timeout window.
+      writeFileExclusive(bodyFile, body, 0o600, () => { bodyCreated = true; });
+      args.push("-d", `@${bodyFile}`);
+    }
+    args.push(url);
+    const out = execFileSync("curl", args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+    const nl = out.lastIndexOf("\n");
+    const status = parseInt(out.slice(nl + 1), 10);
+    const text = out.slice(0, nl);
+    let json = null;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      // non-JSON body (edge HTML error page); callers see json === null
+    }
+    return { status, json, text };
+  } finally {
+    if (headerCreated) fs.rmSync(headerFile, { force: true });
+    if (bodyCreated) fs.rmSync(bodyFile, { force: true });
+  }
+}
+
+// Downloads to a sibling temp path, checks the PNG signature (BFL is asked
+// for output_format: "png", but a 2xx response body is not proof of that --
+// a delivery-CDN edge error page or truncated body would otherwise land
+// directly on outPath and only surface as a mysterious decode failure two
+// pipeline stages later), then renames onto outPath so a reader never sees
+// a partial or invalid file at the final path.
+async function download(url, outPath) {
+  const { hostname } = new URL(url);
+  const tmpPath = `${outPath}.download-${process.pid}-${Date.now()}.tmp`;
+  let lastErr;
+  // Re-resolve on every attempt: CDN delivery hosts are the flakiest to
+  // resolve, and a fresh IP is usually what fixes a failure.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const ip = await resolveIp(hostname);
+      execFileSync("curl", ["-sS", "-f", "--max-time", "60", "--resolve", `${hostname}:443:${ip}`, "-o", tmpPath, url]);
+      const buf = fs.existsSync(tmpPath) ? fs.readFileSync(tmpPath) : null;
+      if (!buf || buf.length === 0) {
+        lastErr = new Error("download produced an empty file");
+      } else if (!isPng(buf)) {
+        lastErr = new Error("downloaded file is not a valid PNG (bad signature)");
+      } else {
+        fs.renameSync(tmpPath, outPath);
+        return;
+      }
+    } catch (e) {
+      lastErr = e;
+    } finally {
+      fs.rmSync(tmpPath, { force: true });
+    }
+    await sleep(2000 * (attempt + 1));
+  }
+  throw lastErr;
+}
+
+// ----------------------------------------------------------------- args
+
+function getArg(name, def) {
+  const i = process.argv.indexOf(`--${name}`);
+  return i >= 0 ? process.argv[i + 1] : def;
+}
+
+function fail(msg) {
+  console.error(msg);
+  process.exit(1);
+}
+
+// ------------------------------------------------------------------ bfl
+
+// FLUX is asynchronous: submit returns a polling_url, poll until Ready,
+// download the signed result URL inside its 10-minute expiry. Transient
+// failures are absorbed internally so a network blip costs this script
+// seconds instead of costing a caller one of its generation attempts.
+// Only two failures are final on the spot: 402 means the account is out
+// of credits (a human must top up; retrying is pointless), and a
+// moderation status means the prompt itself must change.
+async function generateBfl({ apiKey, prompt, ref, width, height, out }) {
+  for (const [label, v] of [["width", width], ["height", height]]) {
+    if (Number.isNaN(v) || v < 256 || v > 1440 || v % 32 !== 0) {
+      fail(`${label} ${v} out of range: BFL takes 256-1440 in multiples of 32`);
+    }
+  }
+
+  const base = "https://api.bfl.ai";
+  let endpoint, body;
+  if (ref) {
+    endpoint = "/v1/flux-kontext-max";
+    body = { prompt, input_image: fs.readFileSync(ref).toString("base64"), aspect_ratio: "1:1", output_format: "png" };
+  } else {
+    endpoint = "/v1/flux-pro-1.1";
+    body = { prompt, width, height, output_format: "png" };
+  }
+
+  const authHeaders = { "x-key": apiKey, "Content-Type": "application/json", accept: "application/json" };
+  let submit;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      submit = await curlJson(base + endpoint, { method: "POST", headers: authHeaders, body: JSON.stringify(body) });
+    } catch (e) {
+      submit = { status: 0, json: null, text: e.message };
+    }
+    if (submit.status === 200 && submit.json?.polling_url) break;
+    if (submit.status === 402) fail("BFL account is out of credits; add credits at dashboard.bfl.ai and re-run");
+    if (submit.status === 401 || submit.status === 403) fail(`BFL rejected the key (HTTP ${submit.status}): check IMAGE_GEN_API_KEY`);
+    if (attempt >= 2) fail(`Submit failed after 3 attempts (last HTTP ${submit.status}): ${submit.text?.slice(0, 300)}`);
+    // 429 is the active-task cap (24 tasks; 6 for kontext-max): wait longer.
+    await sleep(submit.status === 429 ? 10000 : 2000 * (attempt + 1));
+  }
+
+  // Poll the returned polling_url (never a reconstructed one; the global
+  // endpoint requires it). Tolerate a few consecutive transient poll
+  // failures — the task keeps running server-side regardless.
+  let result;
+  let pollFailures = 0;
+  for (let i = 0; i < 150; i++) {
+    await sleep(2000);
+    let poll;
+    try {
+      poll = await curlJson(submit.json.polling_url, { headers: { "x-key": apiKey, accept: "application/json" } });
+    } catch {
+      poll = null;
+    }
+    if (!poll || poll.status >= 500 || !poll.json) {
+      if (++pollFailures >= 5) fail("Polling failed 5 times in a row; giving up");
+      continue;
+    }
+    pollFailures = 0;
+    if (poll.json.status === "Ready") {
+      result = poll.json.result;
+      break;
+    }
+    if (["Error", "Failed", "Content Moderated", "Request Moderated", "Task not found"].includes(poll.json.status)) {
+      fail(`Generation failed with status "${poll.json.status}": ${JSON.stringify(poll.json).slice(0, 300)}`);
+    }
+  }
+  if (!result) fail("Timed out waiting for the generation (5 minutes)");
+
+  // The sample URL is signed and expires after 10 minutes; download now.
+  await download(result.sample, out);
+}
+
+// --------------------------------------------------------------- gemini
+
+// Nano Banana is synchronous: one generateContent call returns the image
+// as base64 in the response, no polling, no delivery CDN. The aspect ratio
+// is pinned 1:1 in imageConfig, so output is always square regardless of
+// --width/--height (Gemini picks its own pixel size per tier; the pipeline
+// only requires square). Moderation shows up as a response with no image
+// part plus a block reason, not as an HTTP error.
+// Reference files on disk are whatever a prior pipeline step produced, not
+// necessarily PNG. Gemini rejects a mismatched declared MIME by silently
+// misreading the bytes rather than erroring, so the type sent must match
+// the actual bytes, sniffed from the format signature rather than trusted
+// from the file extension.
+function sniffImageMime(buf) {
+  if (isPng(buf)) return "image/png";
+  if (buf.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) return "image/jpeg";
+  if (buf.subarray(0, 4).toString("ascii") === "RIFF" && buf.subarray(8, 12).toString("ascii") === "WEBP") return "image/webp";
+  fail("--ref file is not a recognized image format (expected PNG, JPEG, or WebP signature)");
+}
+
+async function generateGemini({ apiKey, prompt, ref, out }) {
+  // IMAGE_GEN_MODEL overrides for users on a different tier; the default
+  // is the high-volume Nano Banana model.
+  let model = loadEnv("IMAGE_GEN_MODEL") || "gemini-3.1-flash-image";
+  const parts = [{ text: prompt }];
+  if (ref) {
+    const refBuf = fs.readFileSync(ref);
+    parts.push({ inlineData: { mimeType: sniffImageMime(refBuf), data: refBuf.toString("base64") } });
+  }
+  const body = JSON.stringify({
+    contents: [{ parts }],
+    generationConfig: { responseModalities: ["IMAGE"], imageConfig: { aspectRatio: "1:1" } },
+  });
+  const headers = { "x-goog-api-key": apiKey, "Content-Type": "application/json" };
+  const urlFor = (m) => `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`;
+
+  let res;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      res = await curlJson(urlFor(model), { method: "POST", headers, body });
+    } catch (e) {
+      res = { status: 0, json: null, text: e.message };
+    }
+    if (res.status === 200) break;
+    const msg = res.json?.error?.message || res.text?.slice(0, 300) || "";
+    if (res.status === 400 && /API key not valid/i.test(msg)) fail(`Gemini rejected the key: check IMAGE_GEN_API_KEY (${msg.slice(0, 200)})`);
+    if (res.status === 401 || res.status === 403) fail(`Gemini rejected the key (HTTP ${res.status}): ${msg.slice(0, 200)}`);
+    // Model ids drift between stable and -preview suffixes as Google
+    // promotes them; try the sibling name once before giving up.
+    if (res.status === 404 && !model.endsWith("-preview")) {
+      model = `${model}-preview`;
+      continue;
+    }
+    if (res.status === 429 && attempt >= 4) fail(`Gemini quota or rate limit exhausted after 5 attempts: ${msg.slice(0, 200)}; check the plan and billing for this key`);
+    if (attempt >= 4) fail(`Gemini call failed after 5 attempts (last HTTP ${res.status}): ${msg.slice(0, 300)}`);
+    await sleep(res.status === 429 ? 15000 : 2000 * (attempt + 1));
+  }
+
+  const blocked = res.json?.promptFeedback?.blockReason;
+  if (blocked) fail(`Prompt was moderated (${blocked}); reword the prompt and re-run`);
+  const cand = res.json?.candidates?.[0];
+  const imgPart = cand?.content?.parts?.find((p) => p.inlineData?.data || p.inline_data?.data);
+  if (!imgPart) {
+    const reason = cand?.finishReason || "no image part in the response";
+    fail(`Generation returned no image (${reason}); reword the prompt and re-run`);
+  }
+  // Gemini often returns JPEG bytes whatever the caller's filename says,
+  // and the pipelines' compile steps decode PNG only, so convert here
+  // rather than making every caller rediscover the mismatch.
+  writeAsPng(Buffer.from(imgPart.inlineData?.data || imgPart.inline_data.data, "base64"), out);
+}
+
+// Writes image bytes to `out` as a real PNG. PNG input passes through;
+// anything else (JPEG, WebP) is converted with the first available system
+// tool: sips ships with macOS, ImageMagick and ffmpeg cover Linux.
+function writeAsPng(buf, out) {
+  if (buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    fs.writeFileSync(out, buf);
+    return;
+  }
+  const tmp = path.join(os.tmpdir(), `image-gen-raw-${process.pid}-${Date.now()}.img`);
+  // See curlJson's header/body temp files above: exclusive create closes
+  // the same predictable-shared-path symlink/overwrite gap. Ownership is
+  // tracked the same way too: the write itself sat outside any try/finally
+  // here, so a failure partway through it (after the exclusive create had
+  // already landed the file) leaked `tmp` with no cleanup ever reached.
+  let tmpCreated = false;
+  try {
+    writeFileExclusive(tmp, buf, 0o600, () => { tmpCreated = true; });
+    const converters = [
+      ["sips", ["-s", "format", "png", tmp, "--out", out]],
+      ["magick", [tmp, `png:${out}`]],
+      ["convert", [tmp, `png:${out}`]],
+      ["ffmpeg", ["-y", "-i", tmp, out]],
+    ];
+    for (const [cmd, args] of converters) {
+      try {
+        execFileSync(cmd, args, { stdio: "ignore" });
+        if (fs.existsSync(out) && fs.statSync(out).size > 0) return;
+      } catch {
+        // tool missing or failed; try the next one
+      }
+    }
+    fail("Provider returned non-PNG image bytes and no converter is available (tried sips, magick, convert, ffmpeg); install one and re-run");
+  } finally {
+    if (tmpCreated) fs.rmSync(tmp, { force: true });
+  }
+}
+
+// ----------------------------------------------------------------- main
+
+const prompt = getArg("prompt");
+const out = getArg("out");
+const ref = getArg("ref");
+// 1408 is the default square: comfortably under BFL's 1440 cap and
+// divisible by 32. Gemini ignores it (aspect ratio 1:1 pins its square).
+const width = parseInt(getArg("width", "1408"), 10);
+const height = parseInt(getArg("height", "1408"), 10);
+const apiKey = loadEnv("IMAGE_GEN_API_KEY", "IMAGE_API_KEY");
+// Users and earlier runs write provider names loosely ("flux" for bfl,
+// "nano-banana" for gemini); normalize the known spellings instead of
+// failing on them. Google API keys start with "AIza" (classic) or "AQ."
+// (newer), so a missing provider line is recoverable from the key itself.
+const PROVIDER_ALIASES = {
+  bfl: "bfl", flux: "bfl", "black-forest-labs": "bfl",
+  gemini: "gemini", google: "gemini", "nano-banana": "gemini", nanobanana: "gemini",
+};
+const looksGoogle = apiKey?.startsWith("AIza") || apiKey?.startsWith("AQ.");
+const rawProvider = (loadEnv("IMAGE_GEN_PROVIDER") || (looksGoogle ? "gemini" : "bfl")).toLowerCase();
+const provider = PROVIDER_ALIASES[rawProvider] || rawProvider;
+
+if (!prompt || !out) fail("Usage: --prompt <p> --out <abs path> [--ref <abs path>] [--width n] [--height n]");
+
+if (provider !== "bfl" && provider !== "gemini") {
+  // Unknown provider: hand the same argv to a project-local wrapper that
+  // implements this CLI. The env guard stops a copied shipped script from
+  // delegating to itself forever.
+  const custom = path.join(process.cwd(), ".impeccable", "image-gen.mjs");
+  if (process.env.IMPECCABLE_IMAGE_GEN_DELEGATED || !fs.existsSync(custom)) {
+    fail(`Unknown IMAGE_GEN_PROVIDER "${provider}" and no ${custom}; supported providers are bfl and gemini, or write that file implementing the same CLI (see reference/image-api.md)`);
+  }
+  const child = spawnSync(process.execPath, [custom, ...process.argv.slice(2)], {
+    stdio: "inherit",
+    env: { ...process.env, IMPECCABLE_IMAGE_GEN_DELEGATED: "1" },
+  });
+  process.exit(child.status ?? 1);
+}
+
+if (!apiKey) fail("Missing IMAGE_GEN_API_KEY (environment or ./.impeccable/.env)");
+
+fs.mkdirSync(path.dirname(out), { recursive: true });
+if (provider === "gemini") await generateGemini({ apiKey, prompt, ref, out });
+else await generateBfl({ apiKey, prompt, ref, width, height, out });
+console.log(path.resolve(out));

@@ -65,9 +65,11 @@ function readSkillScripts(scriptsDir) {
       const relPath = path.relative(scriptsDir, entryPath).split(path.sep).join('/');
       // `mode` travels with the entry so the launcher keeps its executable
       // bit in every provider copy (see writeScriptFile in the transformer).
+      const isBinary = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.ico', '.woff', '.woff2', '.ttf', '.otf']
+        .includes(path.extname(entry.name).toLowerCase());
       scripts.push({
         name: relPath,
-        content: fs.readFileSync(entryPath, 'utf-8'),
+        content: fs.readFileSync(entryPath, isBinary ? undefined : 'utf-8'),
         filePath: entryPath,
         mode: fs.statSync(entryPath).mode & 0o777,
       });
@@ -418,12 +420,6 @@ export const PROVIDER_PLACEHOLDERS = {
     ask_instruction: 'STOP and call the AskUserQuestion tool to clarify.',
     command_prefix: '/'
   },
-  'cursor': {
-    model: 'the model',
-    config_file: '.cursorrules',
-    ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
-    command_prefix: '/'
-  },
   'gemini': {
     model: 'Gemini',
     config_file: 'GEMINI.md',
@@ -464,24 +460,6 @@ export const PROVIDER_PLACEHOLDERS = {
     ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
     command_prefix: '/'
   },
-  'qoder': {
-    model: 'the model',
-    config_file: 'AGENTS.md',
-    ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
-    command_prefix: '/'
-  },
-  'trae': {
-    model: 'the model',
-    config_file: 'RULES.md',
-    ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
-    command_prefix: '/'
-  },
-  'rovo-dev': {
-    model: 'Rovo Dev',
-    config_file: 'AGENTS.md',
-    ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
-    command_prefix: '/'
-  },
   veto: {
     model: 'the selected model',
     config_file: '~/.veto/config.json',
@@ -494,22 +472,24 @@ export const PROVIDER_PLACEHOLDERS = {
     ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
     command_prefix: '/'
   },
-  'grok': {
-    model: 'Grok',
-    config_file: 'AGENTS.md',
-    ask_instruction: 'STOP and call the AskUserQuestion tool to clarify.',
-    command_prefix: '/'
-  },
   'antigravity': {
     model: 'Gemini',
     config_file: 'AGENTS.md',
     ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
     command_prefix: '/'
   },
-  'hermes': {
-    // Hermes is provider-agnostic and reads AGENTS.md / CLAUDE.md / .cursorrules
-    // for project context. "the model" matches the pi/opencode phrasing used
-    // for harnesses without a vendor-fixed assistant name.
+  // oh-my-pi invokes skills as `/skill:<name> [args]`; the args form is a
+  // documented embedded pattern (trailing prose after the token is passed
+  // through), so the router's `/impeccable <subcommand>` shape still works.
+  'omp': {
+    model: 'the model',
+    config_file: 'AGENTS.md',
+    ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
+    command_prefix: '/skill:'
+  },
+  // Fallback for any provider id not in this map (backwards compat for
+  // forks that add a provider config without a matching placeholder entry).
+  'default': {
     model: 'the model',
     config_file: 'AGENTS.md',
     ask_instruction: 'Ask the user directly to clarify what you cannot infer.',
@@ -523,18 +503,12 @@ export const PROVIDER_BLOCK_TAGS = new Set([
   'claude',
   'claude-code',
   'codex',
-  'cursor',
   'gemini',
   'github',
-  'grok',
-  'hermes',
   'kiro',
+  'omp',
   'opencode',
   'pi',
-  'qoder',
-  'rovo-dev',
-  'trae',
-  'trae-cn',
   'vibe',
   'veto',
 ]);
@@ -599,12 +573,13 @@ const EXCLUDED_FROM_SUGGESTIONS = new Set([
 // These are the commands that audit/critique/etc. reference when suggesting next steps.
 const IMPECCABLE_SUB_COMMANDS = [
   'adapt', 'animate', 'audit', 'bolder', 'clarify', 'colorize',
-  'critique', 'delight', 'distill', 'document', 'harden', 'layout',
-  'onboard', 'optimize', 'overdrive', 'polish', 'quieter', 'shape', 'typeset',
+  'critique', 'delight', 'design-context', 'distill', 'document', 'harden',
+  'layout', 'onboard', 'optimize', 'overdrive', 'polish', 'quieter', 'shape',
+  'typeset',
 ];
 
 export function replacePlaceholders(content, provider, commandNames = [], allSkillNames = []) {
-  const placeholders = PROVIDER_PLACEHOLDERS[provider] || PROVIDER_PLACEHOLDERS['cursor'];
+  const placeholders = PROVIDER_PLACEHOLDERS[provider] || PROVIDER_PLACEHOLDERS.default;
   const cmdPrefix = placeholders.command_prefix || '/';
 
   // Build the available_commands list.
@@ -659,7 +634,8 @@ export function replacePlaceholders(content, provider, commandNames = [], allSki
  * path or IMPECCABLE_PROVIDER_ID at run time.
  */
 export function replaceScriptProviderMarker(content, provider, buildProvider = provider) {
-  const placeholders = PROVIDER_PLACEHOLDERS[provider] || PROVIDER_PLACEHOLDERS.cursor;
+  if (Buffer.isBuffer(content)) return content;
+  const placeholders = PROVIDER_PLACEHOLDERS[provider] || PROVIDER_PLACEHOLDERS.default;
   const commandPrefix = placeholders.command_prefix || '/';
   const prefixMarker = "export const IMPECCABLE_COMMAND_PREFIX = '/'; // @impeccable-provider-command-prefix";
   const providerMarker = "export const IMPECCABLE_PROVIDER_ID = 'source'; // @impeccable-provider-id";

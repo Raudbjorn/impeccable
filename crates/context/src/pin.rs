@@ -8,15 +8,15 @@ use impeccable_common::Io;
 /// keep in sync with the public repo).
 pub const COMMAND_METADATA_JSON: &str = include_str!("command-metadata.json");
 
-const HARNESS_DIRS: [&str; 17] = [
+const HARNESS_DIRS: [&str; 19] = [
     ".claude", ".cursor", ".gemini", ".codex", ".agents", ".agent", ".github", ".grok", ".hermes", ".trae", ".trae-cn",
-    ".pi", ".opencode", ".kiro", ".rovodev", ".vibe", ".qoder",
+    ".pi", ".opencode", ".kiro", ".rovodev", ".vibe", ".qoder", ".veto", ".omp",
 ];
 const CODEX_HARNESSES: [&str; 2] = [".codex", ".agents"];
-pub const VALID_COMMANDS: [&str; 23] = [
+pub const VALID_COMMANDS: [&str; 24] = [
     "craft", "init", "extract", "document", "shape", "critique", "audit", "polish", "bolder", "quieter", "distill",
     "harden", "onboard", "live", "animate", "colorize", "typeset", "layout", "delight", "overdrive", "clarify",
-    "adapt", "optimize",
+    "adapt", "optimize", "design-context",
 ];
 const PIN_MARKER: &str = "<!-- impeccable-pinned-skill -->";
 const OPENCODE_PIN_MARKER: &str = "<!-- impeccable-pinned-command -->";
@@ -54,6 +54,8 @@ fn command_prefix_for(skills_dir: &str) -> &'static str {
     let harness = jsp::basename(&jsp::dirname(skills_dir));
     if CODEX_HARNESSES.contains(&harness.as_str()) {
         "$"
+    } else if harness == ".omp" {
+        "/skill:"
     } else {
         "/"
     }
@@ -319,4 +321,27 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
         }
     }
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn veto_pin_and_unpin() {
+        let root = std::env::temp_dir().join(format!(
+            "impeccable-veto-pin-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        std::fs::create_dir_all(root.join(".veto/skills/impeccable")).unwrap();
+        let (mut io, _) = Io::captured("", root.clone(), Default::default());
+        let shortcut = root.join(".veto/skills/polish/SKILL.md");
+        assert_eq!(run(&["pin".into(), "polish".into()], &mut io), 0);
+        assert!(std::fs::read_to_string(&shortcut).unwrap().contains("/impeccable polish"));
+        assert_eq!(run(&["unpin".into(), "polish".into()], &mut io), 0);
+        assert!(!shortcut.exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }

@@ -145,6 +145,7 @@ problem that one model's priors expose rather than as a model floor.
 | 1-7, 10, 12-15 | pass | pass | pass |
 | 8 (SvelteKit exploration) | flaky | pass | pass |
 | 11 (shape resolves the build gate) | flaky | pass | pass |
+| 16 (cultural-palette override survives craft-floor.md) | not measured (no provider key in this environment) | not measured | not measured |
 
 Scenarios 8 and 11 pass on re-run, so treat a single failure there as flake and
 confirm with a second run before investigating.
@@ -158,11 +159,11 @@ and the two causes are worth keeping because neither was where it looked:
   was the only concrete instruction left standing and sonnet ran it. Fixed by
   removing the command from the turn entirely rather than by strengthening the
   warning around it.
-- **15 was a broken fixture.** The iOS workspace held PRODUCT.md and nothing
+- **15 was a broken fixture.** The Android workspace held PRODUCT.md and nothing
   else, so `audit the app in this workspace` named an app that did not exist.
   Sonnet spent its whole step budget looking for it and read no reference file
   at all, which the assertion reported as "loaded `audit.md` instead of the
-  variant". The fixture now ships one SwiftUI screen, the same courtesy
+  variant". The fixture now ships one Compose screen, the same courtesy
   `MINIMAL_LANDING_HTML` already did for the web scenarios. The scenario passes
   on unmodified `main` once the fixture is answerable, which is the proof the
   routing text was never at fault.

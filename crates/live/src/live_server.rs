@@ -2410,7 +2410,7 @@ fn handle_manual_edit_commit(
             },
         )
     };
-    let result = match result {
+    let mut result = match result {
         Ok(r) => r,
         Err(message) => {
             let mut st = lock(shared);
@@ -2465,6 +2465,17 @@ fn handle_manual_edit_commit(
                 env,
                 t.get("id").and_then(|v| v.as_str()),
             );
+        }
+    }
+    if result.get("needsManualDecision") != Some(&Value::Bool(true))
+        && result.get("cleared").and_then(Value::as_u64).unwrap_or(0) > 0
+    {
+        let files = result.get("files").and_then(Value::as_array).cloned().unwrap_or_default();
+        let warnings = manual_apply::retrigger_manual_apply_files(&files, cwd);
+        if !warnings.is_empty() {
+            let mut all = result.get("warnings").and_then(Value::as_array).cloned().unwrap_or_default();
+            all.extend(warnings);
+            result["warnings"] = json!(all);
         }
     }
     let (total, per_page) = manual_buffer::count_by_page(cwd, env);

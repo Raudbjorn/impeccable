@@ -153,30 +153,6 @@ function buildCopilotAgent(agent, body) {
   return `${generateYamlFrontmatter(frontmatter)}\n${body.trim()}\n`;
 }
 
-// Cursor subagents are plain markdown files with YAML frontmatter (project
-// scope: `.cursor/agents/`; user scope: `~/.cursor/agents/`). Fields: name,
-// description (drives auto-delegation), model (`inherit` maps directly to our
-// value), readonly, is_background. `readonly` is derived from the agent's own
-// tool list: a role that declares tools but neither Write nor Edit is a
-// reader, and Cursor can enforce that. effort/max-turns are skipped: Cursor's
-// effort option requires an explicit model id, incompatible with `inherit`.
-function buildCursorAgent(agent, body) {
-  const frontmatter = {
-    name: agent.name,
-    description: agent.description,
-    model: agent.model || 'inherit',
-  };
-
-  const tools = String(agent.tools || '').split(',').map(t => t.trim()).filter(Boolean);
-  if (tools.length > 0 && !tools.includes('Write') && !tools.includes('Edit')) {
-    frontmatter.readonly = true;
-  }
-  // The parent thread waits on each role's return; none of these run detached.
-  frontmatter.is_background = false;
-
-  return `${generateYamlFrontmatter(frontmatter)}\n${body.trim()}\n`;
-}
-
 /**
  * Render an agent's markdown body for one provider.
  *
@@ -212,13 +188,6 @@ function buildAgentFile(config, agent, body) {
     return {
       filename: `${agent.name}.agent.md`,
       content: buildCopilotAgent(agent, body),
-    };
-  }
-
-  if (config.agentFormat === 'cursor-md') {
-    return {
-      filename: `${agent.name}.md`,
-      content: buildCursorAgent(agent, body),
     };
   }
 
@@ -437,13 +406,14 @@ export function createTransformer(config) {
 
     // Emit the provider hook manifest when the provider opts in.
     // Claude Code uses `.claude/settings.json`, Codex uses project-local
-    // `.codex/hooks.json`, and Cursor uses `.cursor/hooks.json`.
+    // `.codex/hooks.json`.
     let hooksEmitted = false;
     if (config.emitHooks) {
       const manifest = hooksJsonFor(config.emitHooks, { configDir });
       if (manifest) {
         const hooksRel = config.hooksManifestRel || path.join('hooks', 'hooks.json');
-        writeFile(path.join(providerDir, configDir, hooksRel), JSON.stringify(manifest, null, 2) + '\n');
+        const content = manifest.isModule ? manifest.content : JSON.stringify(manifest, null, 2) + '\n';
+        writeFile(path.join(providerDir, configDir, hooksRel), content);
         hooksEmitted = true;
       }
     }

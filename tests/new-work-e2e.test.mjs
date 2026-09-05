@@ -125,6 +125,10 @@ function spawnSyncGen(prompt, out, size = null) {
   });
 }
 
+function spawnSyncEmbed(args) {
+  return spawnSync(process.execPath, [EMBED_PROMPT, ...args], { encoding: 'utf8' });
+}
+
 // --------------------------------------------------------------------------
 // serve-question interactive cycles
 // --------------------------------------------------------------------------
@@ -162,6 +166,37 @@ describe('new-work-e2e: serve-question decision page', () => {
       assert.ok(answer.board, 'answer carries the chosen board path');
       assert.match(collected.out, /CHOSEN CARD:/);
     } finally {
+      await stopDaemon(cwd, key);
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('a rejected /answer POST (stale key) shows the page is out of date, never "recorded"', async () => {
+    const cwd = makeWorkspace();
+    const key = 'stale-key';
+    const payload = {
+      title: 'Choose the visual world',
+      options: [
+        { id: 'assigned', label: 'First Hand', kicker: 'THE ROLL' },
+        { id: 'challenger-a', label: 'Alt One' },
+      ],
+    };
+    const { url } = await startDaemon(cwd, payload, key);
+    let page;
+    try {
+      page = await browser.newPage();
+      // fetch() only rejects on a transport failure, never on an HTTP error
+      // status, so the only way to reproduce a stale-key rejection
+      // deterministically is to intercept the POST and answer with the same
+      // 401 the server itself would return for a mismatched key.
+      await page.route('**/answer*', (route) => route.fulfill({ status: 401, body: '' }));
+      await page.goto(url);
+      await page.click('button.choose');
+      const doneText = await page.locator('.done').textContent();
+      assert.match(doneText, /out of date/i, `expected the out-of-date notice, got: ${doneText}`);
+      assert.doesNotMatch(doneText, /Choice recorded/i, 'a rejected POST must never render as accepted');
+    } finally {
+      await page?.close();
       await stopDaemon(cwd, key);
       rmSync(cwd, { recursive: true, force: true });
     }
@@ -1013,6 +1048,57 @@ describe('new-work-e2e: fake image generation', () => {
       const bytesA = readFileSync(a);
       const bytesC = readFileSync(c);
       assert.ok(!bytesA.equals(bytesC), 'different prompts produce different images');
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('reads, scans, and idempotently replaces the prompt embedded in a PNG', () => {
+    const cwd = mkdtempSync(path.join(tmpdir(), 'new-work-img-'));
+    try {
+      const image = makeFakeImage(cwd, 'synthetic IEND source prompt', 'comp.png');
+      const original = readFileSync(image);
+      assert.ok(original.indexOf(Buffer.from('IEND')) < original.lastIndexOf(Buffer.from('IEND')),
+        'the fixture carries IEND bytes in metadata before the real terminator chunk');
+
+      const first = spawnSyncEmbed([image, '--prompt', 'first production prompt']);
+      assert.equal(first.status, 0, first.stderr);
+      assert.equal(spawnSyncEmbed([image, '--read']).stdout.trim(), 'first production prompt');
+
+      const scan = spawnSyncEmbed(['--scan', cwd]);
+      assert.equal(scan.status, 0, scan.stderr);
+      assert.match(scan.stdout, /SCAN: 1 raster, 0 missing/);
+
+      const second = spawnSyncEmbed([image, '--prompt', 'replacement production prompt']);
+      assert.equal(second.status, 0, second.stderr);
+      assert.equal(spawnSyncEmbed([image, '--read']).stdout.trim(), 'replacement production prompt');
+
+      const bytes = readFileSync(image);
+      assert.equal(bytes.toString().match(/impeccable:prompt/g)?.length, 1,
+        're-embedding replaces the existing metadata instead of accumulating chunks');
+      assert.ok(bytes.includes(Buffer.from('SYNTHETIC')),
+        'replacing the prompt preserves unrelated PNG metadata');
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('reads JPEG comments and sidecar fallbacks through the same scan contract', () => {
+    const cwd = mkdtempSync(path.join(tmpdir(), 'new-work-img-'));
+    try {
+      const jpeg = path.join(cwd, 'reference.jpg');
+      const webp = path.join(cwd, 'reference.webp');
+      writeFileSync(jpeg, Buffer.from([0xff, 0xd8, 0xff, 0xda, 0x00, 0x02]));
+      writeFileSync(webp, Buffer.from('RIFF placeholder WEBP'));
+
+      assert.equal(spawnSyncEmbed([jpeg, '--prompt', 'jpeg prompt']).status, 0);
+      assert.equal(spawnSyncEmbed([webp, '--prompt', 'sidecar prompt']).status, 0);
+      assert.equal(spawnSyncEmbed([jpeg, '--read']).stdout.trim(), 'jpeg prompt');
+      assert.equal(spawnSyncEmbed([webp, '--read']).stdout.trim(), 'sidecar prompt');
+
+      const scan = spawnSyncEmbed(['--scan', cwd]);
+      assert.equal(scan.status, 0, scan.stderr);
+      assert.match(scan.stdout, /SCAN: 2 rasters, 0 missing/);
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }

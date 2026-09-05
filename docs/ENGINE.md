@@ -3,7 +3,7 @@
 Every command the skill text runs is `{{scripts_path}}/impeccable <verb>`. The
 launcher next to the skill (`skill/scripts/impeccable`, `impeccable.cmd`)
 finds or downloads one static binary per platform and execs it. That binary
-is built from this repo's Cargo workspace. There is no Node at runtime.
+is built from this repo's Cargo workspace. Core commands require no Node runtime. The fork's optional design-context import/export, evidence scoring, visual-cue, and image-gen helpers remain separate Node scripts under `skill/scripts/`; their references explicitly invoke `node`.
 
 This page is the map for anyone building or changing the runtime. The
 observable behavior of every verb is specified in `CLI-CONTRACT.md` and

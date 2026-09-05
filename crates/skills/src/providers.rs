@@ -9,7 +9,7 @@ pub const API_BASE: &str = "https://impeccable.style";
 
 pub const PROVIDER_DIRS: &[&str] = &[
     ".claude", ".cursor", ".gemini", ".agents", ".agent", ".github", ".grok", ".hermes", ".kiro",
-    ".opencode", ".pi", ".qoder", ".trae", ".trae-cn", ".rovodev", ".vibe",
+    ".opencode", ".pi", ".qoder", ".trae", ".trae-cn", ".rovodev", ".vibe", ".veto", ".omp",
 ];
 
 const PROVIDER_ALIASES: &[(&str, &str)] = &[
@@ -36,6 +36,8 @@ const PROVIDER_ALIASES: &[(&str, &str)] = &[
     ("trae", ".trae"),
     ("trae-cn", ".trae-cn"),
     ("vibe", ".vibe"),
+    ("veto", ".veto"),
+    ("omp", ".omp"),
 ];
 
 const PROVIDER_DISPLAY: &[(&str, &str, &str)] = &[
@@ -55,11 +57,13 @@ const PROVIDER_DISPLAY: &[(&str, &str, &str)] = &[
     (".trae", "Trae", "trae"),
     (".trae-cn", "Trae CN", "trae-cn"),
     (".vibe", "Mistral Vibe", "vibe"),
+    (".veto", "Veto", "veto"),
+    (".omp", "oh-my-pi", "omp"),
 ];
 
 pub const PROVIDER_INPUT_ORDER: &[&str] = &[
     "antigravity", "claude", "codex", "cursor", "gemini", "github", "grok", "hermes", "kiro",
-    "opencode", "pi", "qoder", "trae", "trae-cn", "rovo-dev", "vibe",
+    "opencode", "pi", "qoder", "trae", "trae-cn", "rovo-dev", "vibe", "veto", "omp",
 ];
 
 pub const DEFAULT_TARGETS: &[&str] = &[".claude", ".agents"];
@@ -443,6 +447,8 @@ const GLOBAL_HARNESS_HINTS: &[Hint] = &[
     Hint::Home(".qoder", ".qoder"),
     Hint::Home(".rovodev", ".rovodev"),
     Hint::Home(".vibe", ".vibe"),
+    Hint::Home(".veto", ".veto"),
+    Hint::Home(".omp", ".omp"),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -745,6 +751,56 @@ pub fn default_install_scope(detections: &[Detection], providers: &[&str]) -> Sc
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn veto_install_detection_and_update() {
+        assert_eq!(parse_provider_list("omp,.omp"), (vec![".omp"], vec![]));
+        assert_eq!(parse_provider_list("veto,.veto"), (vec![".veto"], vec![]));
+        assert_eq!(provider_display_name(".veto"), "Veto");
+        assert!(PROVIDER_INPUT_ORDER.contains(&"veto"));
+        let root = std::env::temp_dir().join(format!(
+            "impeccable-veto-providers-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        let project = root.join("project");
+        let home = root.join("home");
+        let sys = Sys {
+            env: Env::new(),
+            cwd: project.to_string_lossy().into_owned(),
+            home: home.to_string_lossy().into_owned(),
+        };
+        for (dir, scope) in [(&project, Scope::Project), (&home, Scope::User)] {
+            let skills = dir.join(".veto/skills/impeccable");
+            std::fs::create_dir_all(&skills).unwrap();
+            std::fs::write(skills.join("SKILL.md"), "---\nversion: 9.9.9\n---\n").unwrap();
+            let dir = dir.to_string_lossy();
+            assert_eq!(sys.find_installed_providers(&dir, Some(scope)), vec![".veto"]);
+            assert_eq!(sys.find_impeccable_providers(&dir, Some(scope)), vec![".veto"]);
+            assert_eq!(sys.get_skills_version(&dir, Some(scope)).as_deref(), Some("9.9.9"));
+            assert!(matches!(
+                sys.resolve_update_target(&sys.cwd, Some(scope)),
+                Some(UpdateTarget::Resolved { providers, .. }) if providers == vec![".veto"]
+            ));
+        }
+        let detections = sys.collect_install_detections(&sys.cwd);
+        for scope in [Scope::Project, Scope::User] {
+            assert!(detections.iter().any(|d| d.provider == ".veto" && d.scope == scope));
+        }
+        assert_eq!(sys.resolve_install_targets(&sys.cwd, None), vec![".veto"]);
+        let bundle = root.join("bundle");
+        std::fs::create_dir_all(bundle.join(".omp/hooks/post")).unwrap();
+        std::fs::write(bundle.join(".omp/hooks/post/impeccable.js"), impeccable_context::provider::OMP_HOOK_MODULE).unwrap();
+        let written = crate::hook_manifest::copy_provider_hooks(
+            &sys, &bundle.to_string_lossy(), &sys.cwd, &[".omp"], false, Some(&sys.home)
+        ).unwrap();
+        assert_eq!(written, vec![".omp"]);
+        assert!(crate::hook_manifest::hook_installed_for_provider(&sys.cwd, ".omp"));
+        let module = std::fs::read_to_string(project.join(".omp/hooks/post/impeccable.js")).unwrap();
+        assert!(module.contains(&crate::hook_manifest::json_string(&jsp::join(&[&sys.home, ".omp/skills/impeccable/scripts/impeccable"]))));
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn provider_aliases_resolve() {

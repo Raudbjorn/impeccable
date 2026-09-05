@@ -632,7 +632,7 @@ const cases = [
   { id: 'csp-proxy-src', verb: 'detect-csp', workspace: 'ctx-csp-none', setup: (ws) => write(ws, 'src/proxy.ts', PROXY_CSP_SOURCE), env: env() },
   {
     id: 'csp-proxy-nested-app', verb: 'detect-csp', workspace: 'ctx-csp-none',
-    setup: (ws) => { write(ws, 'apps/web/app/page.tsx', 'export default function Page() { return null; }\n'); write(ws, 'apps/web/proxy.ts', PROXY_CSP_SOURCE); },
+    setup: (ws) => { write(ws, 'apps/web/next.config.mjs', 'export default {};\n'); write(ws, 'apps/web/app/page.tsx', 'export default function Page() { return null; }\n'); write(ws, 'apps/web/proxy.ts', PROXY_CSP_SOURCE); },
     env: env(),
   },
   {

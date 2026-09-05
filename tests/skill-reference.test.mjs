@@ -67,4 +67,37 @@ describe('skill reference authoring contracts', () => {
     assert.match(polish, /if a newer critique landed meanwhile, its backlog stays live/);
     assert.doesNotMatch(polish, /git status|git log/);
   });
+
+  // Regression: craft-floor.md's cultural-symbol-palette rule
+  // (<!-- rule:skill-reflex-cultural-palette -->) is the mandatory playbook
+  // loaded immediately before every UI edit, and a `polish` run does not
+  // have to load visual-cues.md at all -- so an override that lived only in
+  // visual-cues.md's fuller PALETTE RULES section left an agent that never
+  // reaches that file seeing nothing but the unconditional ban, free to
+  // override an explicit client palette. The override now sits beside the
+  // marker in craft-floor.md itself, so this asserts it there directly
+  // rather than merely in the other reference. This does not verify a model
+  // actually follows the rule (that needs a real LLM call; see
+  // tests/skill-behavior's scenario 16), only that the file text still
+  // carries the exception.
+  it('keeps the cultural-symbol-palette rule paired with its explicit-brief override in craft-floor.md', () => {
+    const craftFloor = readFileSync(join(ROOT, 'skill/reference/craft-floor.md'), 'utf-8').replace(/\r\n?/g, '\n');
+    const visualCues = readFileSync(join(ROOT, 'skill/reference/visual-cues.md'), 'utf-8').replace(/\r\n?/g, '\n');
+
+    assert.match(
+      craftFloor,
+      /cultural-symbol palette[\s\S]{0,300}explicit brief[\s\S]{0,20}names the cultural palette overrides this rule[\s\S]{0,50}<!-- rule:skill-reflex-cultural-palette -->/,
+      'craft-floor.md must carry the cultural-symbol-palette reflex rule, its explicit-brief override, and its marker together, in the mandatory playbook a `polish` run always loads',
+    );
+    assert.match(
+      visualCues,
+      /cultural-symbol palette/,
+      'visual-cues.md must still state the same rule in its PALETTE RULES section',
+    );
+    assert.match(
+      visualCues,
+      /explicit brief[\s\S]{0,20}names the cultural palette overrides this rule/,
+      'visual-cues.md must still carry its own copy of the explicit-brief override too',
+    );
+  });
 });
