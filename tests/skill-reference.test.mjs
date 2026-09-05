@@ -80,13 +80,21 @@ describe('skill reference authoring contracts', () => {
   // actually follows the rule (that needs a real LLM call; see
   // tests/skill-behavior's scenario 16), only that the file text still
   // carries the exception.
+  //
+  // The match is on the override's shape, not its exact sentence. It used to
+  // pin the phrase "names the cultural palette overrides this rule", which
+  // made the assertion fail when the override was widened to cover an
+  // established brand that already pins those colors alongside an explicit
+  // brief (PR #20 review). What the test is for is that the exception sits
+  // beside the marker in this file, so it asserts that and lets the wording
+  // move.
   it('keeps the cultural-symbol-palette rule paired with its explicit-brief override in craft-floor.md', () => {
     const craftFloor = readFileSync(join(ROOT, 'skill/reference/craft-floor.md'), 'utf-8').replace(/\r\n?/g, '\n');
     const visualCues = readFileSync(join(ROOT, 'skill/reference/visual-cues.md'), 'utf-8').replace(/\r\n?/g, '\n');
 
     assert.match(
       craftFloor,
-      /cultural-symbol palette[\s\S]{0,300}explicit brief[\s\S]{0,20}names the cultural palette overrides this rule[\s\S]{0,50}<!-- rule:skill-reflex-cultural-palette -->/,
+      /cultural-symbol palette[\s\S]{0,300}explicit brief[\s\S]{0,120}overrides this rule[\s\S]{0,50}<!-- rule:skill-reflex-cultural-palette -->/,
       'craft-floor.md must carry the cultural-symbol-palette reflex rule, its explicit-brief override, and its marker together, in the mandatory playbook a `polish` run always loads',
     );
     assert.match(
