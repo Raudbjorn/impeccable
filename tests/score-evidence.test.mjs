@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { score } from '../skill/scripts/score-evidence.mjs';
-import { ANTIPATTERNS } from '../cli/engine/registry/antipatterns.mjs';
+const ANTIPATTERNS = JSON.parse(readFileSync(new URL('../crates/live/assets/antipatterns.json', import.meta.url), 'utf8'));
 
 const SCRIPT = fileURLToPath(new URL('../skill/scripts/score-evidence.mjs', import.meta.url));
 const DATA_DIR = fileURLToPath(new URL('../skill/scripts/data/critique-evidence/', import.meta.url));

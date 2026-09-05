@@ -33,7 +33,7 @@ export const PLUGIN_SCRIPTS_PATH = '<skill-base-dir>/scripts';
 // no variable bound to the loaded plugin root (CLAUDE_PLUGIN_ROOT is
 // hook-only). The plugin copy drops the rule and script runs go through
 // the normal Bash confirmation.
-export const PROJECT_ALLOWED_TOOLS_LINE = `  - Bash(node ${CLAUDE_PROJECT_SCRIPTS_PATH}/*)\n`;
+export const PROJECT_ALLOWED_TOOLS_LINE = `  - Bash(${CLAUDE_PROJECT_SCRIPTS_PATH}/impeccable *)\n`;
 
 // Setup step 1's second sentence names the project path as the fallback
 // when the runtime reports no base directory. A plugin install has no
@@ -41,10 +41,10 @@ export const PROJECT_ALLOWED_TOOLS_LINE = `  - Bash(node ${CLAUDE_PROJECT_SCRIPT
 // fix), and every instruction in the plugin copy already carries the
 // token, so the sentence loses its fallback clause.
 const SETUP_FALLBACK_TEXT =
-  'That base directory resolves every `node .claude/skills/impeccable/scripts/...` command in this skill and its references, ' +
+  'That base directory resolves every `.claude/skills/impeccable/scripts/impeccable <verb>` command in this skill and its references, ' +
   'and `.claude/skills/impeccable/scripts` is the fallback only when the runtime reports no base directory.';
 const SETUP_PLUGIN_TEXT =
-  'Every `node "<skill-base-dir>/scripts/..."` command in this skill and its references resolves against that base directory.';
+  'Every `"<skill-base-dir>/scripts/impeccable" <verb>` command in this skill and its references resolves against that base directory.';
 
 // Agent files are subagent system prompts: a spawned agent never loads
 // SKILL.md, so Setup's <skill-base-dir> token is undefined in the one
@@ -102,7 +102,11 @@ export function rewritePluginMarkdown(content) {
     // script argument, including the token-form commands SKILL.src.md
     // carries natively (Setup step 1). Runs after the path replacement so
     // one pattern covers both origins; already-quoted forms don't match.
-    .replace(/node <skill-base-dir>\/scripts\/([^\s`"]+)/g, 'node "<skill-base-dir>/scripts/$1"');
+    .replace(/node <skill-base-dir>\/scripts\/([^\s`"]+)/g, 'node "<skill-base-dir>/scripts/$1"')
+    // The engine launcher is the command itself now (`<skill-base-dir>/scripts/impeccable <verb>`,
+    // or `impeccable.cmd` on a Windows shell without sh), so the launcher path
+    // is what gets quoted; the verb and its arguments follow unquoted.
+    .replace(/(?<!["\w/])<skill-base-dir>\/scripts\/impeccable(\.cmd)?(?=[\s`])/g, '"<skill-base-dir>/scripts/impeccable$1"');
 }
 
 /**
@@ -112,11 +116,15 @@ export function rewritePluginMarkdown(content) {
  * because no SKILL.md travels with a spawned agent.
  */
 export function rewritePluginAgentMarkdown(content) {
-  const rewritten = content
+  let rewritten = content
     .replaceAll(CLAUDE_PROJECT_SCRIPTS_PATH, PLUGIN_AGENT_SCRIPTS_PATH)
     .replace(
       /node \$\{CLAUDE_PLUGIN_ROOT\}\/skills\/impeccable\/scripts\/([^\s`"]+)/g,
       'node "${CLAUDE_PLUGIN_ROOT}/skills/impeccable/scripts/$1"',
+    )
+    .replace(
+      /(?<!["\w/])\$\{CLAUDE_PLUGIN_ROOT\}\/skills\/impeccable\/scripts\/impeccable(\.cmd)?(?=[\s`])/g,
+      '"${CLAUDE_PLUGIN_ROOT}/skills/impeccable/scripts/impeccable$1"',
     )
     // Anchors on the command this rewrite just produced plus the rest of
     // its sentence, so the fallback lands as the following sentence rather
@@ -125,6 +133,9 @@ export function rewritePluginAgentMarkdown(content) {
       /(`node "\$\{CLAUDE_PLUGIN_ROOT\}\/skills\/impeccable\/scripts\/embed-prompt\.mjs"[^`]*`[^.]*\.)/g,
       `$1${AGENT_EMBED_FALLBACK}`,
     );
+  if (rewritten.includes('impeccable" embed-prompt') && !rewritten.includes(AGENT_EMBED_FALLBACK)) {
+    rewritten += '\n\n' + AGENT_EMBED_FALLBACK.trim() + '\n';
+  }
   // Idempotent: the tree rewrite copies from source each build, but a rerun
   // over already-rewritten output must not stack a second copy of the note.
   return rewritten.includes(AGENT_PATH_NOTE.trim())
@@ -154,7 +165,7 @@ export function verifyPluginAgentRewrite(agentPath) {
   // splices into the middle of it and truncates the script name. The fallback
   // is still present, so the check below cannot see it; this one can.
   for (const match of content.matchAll(/\$\{CLAUDE_PLUGIN_ROOT\}\/skills\/impeccable\/scripts\/(\S*)/g)) {
-    if (!/^[A-Za-z0-9._-]+\.mjs"/.test(match[1])) {
+    if (!/^(?:[A-Za-z0-9._-]+\.mjs|impeccable(?:\.cmd)?)"/.test(match[1])) {
       throw new Error(
         `Plugin rewrite drift: ${agentPath} has a truncated script path ` +
         `(\${CLAUDE_PLUGIN_ROOT}/skills/impeccable/scripts/${match[1]}). A replacement in ` +
@@ -188,11 +199,11 @@ export function verifyPluginSkillRewrite(skillMdPath) {
       'scripts/lib/plugin-paths.js (issue #523); update SETUP_FALLBACK_TEXT to the new wording.',
     );
   }
-  if (content.includes('Bash(node ')) {
+  if (/Bash\((?:node |[^)]*scripts\/impeccable)/.test(content)) {
     throw new Error(
-      `Plugin rewrite drift: ${skillMdPath} still pre-approves a node script path. ` +
+      `Plugin rewrite drift: ${skillMdPath} still pre-approves an engine launcher or node script path. ` +
       "SKILL.src.md's allowed-tools entry no longer matches the removal in " +
-      'scripts/lib/plugin-paths.js (issue #523); the plugin ships no node pre-approval.',
+      'scripts/lib/plugin-paths.js (issue #523); the plugin ships no launcher pre-approval.',
     );
   }
   if (content.includes(CLAUDE_PROJECT_SCRIPTS_PATH)) {

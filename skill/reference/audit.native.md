@@ -1,6 +1,6 @@
 Run systematic **technical** quality checks on a native app (`android` / `adaptive`) and generate a comprehensive report. Don't fix issues; document them for other commands to address.
 
-This is a code-level audit, not a design critique. Audit from source (Compose / React Native / Flutter); no browser tooling or `detect.mjs` applies. Score against the platform reference: [android.md](android.md). Read it before scoring if Setup hasn't already. The report skeleton mirrors [audit.md](audit.md); keep the two in sync when changing it.
+This is a code-level audit, not a design critique. Audit from source (Compose / React Native / Flutter); no browser tooling or `impeccable detect` applies. Score against the platform reference: [android.md](android.md). Read it before scoring if Setup hasn't already. The report skeleton mirrors [audit.md](audit.md); keep the two in sync when changing it.
 
 ## Diagnostic Scan
 

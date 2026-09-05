@@ -1,0 +1,74 @@
+{
+  "heuristic_id": "hd",
+  "heuristic_name": "Help and Documentation",
+  "nielsen_index": 10,
+  "short_description": "Even if the system is usable without docs, help should be easy to find, task-focused, and concise.",
+  "catalog": {
+    "positive": [
+      {
+        "id": "hd-pos-searchable-help",
+        "impact": 2,
+        "definition": "Help center is searchable and surfaces relevant articles",
+        "evidence_required": "name the surface and the search affordance"
+      },
+      {
+        "id": "hd-pos-contextual-help",
+        "impact": 3,
+        "definition": "Tooltips, inline hints, or guided tours appear at the point of need",
+        "evidence_required": "name the surface and the help element"
+      },
+      {
+        "id": "hd-pos-task-focused",
+        "impact": 2,
+        "definition": "Help articles are organized around user tasks rather than system features",
+        "evidence_required": "name the article and the task it addresses"
+      },
+      {
+        "id": "hd-pos-concise-content",
+        "impact": 1,
+        "definition": "Help content is concise and scannable (bullets, headings, code snippets)",
+        "evidence_required": "name the article and the structure"
+      },
+      {
+        "id": "hd-pos-in-context-link",
+        "impact": 1,
+        "definition": "Help link is reachable from anywhere via persistent control (help icon, ? in command palette)",
+        "evidence_required": "name the control"
+      }
+    ],
+    "negative": [
+      {
+        "id": "hd-neg-no-help",
+        "impact": -2,
+        "definition": "No help, docs, or tooltips exist where users would clearly need them",
+        "evidence_required": "name the surface and the missing help"
+      },
+      {
+        "id": "hd-neg-help-buried",
+        "impact": -2,
+        "definition": "Help is reachable only through deep navigation or external link",
+        "evidence_required": "name the path to help"
+      },
+      {
+        "id": "hd-neg-feature-organized",
+        "impact": -1,
+        "definition": "Help is organized by feature surfaces rather than by user task",
+        "evidence_required": "cite the help structure"
+      },
+      {
+        "id": "hd-neg-walls-of-text",
+        "impact": -1,
+        "definition": "Help articles are dense walls of text with no structure",
+        "evidence_required": "cite an article"
+      }
+    ],
+    "critical_negative": [
+      {
+        "id": "hd-neg-no-help-on-blocking",
+        "impact": -5,
+        "definition": "Surface that frequently blocks users (auth, payment, error) has no help, no FAQ, no support contact",
+        "evidence_required": "name the blocking surface"
+      }
+    ]
+  }
+}

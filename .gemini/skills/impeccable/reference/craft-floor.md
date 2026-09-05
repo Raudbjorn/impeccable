@@ -43,7 +43,7 @@ Surface habits:
 - Unicode glyphs or emoji standing in for an icon system. Icons are drawn, from a real library or authored SVG, in one consistent stroke and weight. When a pack icon fails to fetch, take the nearest icon from the same pack, jsDelivr as the fallback CDN; drawing a replacement from scratch is an exception the user signs off on, so the one-pack promise survives a failed fetch.
 - Geometric masks standing in for organic contours. A circle, polygon, or radial-gradient cutout approximating a photographic subject's edge is the cheap version of the effect and reads worse than omitting it. Derive an alpha matte from the actual image, or produce a cut-out asset.
 - Light or dark picked by category. Pick it from the use scene: who, where, under what ambient light.
-- A cultural-symbol palette as the obvious pull for a domain that carries one (a nation's flag colors, a cuisine's stock hues, a holiday's palette). Reach past it; let the cultural reading come from typography, imagery, and copy, not the palette.
+- A cultural-symbol palette as the obvious pull for a domain that carries one (a nation's flag colors, a cuisine's stock hues, a holiday's palette). Reach past it; let the cultural reading come from typography, imagery, and copy, not the palette. An explicit brief that names the cultural palette overrides this rule.
 
 Never animate an image on hover, directly or through its parent. It is not an action target. Give the container the feedback.
 

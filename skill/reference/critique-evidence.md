@@ -20,7 +20,7 @@ Prompt template: [reference/evidence-collection.md](reference/evidence-collectio
 
 Run:
 ```bash
-node {{scripts_path}}/detect.mjs --json [target]
+{{scripts_path}}/impeccable detect --json [target]
 ```
 
 Translate each finding into a detector item: each finding's `antipattern` field (the rule id, e.g. `"side-tab"`, per `cli/engine/findings.mjs`) is the lookup key into the matching `id` in `{{scripts_path}}/data/critique-evidence/detector-items.json`. Each detector hit becomes a negative evidence item with `source: "detector"`, carrying that entry's `impact`, `heuristic_id`, and `impact_source` (see Coverage note below) onto the emitted item.

@@ -1,0 +1,80 @@
+{
+  "heuristic_id": "rrr",
+  "heuristic_name": "Recognition Rather Than Recall",
+  "nielsen_index": 6,
+  "short_description": "Minimize memory load. Make objects, actions, and options visible or easily retrievable.",
+  "catalog": {
+    "positive": [
+      {
+        "id": "rrr-pos-labels-with-icons",
+        "impact": 2,
+        "definition": "Icon-only controls have visible labels or text alternates (sidebar, toolbar)",
+        "evidence_required": "name the control and the label"
+      },
+      {
+        "id": "rrr-pos-recent-items",
+        "impact": 2,
+        "definition": "Recent items, frequent items, or history is surfaced (recent files, recent searches)",
+        "evidence_required": "name the surface and the recents source"
+      },
+      {
+        "id": "rrr-pos-autocomplete",
+        "impact": 1,
+        "definition": "Search and entry fields offer autocomplete or live suggestions",
+        "evidence_required": "name the field and the suggestion mechanism"
+      },
+      {
+        "id": "rrr-pos-contextual-help",
+        "impact": 2,
+        "definition": "Tooltips, inline hints, or examples appear near the controls they explain",
+        "evidence_required": "name the control and the hint"
+      },
+      {
+        "id": "rrr-pos-clear-action-naming",
+        "impact": 1,
+        "definition": "Buttons and actions are named for what they do, not vague verbs (Save Changes, Send Invite vs Submit, Go)",
+        "evidence_required": "name the action label"
+      }
+    ],
+    "negative": [
+      {
+        "id": "rrr-neg-icon-only-nav",
+        "impact": -2,
+        "definition": "Sidebar or main nav uses icons only with no labels and no tooltips",
+        "evidence_required": "name the nav and what is missing"
+      },
+      {
+        "id": "rrr-neg-hidden-feature",
+        "impact": -2,
+        "definition": "Useful feature requires the user to remember a hidden command or path",
+        "evidence_required": "name the feature and how it is reached"
+      },
+      {
+        "id": "rrr-neg-no-recents",
+        "impact": -1,
+        "definition": "Frequent task surface (recent files, recent searches) is absent where users would expect it",
+        "evidence_required": "name the surface and the missing affordance"
+      },
+      {
+        "id": "rrr-neg-vague-verb",
+        "impact": -1,
+        "definition": "Buttons use vague verbs (Submit, Go, OK) with no context about what they do",
+        "evidence_required": "name the button and the surrounding context"
+      },
+      {
+        "id": "rrr-neg-no-suggestions",
+        "impact": -1,
+        "definition": "Search field has no autocomplete or recent searches, requiring users to recall exact terms",
+        "evidence_required": "name the field"
+      }
+    ],
+    "critical_negative": [
+      {
+        "id": "rrr-neg-blind-cli-only",
+        "impact": -5,
+        "definition": "Surface requires memorizing commands or syntax with zero affordances for discovery",
+        "evidence_required": "name the surface"
+      }
+    ]
+  }
+}

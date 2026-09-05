@@ -11,7 +11,7 @@
  */
 
 import { migrate } from './design-context/store.mjs';
-import { exportDesignContext } from './design-context/portability.mjs';
+import { assertMigrationSourcesNotSymlinked, exportDesignContext } from './design-context/portability.mjs';
 
 function printHelp() {
   console.log(`Usage: node design-context-export.mjs [options]
@@ -49,9 +49,17 @@ if (unknown) {
   process.exit(1);
 }
 
-await migrate(process.cwd());
-
 try {
+  // migrate() (below) reads from and writes through paths
+  // exportDesignContext()'s own symlink rejection never covers (it runs
+  // too late, and does not know about migrate()'s legacy sources or its
+  // journalJsonl/assetsDir/fontsDir destinations): a symlinked
+  // `.impeccable` ancestor, or a symlinked legacy `design-interview`
+  // source, would let migrate() move content in or out of the project
+  // before the export call ever gets a chance to refuse.
+  await assertMigrationSourcesNotSymlinked(process.cwd());
+  await migrate(process.cwd());
+
   const { markdownPath, bundlePath, skipped } = await exportDesignContext(process.cwd(), {
     outDir: readValue('--out') || undefined,
     includeAssets: !args.includes('--no-assets'),

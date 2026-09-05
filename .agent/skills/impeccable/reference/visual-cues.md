@@ -94,6 +94,12 @@ Hard rules:
 - Any two roles must be nameable apart at a glance. A dark green primary
   next to a dark green neutral is one color, not two.
 - The brief's anti-reference is a hard constraint.
+- A cultural-symbol palette as the obvious pull for a domain that carries
+  one (a nation's flag colors, a cuisine's stock hues, a holiday's
+  palette) is not a real palette here: it is the easy reading the user
+  already knows. Reach past it and let the cultural reading come from
+  typography, imagery, and copy, not the palette. An explicit brief that
+  names the cultural palette overrides this rule.
 ```
 
 ### CONCEPT RULES
@@ -449,4 +455,3 @@ If the references are missing because the interview was skipped, say in one line
 Parse the finished file as JSON and verify its version, specimen, preview (every field above), six unique ids, six unique heading families, role names, weights, and short `why` fields before continuing.
 
 Done when: `fonts.json` is parseable, contains exactly six ranked pairs, every family name has been checked against Google Fonts, and the preview copy reads as this product, not generic SaaS filler.
-
