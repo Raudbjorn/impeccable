@@ -583,6 +583,13 @@ const ANTIPATTERNS = [
       'Interactive and content-bearing UI text (links, buttons, nav items, labels, table cells, meta rows, timecodes) below 11px is a legibility failure, not a style choice. WCAG sets no absolute pixel floor, but functional text under 11px is a defensible quality bar: it fails on high-DPI and small viewports and it degrades tap and read targets. The 11px floor holds even inside a footer; only non-interactive legal smallprint gets the softer 10px floor. Being ON the DESIGN.md size ramp does not exempt a value here: adding 8px to the ramp launders the token but not the legibility problem, and that is exactly the escape hatch this rule closes. Exempts sup/sub, visually-hidden (sr-only) text, and code/terminal contexts. Decorative letterspaced micro-labels are still functional and stay in scope.',
   },
   {
+    id: 'label-line-height',
+    category: 'quality',
+    name: 'Oversized line-height on small text',
+    description:
+      'UI labels, chips, badges and small text elements should not inherit large body-text line heights. Use a tighter line-height so spacing is controlled by padding.',
+  },
+  {
     id: 'all-caps-body',
     category: 'quality',
     scopes: ['type'],
@@ -4833,6 +4840,37 @@ function checkQuality(opts) {
           const excerpt = directText.slice(0, 40);
           findings.push({ id: 'undersized-ui-text', snippet: `${fontSize}px functional text "${excerpt}" (below ${floor}px floor)` });
         }
+      }
+    }
+  }
+
+  // --- Small UI text with oversized line-height ---
+  // Matches the label/control element itself (via `matches`, not `closest`)
+  // so a plain text descendant inside a matching ancestor isn't also
+  // independently evaluated as its own candidate — that duplicated findings
+  // for one control. Requires non-empty rendered text and applies the same
+  // non-rendered / visually-hidden guards the neighboring text-size rules use.
+  if (fontSize > 0 && fontSize <= 13 && lineHeightPx != null && !isNonRenderedText(el, tag, style) && !isVisuallyHidden(el, style)) {
+    const ratio = lineHeightPx / fontSize;
+
+    let isUILabel = false;
+    if (tag === 'label' || tag === 'button') {
+      isUILabel = true;
+    } else if (el.matches) {
+      isUILabel = el.matches('[role="button"], [class*="badge" i], [class*="chip" i], [class*="pill" i], [class*="tag" i], [class*="label" i]');
+    } else {
+      const role = el.getAttribute ? el.getAttribute('role') : el.attribs?.role;
+      const cls = el.getAttribute ? el.getAttribute('class') : el.attribs?.class;
+      isUILabel = role === 'button' || (cls && /badge|chip|pill|tag|label/i.test(cls));
+    }
+
+    if (isUILabel && ratio > 1.7) {
+      const text = (el.textContent || '').trim().replace(/\s+/g, ' ').replace(/^"+|"+$/g, '').substring(0, 30);
+      if (text) {
+        findings.push({
+          id: 'label-line-height',
+          snippet: `${fontSize}px text with ${ratio.toFixed(2)}x line-height "${text}"`,
+        });
       }
     }
   }

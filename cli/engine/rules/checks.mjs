@@ -3542,6 +3542,37 @@ function checkQuality(opts) {
     }
   }
 
+  // --- Small UI text with oversized line-height ---
+  // Matches the label/control element itself (via `matches`, not `closest`)
+  // so a plain text descendant inside a matching ancestor isn't also
+  // independently evaluated as its own candidate — that duplicated findings
+  // for one control. Requires non-empty rendered text and applies the same
+  // non-rendered / visually-hidden guards the neighboring text-size rules use.
+  if (fontSize > 0 && fontSize <= 13 && lineHeightPx != null && !isNonRenderedText(el, tag, style) && !isVisuallyHidden(el, style)) {
+    const ratio = lineHeightPx / fontSize;
+
+    let isUILabel = false;
+    if (tag === 'label' || tag === 'button') {
+      isUILabel = true;
+    } else if (el.matches) {
+      isUILabel = el.matches('[role="button"], [class*="badge" i], [class*="chip" i], [class*="pill" i], [class*="tag" i], [class*="label" i]');
+    } else {
+      const role = el.getAttribute ? el.getAttribute('role') : el.attribs?.role;
+      const cls = el.getAttribute ? el.getAttribute('class') : el.attribs?.class;
+      isUILabel = role === 'button' || (cls && /badge|chip|pill|tag|label/i.test(cls));
+    }
+
+    if (isUILabel && ratio > 1.7) {
+      const text = (el.textContent || '').trim().replace(/\s+/g, ' ').replace(/^"+|"+$/g, '').substring(0, 30);
+      if (text) {
+        findings.push({
+          id: 'label-line-height',
+          snippet: `${fontSize}px text with ${ratio.toFixed(2)}x line-height "${text}"`,
+        });
+      }
+    }
+  }
+
   // --- All-caps body text ---
   if (hasDirectText && textLen > 30 && style.textTransform === 'uppercase') {
     if (!['h1','h2','h3','h4','h5','h6'].includes(tag)) {
