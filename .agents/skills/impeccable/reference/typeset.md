@@ -6,7 +6,7 @@ Typography carries information, hierarchy, and voice. Improve it inside the esta
 
 - **Persuade + Experience:** display type may carry the voice. Use decisive contrast and responsive scale when the composition benefits.
 - **Operate + Read:** stability, scanability, and measure come first. A single well-tuned family and fixed role scale are often right.
-- **Native:** follow [ios.md](ios.md) or [android.md](android.md), including platform scaling and accessibility behavior.
+- **Native:** follow [android.md](android.md), including platform scaling and accessibility behavior.
 
 If typography replacement would create a new identity, route through [new-work.md](new-work.md) and update DESIGN.md. Otherwise preserve confirmed families and improve their use.
 
@@ -24,7 +24,7 @@ When a sub-agent tool is available and permitted, run these independently; other
 2. **Mechanical scan:** run:
 
 ```bash
-node .agents/skills/impeccable/scripts/detect.mjs --json --scope type [target files or dirs]
+.agents/skills/impeccable/scripts/impeccable detect --json --scope type [target files or dirs]
 ```
 
 Also inspect dynamic or arbitrary font values the detector cannot interpret. Synthesize both assessments before editing, noting what each caught alone. A clean scan is a floor, not proof of good typography.

@@ -6,7 +6,7 @@ Layout turns product priority into reading order, grouping, rhythm, and usable s
 
 - **Persuade + Experience:** composition may be asymmetric, fluid, or intentionally disruptive when the selected world earns it.
 - **Operate + Read:** predictable structure, stable density, and navigable linearity are affordances.
-- **Native:** follow [ios.md](ios.md) or [android.md](android.md) for navigation, insets, adaptation, and touch targets.
+- **Native:** follow [android.md](android.md) for navigation, insets, adaptation, and touch targets.
 
 Preserve the established visual world. A layout command changes structure inside it; identity replacement belongs to [new-work.md](new-work.md).
 
@@ -25,7 +25,7 @@ When a sub-agent tool is available and permitted, run these independently; other
 2. **Mechanical scan:** run:
 
 ```bash
-node .claude/skills/impeccable/scripts/detect.mjs --json --scope layout [target files or dirs]
+.claude/skills/impeccable/scripts/impeccable detect --json --scope layout [target files or dirs]
 ```
 
 Also inspect arbitrary spacing, overflow, stacking, and container behavior the detector cannot resolve. Keep mechanical evidence out of the first assessment, then synthesize both passes before editing. A clean scan cannot prove hierarchy or rhythm.

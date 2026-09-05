@@ -18,6 +18,14 @@
  * CLI derives a path from the home directory rather than CLAUDE_CONFIG_DIR.
  * Requires the `claude` CLI on PATH; skips cleanly otherwise.
  *
+ * The subtree under test is whatever git holds at ./plugin, which the sync
+ * workflow regenerates on main (`bun run build:release`). Between the launcher
+ * swap landing and that sync, ./plugin still ships the Node-era scripts; the
+ * loader inventory asserted here is unaffected either way (the launcher layout
+ * was verified against a local `bun run build:release` before the swap
+ * merged), and tests/hook-build.test.mjs gates its launcher-path assertions on
+ * the synced output.
+ *
  * Run with: bun run test:plugin-e2e
  */
 import { describe, it, before, after } from 'node:test';
@@ -33,16 +41,9 @@ const PLUGIN_DIR = path.join(REPO_ROOT, 'plugin');
 const MARKETPLACE_NAME = 'impeccable-e2e';
 const PLUGIN_REF = `impeccable@${MARKETPLACE_NAME}`;
 
-// On Windows the claude CLI is a .cmd shim, which Node refuses to spawn
-// without a shell, so commands there go through one with every argument
-// double-quoted (paths under %TEMP% routinely contain spaces). Elsewhere
-// execFileSync runs the binary directly with no quoting concerns.
-const IS_WINDOWS = process.platform === 'win32';
-const quoteForCmd = (arg) => `"${String(arg).replace(/"/g, '""')}"`;
-const runClaude = (args, opts) =>
-  IS_WINDOWS
-    ? execSync(['claude', ...args.map(quoteForCmd)].join(' '), opts)
-    : execFileSync('claude', args, opts);
+
+const runClaude = (args, opts) => execFileSync('claude', args, opts);
+
 
 const claudeAvailable = (() => {
   try {

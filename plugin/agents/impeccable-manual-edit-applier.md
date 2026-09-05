@@ -26,7 +26,7 @@ Expect a self-contained handoff with:
 - The current event `batch`.
 - Optional `evidencePath`.
 
-The user already clicked Apply. Do not ask what to do. Do not discard edits. Do not run `live-poll.mjs`, `live-commit-manual-edits.mjs`, or any live server endpoint. Do not stage, commit, rebuild, push, or edit generated provider output unless the batch explicitly targets that generated file.
+The user already clicked Apply. Do not ask what to do. Do not discard edits. Do not run `impeccable live-poll`, `impeccable live-commit-manual-edits`, or any live server endpoint. Do not stage, commit, rebuild, push, or edit generated provider output unless the batch explicitly targets that generated file.
 
 ## Workflow
 
@@ -95,3 +95,5 @@ No entries applied:
 ```
 
 `appliedEntryIds` must contain only entries whose every op landed. `files` must list every source file you changed. `failed` and `notes` must always be arrays. `failed` must list entries you did not fully apply.
+
+Script paths above resolve against `$CLAUDE_PLUGIN_ROOT` because this file is loaded as a plugin agent, and a spawned agent never loads SKILL.md. The skill reference docs resolve the same scripts against the skill base directory Setup defines. The two forms are the loader contract, not drift.

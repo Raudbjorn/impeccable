@@ -13,8 +13,8 @@
 // Issues with no template structure at all are closed immediately; partial
 // failures are labeled and warned once. Every check re-runs on edit, and an
 // issue the gate closed is reopened automatically once it passes.
-import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, readdirSync, realpathSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
@@ -77,7 +77,11 @@ export function normalizeHeading(text) {
 
 function extractHeadings(markdown) {
   const headings = [];
-  for (const line of String(markdown || '').split(/\r?\n/)) {
+  // Scan the same prose-only view proseWordCount() uses: a heading wrapped
+  // inside a fenced code block (or an HTML comment / <details> block) is not
+  // structure, it's quoted text, and counting it let a body with every
+  // required heading fenced and zero real prose pass the gate untouched.
+  for (const line of stripNonProse(String(markdown || '')).split(/\r?\n/)) {
     const match = line.match(/^#{2,3}\s+(.+)$/);
     if (match) headings.push(normalizeHeading(match[1]));
   }
@@ -293,6 +297,7 @@ export async function main(argv = process.argv.slice(2)) {
   if (options.issue) {
     const issue = fetchIssue(repo, options.issue);
     if (!issue) throw new Error(`Issue #${options.issue} not found.`);
+    if (skipIfPullRequest(issue, options.issue)) return;
     const plan = evaluateIssue(issue, options);
     printPlan(plan, options);
     if (options.apply) applyIssuePlan(repo, plan);
@@ -306,6 +311,7 @@ function runCommentGate(repo, options) {
   const comment = fetchComment(repo, options.commentId);
   const issue = fetchIssue(repo, options.issue);
   if (!comment || !issue) throw new Error('Comment or issue not found.');
+  if (skipIfPullRequest(issue, options.issue)) return;
 
   const result = evaluateComment({
     commentBody: comment.body,
@@ -414,6 +420,18 @@ function normalizeIssue(raw) {
     isPullRequest: Boolean(raw.pull_request),
     comments: [],
   };
+}
+
+/**
+ * GitHub's issues endpoint returns pull requests too, so `--issue <n>` with a
+ * PR number (a manual workflow_dispatch is the reachable path) lands here with
+ * a PR in hand. A PR carries no issue template, so gating it would label,
+ * comment on, or close it for headings it was never meant to have.
+ */
+export function skipIfPullRequest(issue, number) {
+  if (!issue.isPullRequest) return false;
+  console.log(`#${number} is a pull request, not an issue. The gate only runs on issues; nothing to do.`);
+  return true;
 }
 
 function fetchIssue(repo, number) {
@@ -600,7 +618,7 @@ Options:
 `);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(resolve(process.argv[1]))).href) {
   main().catch((err) => {
     console.error(err.message);
     process.exit(1);

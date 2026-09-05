@@ -22,12 +22,26 @@ Requires `.env` at repo root with at least one of `ANTHROPIC_API_KEY`,
 `OPENAI_API_KEY`, `GOOGLE_CLOUD_API_KEY`, `DEEPSEEK_API_KEY`. Providers without a key are
 skipped, not failed.
 
+Also requires the engine binary (`bun run fetch:engine`, or `IMPECCABLE_BIN`).
+The staged skill dir ships the launcher (`scripts/impeccable`); the harness
+exports `IMPECCABLE_BIN` into every bash call the agent makes, so the launcher
+resolves the binary in both symlink and copy mode without a download. Without a
+binary the suites skip.
+
+To run a single scenario against one model:
+
+```bash
+IMPECCABLE_SKILL_BEHAVIOR_MODELS=claude-sonnet-5 IMPECCABLE_SKILL_BEHAVIOR_VERBOSE=1 \
+  node --test --test-timeout=600000 --test-name-pattern="scenario 6" tests/skill-behavior/scenarios.test.mjs
+```
+
 ## How it works
 
 Each scenario:
 
 1. `prepareWorkspace()` mints a temp dir, symlinks the canonical skill
-   into `<workspace>/.claude/skills/impeccable`, and optionally writes
+   into `<workspace>/.claude/skills/impeccable` (so its launcher is at
+   `.claude/skills/impeccable/scripts/impeccable`), and optionally writes
    `PRODUCT.md` / `DESIGN.md` fixtures.
 2. `runTurn()` inlines `SKILL.md` (placeholders neutralized) as the
    system prompt and runs Vercel AI SDK `generateText` with four
@@ -43,20 +57,20 @@ The trace is the source of truth, not the model's free-form reply.
 
 | # | Setup | Assertion |
 |---|---|---|
-| 1 | empty workspace | runs `context.mjs`; loads `reference/init.md` before implementation; automation is not an init bypass |
-| 2 | PRODUCT.md only | runs `context.mjs` 1-3 times; loads `reference/new-work.md` to resolve visual authority, establish a world when needed, and develop the surface |
-| 3 | PRODUCT.md + DESIGN.md | runs `context.mjs` 1-3 times; receives the committed design system and loads `reference/new-work.md` for the task-scoped concept |
-| 4 | PRODUCT.md + DESIGN.md, context already loaded in turn 1 | turn 2 does **not** re-run `context.mjs` |
-| 5 | PRODUCT.md without the legacy `## Register` field and no DESIGN.md | runs `context.mjs`; greenfield craft loads `reference/new-work.md`, not init, to establish the missing world |
+| 1 | empty workspace | runs `impeccable context`; loads `reference/init.md` before implementation; automation is not an init bypass |
+| 2 | PRODUCT.md only | runs `impeccable context` 1-3 times; loads `reference/new-work.md` to resolve visual authority, establish a world when needed, and develop the surface |
+| 3 | PRODUCT.md + DESIGN.md | runs `impeccable context` 1-3 times; receives the committed design system and loads `reference/new-work.md` for the task-scoped concept |
+| 4 | PRODUCT.md + DESIGN.md, context already loaded in turn 1 | turn 2 does **not** re-run `impeccable context` |
+| 5 | PRODUCT.md without the legacy `## Register` field and no DESIGN.md | runs `impeccable context`; greenfield craft loads `reference/new-work.md`, not init, to establish the missing world |
 | 6 | PRODUCT.md + DESIGN.md + a minimal `index.html`; prompt is `/impeccable polish` | loads `reference/polish.md` |
 | 7 | same fixture; prompt is `/impeccable audit` | loads `reference/audit.md` |
 | 8 | PRODUCT.md + DESIGN.md + a SvelteKit scaffold (`src/app.css`, components, `+page.svelte`); prompt is `/impeccable polish src/routes/+page.svelte` | reads at least one project code file (CSS / component / page) — not just the skill's reference files |
-| 9 | PRODUCT.md + `index.html` + a seeded update cache with a newer version (`skillVersion` copy-mode so `context.mjs` has a `SKILL.md` to version-check against); prompt is `/impeccable polish index.html` | `context.mjs` runs and its output carries the `UPDATE_AVAILABLE` directive (proven via captured bash output); the agent does **not** auto-run `npx impeccable update` (it must ask first) |
-| 10 | no PRODUCT.md + a minimal `index.html`; prompt is `/impeccable polish index.html` | runs `context.mjs`, loads `reference/polish.md`, and does **not** divert into `reference/init.md` |
-| 11 | empty workspace; prompt is `/impeccable shape ...` | runs `context.mjs`; resolves `reference/init.md` before planning the surface |
-| 12 | empty workspace; prompt is natural-language build intent with no command word | runs `context.mjs`; resolves `reference/init.md` before implementation |
-| 13 | empty workspace; prompt is `/impeccable teach` | runs `context.mjs` and diverts into `reference/init.md` because `teach` aliases `init` |
-| 14 | PRODUCT.md with `## Platform: ios` (native iOS app); prompt is `/impeccable craft a tide detail screen` | `context.mjs` runs and emits the contents of `reference/ios.md` directly, placing native conventions in context without a second model-directed read |
+| 9 | PRODUCT.md + `index.html` + a seeded update cache with a newer version (`skillVersion` copy-mode so `impeccable context` has a `SKILL.md` to version-check against); prompt is `/impeccable polish index.html` | `impeccable context` runs and its output carries the `UPDATE_AVAILABLE` directive (proven via captured bash output); the agent does **not** auto-run `npx impeccable update` (it must ask first) |
+| 10 | no PRODUCT.md + a minimal `index.html`; prompt is `/impeccable polish index.html` | runs `impeccable context`, loads `reference/polish.md`, and does **not** divert into `reference/init.md` |
+| 11 | empty workspace; prompt is `/impeccable shape ...` | runs `impeccable context`; resolves `reference/init.md` before planning the surface |
+| 12 | empty workspace; prompt is natural-language build intent with no command word | runs `impeccable context`; resolves `reference/init.md` before implementation |
+| 13 | empty workspace; prompt is `/impeccable teach` | runs `impeccable context` and diverts into `reference/init.md` because `teach` aliases `init` |
+| 14 | PRODUCT.md with `## Platform: ios` (native iOS app); prompt is `/impeccable craft a tide detail screen` | `impeccable context` runs and emits the contents of `reference/ios.md` directly, placing native conventions in context without a second model-directed read |
 | 15 | same iOS fixture; prompt is `/impeccable audit` | agent loads `reference/audit.native.md` (the Commands-table native variant, routed instead of `audit.md`) |
 
 The workflow-contract file adds end-to-end assertions for attended fresh init,
@@ -131,6 +145,7 @@ problem that one model's priors expose rather than as a model floor.
 | 1-7, 10, 12-15 | pass | pass | pass |
 | 8 (SvelteKit exploration) | flaky | pass | pass |
 | 11 (shape resolves the build gate) | flaky | pass | pass |
+| 16 (cultural-palette override survives craft-floor.md) | not measured (no provider key in this environment) | not measured | not measured |
 
 Scenarios 8 and 11 pass on re-run, so treat a single failure there as flake and
 confirm with a second run before investigating.
@@ -144,11 +159,11 @@ and the two causes are worth keeping because neither was where it looked:
   was the only concrete instruction left standing and sonnet ran it. Fixed by
   removing the command from the turn entirely rather than by strengthening the
   warning around it.
-- **15 was a broken fixture.** The iOS workspace held PRODUCT.md and nothing
+- **15 was a broken fixture.** The Android workspace held PRODUCT.md and nothing
   else, so `audit the app in this workspace` named an app that did not exist.
   Sonnet spent its whole step budget looking for it and read no reference file
   at all, which the assertion reported as "loaded `audit.md` instead of the
-  variant". The fixture now ships one SwiftUI screen, the same courtesy
+  variant". The fixture now ships one Compose screen, the same courtesy
   `MINIMAL_LANDING_HTML` already did for the web scenarios. The scenario passes
   on unmodified `main` once the fixture is answerable, which is the proof the
   routing text was never at fault.
@@ -170,7 +185,7 @@ lineup. Only the scenarios under investigation were scoped per model. The rows
 are worth keeping anyway, since a scenario absent from the table is easy to
 mistake for a scenario that passed.
 
-**`bolder refinement`, deepseek-v4-flash.** The model runs `context.mjs`, reads
+**`bolder refinement`, deepseek-v4-flash.** The model runs `impeccable context`, reads
 `bolder.md`, `craft-floor.md`, and `current.html`, then ends its turn without
 editing anything: empty `writePaths`, no `ask_user_question` call, well short of
 the 16-step cap. Confirmed identical on HEAD with `bolder.md` reverted, so it is
@@ -241,7 +256,7 @@ IMPECCABLE_QUESTION_DISABLED=1 CI=1 IMPECCABLE_SKILL_BEHAVIOR_MODELS=deepseek-v4
 
 Keep `--test-timeout` at 300000. A tighter cap turns claude-sonnet-5's slower
 runs into timeouts that look like failures. Set `IMPECCABLE_QUESTION_DISABLED=1`
-and `CI=1` so `serve-question.mjs` cannot open a browser window on the host. Pipe
+and `CI=1` so `impeccable serve-question` cannot open a browser window on the host. Pipe
 to a file rather than `tail`; node prints the failing-test summary at the end,
 and truncating it costs you the per-model attribution.
 
@@ -256,14 +271,14 @@ and truncating it costs you the per-model attribution.
 
 Captured after moving sub-command reference loading from step 4 to step 2
 of Setup (so the agent loads `reference/<command>.md` right after
-`context.mjs`, before "doing the work" preempts it), and tightening
+`impeccable context`, before "doing the work" preempts it), and tightening
 step 3 to require at least one project code read even when a sub-command
 reference loads first. Use this table when comparing pre/post refactor:
 a regression is "more failures than baseline", not "any failures at all".
 
 | Scenario | claude-haiku-4-5 | gpt-5.4-mini | gemini-3.1-flash-lite |
 |---|---|---|---|
-| 1 (no context) | pass (rare flake — agent stops after `context.mjs` without loading `init.md`) | pass | pass |
+| 1 (no context) | pass (rare flake — agent stops after `impeccable context` without loading `init.md`) | pass | pass |
 | 2 (product only) | pass | pass | pass |
 | 3 (product + design) | pass | pass | pass (rare flake — sub-command ref loads but world ref doesn't) |
 | 4 (already loaded) | pass | pass | pass |
