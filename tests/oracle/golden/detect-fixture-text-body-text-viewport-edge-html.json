@@ -1,7 +1,7 @@
 {
   "stdout": "",
-  "stderr": "",
-  "exit": 0,
+  "stderr": "\n<REPO>/tests/fixtures/antipatterns/body-text-viewport-edge.html\n  [label-line-height] 12px text with 1.75x line-height \"paragraph in centered containe\"\n    → UI labels, chips, badges and small text elements should not inherit large body-text line heights. Use a tighter line-height so spacing is controlled by padding.\n  [label-line-height] 12px text with 1.75x line-height \"paragraph inside <nav> (exclud\"\n    → UI labels, chips, badges and small text elements should not inherit large body-text line heights. Use a tighter line-height so spacing is controlled by padding.\n  [label-line-height] 12px text with 1.75x line-height \"paragraph inside <header> (exc\"\n    → UI labels, chips, badges and small text elements should not inherit large body-text line heights. Use a tighter line-height so spacing is controlled by padding.\n  [label-line-height] 12px text with 1.75x line-height \"paragraph inside full-bleed se\"\n    → UI labels, chips, badges and small text elements should not inherit large body-text line heights. Use a tighter line-height so spacing is controlled by padding.\n  [label-line-height] 12px text with 1.75x line-height \"short label / button-ish text \"\n    → UI labels, chips, badges and small text elements should not inherit large body-text line heights. Use a tighter line-height so spacing is controlled by padding.\n\n5 anti-patterns found.\n",
+  "exit": 2,
   "signal": null,
   "files": {}
 }

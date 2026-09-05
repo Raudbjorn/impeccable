@@ -614,6 +614,46 @@ pub fn check_quality(dom: &dyn Dom, q: &QualityInput) -> Vec<RuleHit> {
         }
     }
 
+    // --- Small UI text with oversized line-height ---
+    // Matches the label/control element itself (`matches_or_false`, not
+    // `matches_or_closest`) so a plain text descendant inside a matching
+    // ancestor isn't also independently evaluated as its own candidate —
+    // that duplicated findings for one control. Requires non-empty
+    // rendered text and applies the same non-rendered / visually-hidden
+    // guards the neighboring text-size rules use.
+    if font_size > 0.0
+        && font_size <= 13.0
+        && !is_non_rendered_text(dom, el, tag)
+        && !is_visually_hidden(dom, el)
+    {
+        if let Some(lh) = q.line_height_px {
+            let ratio = lh / font_size;
+            let is_ui_label = tag == "label"
+                || tag == "button"
+                || matches_or_false(
+                    dom,
+                    el,
+                    "[role=\"button\"], [class*=\"badge\" i], [class*=\"chip\" i], [class*=\"pill\" i], [class*=\"tag\" i], [class*=\"label\" i]",
+                );
+            if is_ui_label && ratio > 1.7 {
+                let raw = js::trim(&dom.text_content(el)).to_string();
+                let text = collapse_ws(&raw);
+                let text = slice_utf16_prefix(text.trim_matches('"'), 30);
+                if !text.is_empty() {
+                    findings.push(RuleHit::new(
+                        "label-line-height",
+                        format!(
+                            "{}px text with {}x line-height \"{}\"",
+                            number_to_string(font_size),
+                            to_fixed(ratio, 2),
+                            text
+                        ),
+                    ));
+                }
+            }
+        }
+    }
+
     // --- All-caps body text ---
     if has_direct_text && text_len > 30 && st("textTransform") == "uppercase" && !is_heading {
         findings.push(RuleHit::new(

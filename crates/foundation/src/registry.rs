@@ -501,6 +501,16 @@ pub static ANTIPATTERNS: &[Antipattern] = &[
         skill_guideline: None,
     },
     Antipattern {
+        id: "label-line-height",
+        category: "quality",
+        scopes: None,
+        severity: None,
+        name: "Oversized line-height on small text",
+        description: "UI labels, chips, badges and small text elements should not inherit large body-text line heights. Use a tighter line-height so spacing is controlled by padding.",
+        skill_section: None,
+        skill_guideline: None,
+    },
+    Antipattern {
         id: "all-caps-body",
         category: "quality",
         scopes: Some(&["type"]),
@@ -840,7 +850,7 @@ mod tests {
 
     #[test]
     fn registry_shape() {
-        assert_eq!(ANTIPATTERNS.len(), 61);
+        assert_eq!(ANTIPATTERNS.len(), 62);
         assert_eq!(ANTIPATTERNS[0].id, "side-tab");
         assert_eq!(rule_scopes(), vec!["type", "layout"]);
         assert!(is_advisory_rule("em-dash-overuse"));
