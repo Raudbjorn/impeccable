@@ -1,6 +1,6 @@
 {
   "stdout": "",
-  "stderr": "\n<REPO>/tests/fixtures/antipatterns/heading-rhythm.html\n  [label-line-height] 12px text with 2.00x line-height \"Chapter Four\"\n    → UI labels, chips, badges and small text elements should not inherit large body-text line heights. Use a tighter line-height so spacing is controlled by padding.\n  [cramped-padding] <div> \"pass-band\": children flush against bg on right/left (no inset)\n    → Text is too close to the edge of its container. Two shapes: (1) an element with its own text where the padding is too low for the font size, and (2) a wrapper with text-bearing children and near-zero padding against a visible boundary (border, outline, or non-transparent background) — children land flush against the boundary line. Add at least 8px (ideally 12–16px) of padding inside bordered, outlined, or colored containers.\n\n2 anti-patterns found.\n",
+  "stderr": "\n<REPO>/tests/fixtures/antipatterns/heading-rhythm.html\n  [cramped-padding] <div> \"pass-band\": children flush against bg on right/left (no inset)\n    → Text is too close to the edge of its container. Two shapes: (1) an element with its own text where the padding is too low for the font size, and (2) a wrapper with text-bearing children and near-zero padding against a visible boundary (border, outline, or non-transparent background) — children land flush against the boundary line. Add at least 8px (ideally 12–16px) of padding inside bordered, outlined, or colored containers.\n\n1 anti-pattern found.\n",
   "exit": 2,
   "signal": null,
   "files": {}
