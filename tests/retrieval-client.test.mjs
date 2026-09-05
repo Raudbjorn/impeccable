@@ -29,7 +29,8 @@ test('CLI retrieves and records locally, stages references, and never invents ca
   const data = response();
   const f = fixture(`import fs from 'node:fs'; const r=JSON.parse(fs.readFileSync(0,'utf8')); fs.appendFileSync('requests.jsonl',JSON.stringify(r)+'\\n'); console.log(JSON.stringify(r.op==='choose'?{protocol:1,recorded:true}:${JSON.stringify(data)}));`);
   try {
-    const run = (...args) => spawnSync('node', [seeder, ...args], { cwd: f.cwd, encoding: 'utf8' });
+    const launcher = fileURLToPath(new URL('../skill/scripts/impeccable', import.meta.url));
+    const run = (...args) => spawnSync(process.platform === 'win32' ? 'node' : 'sh', process.platform === 'win32' ? [seeder, ...args] : [launcher, 'concept-seed', ...args], { cwd: f.cwd, encoding: 'utf8', env: { ...process.env, IMPECCABLE_NATIVE: '' } });
     const first = run('--scope','direction','--from','deadbeef','--brief-file','brief.md');
     assert.equal(first.status, 0, first.stderr);
     assert.match(first.stdout, /RETRIEVAL SESSION/);

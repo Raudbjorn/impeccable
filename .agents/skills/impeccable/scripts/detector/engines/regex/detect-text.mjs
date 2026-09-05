@@ -498,6 +498,247 @@ function isNeutralBorderColor(str) {
   return isNeutralAuthoredColor(m[1]);
 }
 
+const TW_SOLID_CHROMATIC_BG_RE = /\bbg-(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d+(?!\/)\b/;
+
+// A '/' opens a regex literal (not division) unless it follows an identifier,
+// number, string-ish close, `)`, `]`, `.`, or an expression-closing `}` —
+// the same heuristic tokenizers use for the ASI-adjacent regex/divide
+// ambiguity. A block-closing `}` remains a valid regex prefix.
+function canPrecedeRegex(char, lastClosedBraceKind = '') {
+  if (char === '}') return lastClosedBraceKind === 'block';
+  return char === undefined || !/[A-Za-z0-9_$)\].'"`]/.test(char);
+}
+
+function scanJs(text, start, onChar) {
+  let stringQuote = '';
+  let inTemplate = false;
+  let inRegex = false;
+  let inRegexClass = false;
+  let paren = 0;
+  let brace = 0;
+  let lastSignificant = '';
+  let previousSignificant = '';
+  let currentWord = '';
+  let wordSeparated = false;
+  let lastClosedBraceKind = '';
+  const braceKinds = [];
+  const interpBrace = [];
+
+  const braceKind = () => (
+    !lastSignificant ||
+      lastSignificant === ')' ||
+      lastSignificant === ';' ||
+      lastSignificant === '}' ||
+      (previousSignificant === '=' && lastSignificant === '>') ||
+      BLOCK_BRACE_PREFIX_KEYWORDS.has(currentWord)
+      ? 'block'
+      : 'expression'
+  );
+
+  const recordSignificant = (char) => {
+    if (/\s/.test(char)) {
+      wordSeparated = true;
+      return;
+    }
+    const isWordChar = /[\w$]/.test(char);
+    if (isWordChar && (wordSeparated || !currentWord)) currentWord = '';
+    wordSeparated = false;
+    previousSignificant = lastSignificant;
+    lastSignificant = char;
+    currentWord = isWordChar ? currentWord + char : '';
+  };
+
+  for (let i = start; i < text.length; i++) {
+    const char = text[i];
+    const prev = text[i - 1];
+    const next = text[i + 1];
+
+    if (stringQuote) {
+      if (char === '\\') { i++; continue; }
+      if (char === stringQuote) {
+        stringQuote = '';
+        recordSignificant(char);
+      }
+      continue;
+    }
+    if (inTemplate && interpBrace.length === 0) {
+      if (char === '\\') { i++; continue; }
+      if (char === '$' && next === '{') {
+        brace++;
+        braceKinds.push('expression');
+        interpBrace.push(brace);
+        recordSignificant(char);
+        recordSignificant(next);
+        i++;
+        continue;
+      }
+      if (char === '`') {
+        inTemplate = false;
+        recordSignificant(char);
+        continue;
+      }
+      continue;
+    }
+    if (inRegex) {
+      if (char === '\\') { i++; continue; }
+      if (char === '[') { inRegexClass = true; continue; }
+      if (char === ']') { inRegexClass = false; continue; }
+      if (char === '/' && !inRegexClass) {
+        inRegex = false;
+        recordSignificant(char);
+      }
+      continue;
+    }
+
+    if (char === "'" || char === '"') {
+      stringQuote = char;
+      recordSignificant(char);
+      continue;
+    }
+    if (char === '`') {
+      inTemplate = true;
+      recordSignificant(char);
+      continue;
+    }
+    // `/>` closes a JSX tag only outside any `{...}` expression (brace 0) --
+    // a bare `}` right before it would otherwise pass canPrecedeRegex and
+    // read it as opening a regex. Inside an expression, `/>` can be a real
+    // regex literal (e.g. `{/>/.test(value) ? a : b}`), so only the
+    // brace-0 tag-boundary case is excluded, not `/>` generally.
+    const jsxSelfClose = next === '>' && brace === 0;
+    if (char === '/' && next !== '/' && next !== '*' && !jsxSelfClose) {
+      let j = i - 1;
+      while (j >= start && /\s/.test(text[j])) j--;
+      if (canPrecedeRegex(j >= start ? text[j] : undefined, lastClosedBraceKind)) {
+        inRegex = true;
+        inRegexClass = false;
+        continue;
+      }
+    }
+    if (char === '(') {
+      paren++;
+      recordSignificant(char);
+      continue;
+    }
+    if (char === ')') {
+      paren--;
+      recordSignificant(char);
+      continue;
+    }
+    if (char === '{') {
+      braceKinds.push(braceKind());
+      brace++;
+      recordSignificant(char);
+      continue;
+    }
+    if (char === '}') {
+      brace--;
+      lastClosedBraceKind = braceKinds.pop() ?? '';
+      if (interpBrace.length && brace < interpBrace[interpBrace.length - 1]) interpBrace.pop();
+      recordSignificant(char);
+      continue;
+    }
+    if (onChar(char, i, prev, next, { paren, brace })) return;
+    recordSignificant(char);
+  }
+}
+
+function containingMarkupTag(line, index) {
+  let i = 0;
+  while (i < line.length) {
+    const tagStart = line.indexOf('<', i);
+    if (tagStart === -1) break;
+    if (!/^<[A-Za-z]/.test(line.slice(tagStart))) {
+      i = tagStart + 1;
+      continue;
+    }
+    let tagEnd = -1;
+    scanJs(line, tagStart + 1, (char, j, _p, _n, depth) => {
+      if (char === '>' && depth.brace === 0) {
+        tagEnd = j;
+        return true;
+      }
+      return false;
+    });
+    if (tagEnd === -1) break;
+    if (index >= tagStart && index <= tagEnd) {
+      return { text: line.slice(tagStart, tagEnd + 1), start: tagStart };
+    }
+    i = tagEnd + 1;
+  }
+  return { text: line, start: 0 };
+}
+
+function findTernarySplit(text) {
+  let qPos = -1;
+  let qParen = 0;
+  let qBrace = 0;
+  let nested = 0;
+  let colonPos = -1;
+  let split = null;
+
+  const isQuestion = (char, prev, next) =>
+    char === '?' && prev !== '.' && prev !== '?' && next !== '?' && next !== '.';
+  const sameDepth = (depth) => depth.paren === qParen && depth.brace === qBrace;
+
+  scanJs(text, 0, (char, i, prev, next, depth) => {
+    if (colonPos === -1) {
+      if (qPos === -1 && isQuestion(char, prev, next)) {
+        qPos = i;
+        qParen = depth.paren;
+        qBrace = depth.brace;
+        return false;
+      }
+      if (qPos !== -1 && isQuestion(char, prev, next) && sameDepth(depth)) {
+        nested++;
+        return false;
+      }
+      if (qPos !== -1 && char === ':' && sameDepth(depth)) {
+        if (nested) nested--;
+        else colonPos = i;
+      }
+      return false;
+    }
+    if (char === ',' && sameDepth(depth)) {
+      split = {
+        common: text.slice(0, qPos),
+        consequent: text.slice(qPos + 1, colonPos),
+        alternate: text.slice(colonPos + 1, i),
+        suffix: text.slice(i),
+      };
+      return true;
+    }
+    return false;
+  });
+
+  if (!split && qPos !== -1 && colonPos !== -1) {
+    split = {
+      common: text.slice(0, qPos),
+      consequent: text.slice(qPos + 1, colonPos),
+      alternate: text.slice(colonPos + 1),
+      suffix: '',
+    };
+  }
+  return split;
+}
+
+function exclusiveClassScopes(text) {
+  const split = findTernarySplit(text);
+  if (!split) return [text];
+  return [
+    ...exclusiveClassScopes(split.consequent).map((part) => split.common + part + split.suffix),
+    ...exclusiveClassScopes(split.alternate).map((part) => split.common + part + split.suffix),
+  ];
+}
+
+function grayOnColorScopes(line, index) {
+  return exclusiveClassScopes(containingMarkupTag(line, index).text);
+}
+
+function grayOnColorPairs(line, grayClass, index) {
+  return grayOnColorScopes(line, index).filter((scope) => scope.includes(grayClass));
+}
+
 const REGEX_MATCHERS = [
   // --- Side-tab ---
   { id: 'side-tab', regex: /\bborder-[lrse]-(\d+)\b/g,
@@ -545,8 +786,13 @@ const REGEX_MATCHERS = [
     fmt: () => 'bg-clip-text + bg-gradient' },
   // --- Tailwind gray on colored bg ---
   { id: 'gray-on-color', regex: /\btext-(?:gray|slate|zinc|neutral|stone)-(\d+)\b/g,
-    test: (m, line) => /\bbg-(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d+\b/.test(line),
-    fmt: (m, line) => { const bg = line.match(/\bbg-(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d+\b/); return `${m[0]} on ${bg?.[0] || '?'}`; } },
+    test: (m, line) => grayOnColorPairs(line, m[0], m.index).some((scope) => TW_SOLID_CHROMATIC_BG_RE.test(scope)),
+    fmt: (m, line) => {
+      const bg = grayOnColorPairs(line, m[0], m.index)
+        .map((scope) => scope.match(TW_SOLID_CHROMATIC_BG_RE))
+        .find(Boolean);
+      return `${m[0]} on ${bg?.[0] || '?'}`;
+    } },
   // --- Tailwind AI palette ---
   { id: 'ai-color-palette', regex: /\btext-(?:purple|violet|indigo)-(\d+)\b/g,
     test: (m, line) => /\btext-(?:[2-9]xl|[3-9]xl)\b|<h[1-3]/i.test(line),

@@ -1,0 +1,98 @@
+{
+  "heuristic_id": "vss",
+  "heuristic_name": "Visibility of System Status",
+  "nielsen_index": 1,
+  "short_description": "Keep users informed about what's happening through timely, appropriate feedback.",
+  "catalog": {
+    "positive": [
+      {
+        "id": "vss-pos-loading-feedback",
+        "impact": 3,
+        "definition": "Long-running operation (>500ms) shows progress indicator (spinner, progress bar, or skeleton)",
+        "evidence_required": "name the action and the indicator (selector or screenshot region)"
+      },
+      {
+        "id": "vss-pos-state-confirmation",
+        "impact": 2,
+        "definition": "Destructive or important action shows confirmation toast or banner after completion",
+        "evidence_required": "name the action and the confirmation surface"
+      },
+      {
+        "id": "vss-pos-async-status",
+        "impact": 1,
+        "definition": "Async save shows saving / saved / error state inline",
+        "evidence_required": "name the field or form and the status surface"
+      },
+      {
+        "id": "vss-pos-skeleton-load",
+        "impact": 1,
+        "definition": "Initial render uses skeleton or placeholder content, not a blank screen",
+        "evidence_required": "name the page region and the skeleton element"
+      },
+      {
+        "id": "vss-pos-active-nav-state",
+        "impact": 1,
+        "definition": "Current page or section is clearly highlighted in navigation",
+        "evidence_required": "name the nav and the active styling"
+      },
+      {
+        "id": "vss-pos-form-inline-validation",
+        "impact": 2,
+        "definition": "Form fields validate inline as the user types (not only on submit)",
+        "evidence_required": "name the field and the validation behavior"
+      },
+      {
+        "id": "vss-pos-progress-multistep",
+        "impact": 2,
+        "definition": "Multi-step flow shows step N of M with completed steps marked",
+        "evidence_required": "name the flow and the step indicator"
+      }
+    ],
+    "negative": [
+      {
+        "id": "vss-neg-silent-action",
+        "impact": -3,
+        "definition": "Action (button click, form submit, delete) completes with no visible response",
+        "evidence_required": "name the action and what was observed (or not observed)"
+      },
+      {
+        "id": "vss-neg-blank-loading",
+        "impact": -2,
+        "definition": "Loading state is a blank screen or empty container with no indicator",
+        "evidence_required": "name the page region and what showed during load"
+      },
+      {
+        "id": "vss-neg-stale-state",
+        "impact": -2,
+        "definition": "UI shows stale data after action and requires manual refresh",
+        "evidence_required": "name the action and the stale element"
+      },
+      {
+        "id": "vss-neg-mystery-spinner",
+        "impact": -1,
+        "definition": "Spinner appears with no label or context for what is loading",
+        "evidence_required": "name the location of the spinner"
+      },
+      {
+        "id": "vss-neg-no-current-state",
+        "impact": -1,
+        "definition": "User cannot tell what page or section they are on (no breadcrumbs, no active state)",
+        "evidence_required": "name the navigation and what is missing"
+      },
+      {
+        "id": "vss-neg-only-submit-validation",
+        "impact": -2,
+        "definition": "Form errors only surface on submit, not during typing",
+        "evidence_required": "name the form and the validation timing"
+      }
+    ],
+    "critical_negative": [
+      {
+        "id": "vss-neg-error-swallowed",
+        "impact": -5,
+        "definition": "Error condition produces zero feedback (silent failure)",
+        "evidence_required": "name the failing action and the browser console state"
+      }
+    ]
+  }
+}

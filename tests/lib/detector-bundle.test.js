@@ -169,7 +169,7 @@ describe('skill detector bundle', () => {
   test('critique references the bundled detector command', () => {
     const critique = fs.readFileSync(path.join(ROOT, 'skill/reference/critique.md'), 'utf-8');
 
-    expect(critique).toContain('node {{scripts_path}}/detect.mjs --json [target]');
+    expect(critique).toContain('{{scripts_path}}/impeccable detect --json [target]');
     expect(critique).not.toContain('npx impeccable detect');
   });
 });

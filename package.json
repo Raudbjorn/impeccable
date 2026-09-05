@@ -73,7 +73,9 @@
     "postpack": "cp README.repo.md README.md && rm README.repo.md",
     "release:skill": "node scripts/release.mjs skill",
     "release:cli": "node scripts/release.mjs cli",
-    "release:ext": "node scripts/release.mjs extension"
+    "release:ext": "node scripts/release.mjs extension",
+    "test:native": "node scripts/run-tests.mjs native",
+    "native": "node cli/native/bin/cli.js"
   },
   "dependencies": {
     "css-select": "^7.0.0",

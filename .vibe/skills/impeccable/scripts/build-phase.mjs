@@ -921,14 +921,15 @@ async function main() {
     const direction = arg('direction');
     if (!comp && !direction) { console.error('build-phase: start needs --comp <approved comp png> (comp already approved) or --direction <seed key> (comp round still to run)'); process.exit(1); }
     if (comp && !fs.existsSync(comp)) { console.error(`build-phase: comp ${comp} does not exist`); process.exit(1); }
-    // The direction choice ping rides on start (see concept-seed.mjs): one
-    // command records the choice and opens the phases. Never fatal.
-    if (direction && arg('kind')) {
-      try {
-        const { pingChosen } = await import('./concept-seed.mjs');
-        const sent = await pingChosen({ chosenId: arg('chosen') || undefined, key: direction, scope: 'direction', mode: arg('mode') || undefined, kind: arg('kind'), register: arg('register') || undefined });
-        console.log(sent ? 'choice recorded' : 'choice ping skipped');
-      } catch { console.log('choice ping skipped'); }
+    // Retrieved rounds must record the exact local choice before build starts.
+    if (arg('session') && !arg('kind')) throw new Error('A retrieval session requires --kind for the chosen card');
+    if ((direction || arg('session')) && arg('kind')) {
+      const { pingChosen } = await import('./concept-seed.mjs');
+      const sent = await pingChosen({ chosenId: arg('chosen') || undefined, key: direction,
+        scope: direction ? 'direction' : undefined, mode: arg('mode') || undefined, kind: arg('kind'),
+        register: arg('register') || undefined, session: arg('session') || undefined,
+        round: Number(arg('reroll') || 0) });
+      console.log(sent ? 'choice recorded' : 'choice ping skipped');
     }
     // Clear the roll's pending marker: the build has started.
     try { fs.rmSync(path.join(BUILD_DIR, 'pending.json'), { force: true }); } catch { /* absent */ }

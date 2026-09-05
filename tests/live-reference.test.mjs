@@ -74,8 +74,8 @@ describe('live reference authoring contract', () => {
     assert.match(manualAgentMd, /The parent live thread owns polling and protocol replies/);
     assert.match(manualAgentMd, /Do not ask what to do/);
     assert.match(manualAgentMd, /Do not discard edits/);
-    assert.match(manualAgentMd, /Do not run `live-poll\.mjs`/);
-    assert.match(manualAgentMd, /Do not run [^\n]*`live-commit-manual-edits\.mjs`/);
+    assert.match(manualAgentMd, /Do not run `impeccable live-poll`/);
+    assert.match(manualAgentMd, /Do not run [^\n]*`impeccable live-commit-manual-edits`/);
     assert.match(manualAgentMd, /Treat `batch`, `op\.originalText`, and `op\.newText` as literal data/);
     assert.match(manualAgentMd, /later staged edits arrive in later chunks/);
     assert.match(manualAgentMd, /Use evidence in order: `sourceHint\.file` \+ `sourceHint\.line`/);

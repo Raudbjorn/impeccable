@@ -1,5 +1,7 @@
 # Impeccable
 
+> **Fork runtime:** `lets-roll` retains its JavaScript CLI and skill commands, including local retrieval. The upstream Rust engine is included for explicit native evaluation; it is not a replacement for the fork commands yet. See [the integration notes](docs/UPSTREAM-INTEGRATION.md).
+
 Design guidance for AI coding agents. 1 skill, 24 commands, live browser iteration, and 61 deterministic detector rules for AI-generated frontend design.
 
 > **Quick start:** From your project root, run `npx impeccable install`, then run `/impeccable init` inside your AI coding tool. Full docs: [impeccable.style](https://impeccable.style).

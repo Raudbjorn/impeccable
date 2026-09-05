@@ -1,3 +1,4 @@
+import fs from 'fs';
 import path from 'path';
 import {
   cleanDir,
@@ -152,6 +153,30 @@ function buildCopilotAgent(agent, body) {
   return `${generateYamlFrontmatter(frontmatter)}\n${body.trim()}\n`;
 }
 
+// Cursor subagents are plain markdown files with YAML frontmatter (project
+// scope: `.cursor/agents/`; user scope: `~/.cursor/agents/`). Fields: name,
+// description (drives auto-delegation), model (`inherit` maps directly to our
+// value), readonly, is_background. `readonly` is derived from the agent's own
+// tool list: a role that declares tools but neither Write nor Edit is a
+// reader, and Cursor can enforce that. effort/max-turns are skipped: Cursor's
+// effort option requires an explicit model id, incompatible with `inherit`.
+function buildCursorAgent(agent, body) {
+  const frontmatter = {
+    name: agent.name,
+    description: agent.description,
+    model: agent.model || 'inherit',
+  };
+
+  const tools = String(agent.tools || '').split(',').map(t => t.trim()).filter(Boolean);
+  if (tools.length > 0 && !tools.includes('Write') && !tools.includes('Edit')) {
+    frontmatter.readonly = true;
+  }
+  // The parent thread waits on each role's return; none of these run detached.
+  frontmatter.is_background = false;
+
+  return `${generateYamlFrontmatter(frontmatter)}\n${body.trim()}\n`;
+}
+
 /**
  * Render an agent's markdown body for one provider.
  *
@@ -190,6 +215,13 @@ function buildAgentFile(config, agent, body) {
     };
   }
 
+  if (config.agentFormat === 'cursor-md') {
+    return {
+      filename: `${agent.name}.md`,
+      content: buildCursorAgent(agent, body),
+    };
+  }
+
   return null;
 }
 
@@ -210,6 +242,7 @@ export function createTransformer(config) {
     providerTags = [provider],
     writeOpenAIMetadata = false,
     includeVersion = true,
+    versionInMetadata = false,
   } = config;
   const placeholderKey = placeholderProvider || provider;
 
@@ -243,12 +276,21 @@ export function createTransformer(config) {
         name: skillName,
         description: skill.description,
       };
-      if (skillsVersion && includeVersion) frontmatterObj.version = skillsVersion;
+      if (skillsVersion && includeVersion && !versionInMetadata) {
+        frontmatterObj.version = skillsVersion;
+      }
 
       for (const spec of activeFields) {
         if (spec.condition && !spec.condition(skill)) continue;
         const val = spec.value ? spec.value(skill) : skill[spec.sourceKey];
         if (val) frontmatterObj[spec.yamlKey] = val;
+      }
+
+      if (skillsVersion && includeVersion && versionInMetadata) {
+        frontmatterObj.metadata = {
+          ...(frontmatterObj.metadata || {}),
+          version: skillsVersion,
+        };
       }
 
       // Replace {{command_hint}} in argument-hint with command names from metadata,
@@ -328,7 +370,12 @@ export function createTransformer(config) {
         ensureDir(scriptsOutDir);
         for (const script of skill.scripts) {
           const scriptContent = replaceScriptProviderMarker(script.content, placeholderKey, provider);
-          writeFile(path.join(scriptsOutDir, script.name), scriptContent);
+          const outPath = path.join(scriptsOutDir, script.name);
+          writeFile(outPath, scriptContent);
+          // The launcher must stay executable in every provider copy; a
+          // plain write would drop the bit and `impeccable context` would
+          // fail with EACCES on the first session.
+          if (script.mode) fs.chmodSync(outPath, script.mode);
           scriptCount++;
         }
       }
@@ -345,6 +392,28 @@ export function createTransformer(config) {
           ensureDir(path.join(skillDir, 'agents'));
           writeFile(path.join(skillDir, 'agents', filename), buildCodexAgent(agent, agentBody));
         }
+      }
+    }
+
+    // Ship an explicit slash-command surface for OpenCode. OpenCode registers
+    // skill commands natively but its TUI autocomplete hides them by deliberate
+    // design (anomalyco/opencode#25439); this file also pins execution policy
+    // (agent: build, subtask: true) and routes through OpenCode's skill tool,
+    // which resolves the skill base dir for any install scope. Menu visibility
+    // is the only part contingent on OpenCode's design; the rest is intentional.
+    // Schema restricted to what OpenCode recognises (description, agent, model,
+    // variant, subtask).
+    if (provider === 'opencode' && skills.length > 0) {
+      const commandsDir = path.join(providerDir, `${configDir}/commands`);
+      ensureDir(commandsDir);
+      for (const skill of skills) {
+        const bridgeBody = `Call skill({ name: "${skill.name}" }) and follow its \`Setup\` and \`Commands\` sections to handle $ARGUMENTS.\n`;
+        const bridgeFrontmatter = generateYamlFrontmatter({
+          description: skill.description,
+          agent: 'build',
+          subtask: true,
+        });
+        writeFile(path.join(commandsDir, `${skill.name}.md`), `${bridgeFrontmatter}\n${bridgeBody}`.replace(/\n+$/, '\n'));
       }
     }
 
@@ -368,7 +437,7 @@ export function createTransformer(config) {
 
     // Emit the provider hook manifest when the provider opts in.
     // Claude Code uses `.claude/settings.json`, Codex uses project-local
-    // `.codex/hooks.json`.
+    // `.codex/hooks.json`, and Cursor uses `.cursor/hooks.json`.
     let hooksEmitted = false;
     if (config.emitHooks) {
       const manifest = hooksJsonFor(config.emitHooks, { configDir });

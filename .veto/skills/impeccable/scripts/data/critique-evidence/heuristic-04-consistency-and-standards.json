@@ -1,0 +1,74 @@
+{
+  "heuristic_id": "cas",
+  "heuristic_name": "Consistency and Standards",
+  "nielsen_index": 4,
+  "short_description": "Users should not wonder whether different words, situations, or actions mean the same thing.",
+  "catalog": {
+    "positive": [
+      {
+        "id": "cas-pos-consistent-terminology",
+        "impact": 2,
+        "definition": "The same concept uses the same term throughout the interface",
+        "evidence_required": "name the concept and where it appears consistently"
+      },
+      {
+        "id": "cas-pos-platform-conventions",
+        "impact": 2,
+        "definition": "Standard platform conventions are followed (cmd+k for command palette, cmd+/ for help, etc.)",
+        "evidence_required": "name the convention and where it is honored"
+      },
+      {
+        "id": "cas-pos-visual-system",
+        "impact": 2,
+        "definition": "Type, color, spacing, and component styles are visibly consistent across the surface",
+        "evidence_required": "name the system elements that match"
+      },
+      {
+        "id": "cas-pos-interaction-patterns",
+        "impact": 1,
+        "definition": "Same gesture or interaction triggers the same kind of behavior (clicking the brand always returns home, etc.)",
+        "evidence_required": "name the interaction and where it repeats"
+      },
+      {
+        "id": "cas-pos-shared-component-library",
+        "impact": 1,
+        "definition": "Buttons, inputs, modals, etc. visibly come from a single design system",
+        "evidence_required": "name the components and where they appear"
+      }
+    ],
+    "negative": [
+      {
+        "id": "cas-neg-terminology-drift",
+        "impact": -2,
+        "definition": "The same concept is named two or more different things across the interface",
+        "evidence_required": "name the concept and the divergent terms"
+      },
+      {
+        "id": "cas-neg-button-style-drift",
+        "impact": -2,
+        "definition": "Primary buttons render differently in different parts of the interface",
+        "evidence_required": "name the surfaces and the differing styles"
+      },
+      {
+        "id": "cas-neg-spacing-rhythm-broken",
+        "impact": -1,
+        "definition": "Spacing scale changes arbitrarily between sections (large gap here, cramped gap there)",
+        "evidence_required": "name the sections and the contrasting spacings"
+      },
+      {
+        "id": "cas-neg-broken-platform-convention",
+        "impact": -2,
+        "definition": "A standard platform convention is overridden in a confusing way (cmd+s does something other than save, etc.)",
+        "evidence_required": "name the convention and what was overridden"
+      }
+    ],
+    "critical_negative": [
+      {
+        "id": "cas-neg-stitched-products",
+        "impact": -5,
+        "definition": "Surface looks and behaves like multiple unrelated products glued together",
+        "evidence_required": "name the surface and the divergent regions"
+      }
+    ]
+  }
+}

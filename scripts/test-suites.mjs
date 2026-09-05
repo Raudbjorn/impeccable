@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const DEFAULT_SUITES = ['core', 'detector', 'live', 'framework', 'plugin-e2e'];
+export const DEFAULT_SUITES = ['core', 'detector', 'live', 'framework', 'plugin-e2e', 'upstream-tools'];
 export const OPT_IN_SUITES = [
+  'native',
   'cli-remote-e2e',
   'live-e2e',
   'live-e2e-accept-cleanup',
@@ -20,6 +21,21 @@ const COMMON_INFRA_PATTERNS = [
 ];
 
 export const SUITES = {
+  'upstream-tools': {
+    description: 'Upstream build, signing, process cleanup and explicit native shim helpers.',
+    triggers: [/^scripts\//, /^cli\/native\//],
+    commands: [
+      {runner:'bun',files:['tests/lib/transformers/opencode-commands.test.js','tests/root-commands-sync.test.js']},
+      {runner:'node',timeoutMs:180000,files:['tests/bundle-signing.test.mjs','tests/cli-shim.test.mjs','tests/process-group.test.mjs','tests/publish-platform-packages.test.mjs']},
+    ],
+  },
+  native: {
+    description: 'Upstream native engine oracle and server cleanup (requires a built engine).',
+    optIn: true,
+    triggers: [/^crates\//, /^browser-bundle\//, /^ENGINE_VERSION$/, /^tests\/oracle\//],
+    commands: [{runner:'node',timeoutMs:1200000,files:['tests/oracle.test.mjs','tests/live-server-leak.test.mjs']}],
+  },
+
   core: {
     description: 'Build, provider transforms, CLI helpers, context, and storage unit tests.',
     triggers: [
@@ -54,6 +70,7 @@ export const SUITES = {
           'tests/cli-args.test.mjs',
           'tests/concept-seed.test.mjs',
           'tests/retrieval-client.test.mjs',
+          'tests/fork-launcher.test.mjs',
           'tests/generate-image-embed.test.mjs',
           'tests/comp-diff.test.mjs',
           'tests/build-phase.test.mjs',

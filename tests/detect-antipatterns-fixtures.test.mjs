@@ -635,7 +635,7 @@ describe('detectHtml — static HTML/CSS fixtures', () => {
   });
 
   it('overused-font: flags named primaries and skips system-stack Roboto', async () => {
-    const f = await detectHtml(path.join(FIXTURES, 'overused-font.html'));
+    const f = await detectHtml(path.join(FIXTURES, '../fork/overused-font.html'));
     const snippets = f.filter(r => r.antipattern === 'overused-font').map(r => r.snippet).join(' | ');
     for (const font of ['inter', 'geist', 'montserrat', 'lato']) {
       assert.match(snippets, new RegExp(`Primary font: ${font}`), `expected flag for ${font}: ${snippets}`);
