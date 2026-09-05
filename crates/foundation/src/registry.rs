@@ -503,7 +503,7 @@ pub static ANTIPATTERNS: &[Antipattern] = &[
     Antipattern {
         id: "label-line-height",
         category: "quality",
-        scopes: None,
+        scopes: Some(&["type"]),
         severity: None,
         name: "Oversized line-height on small text",
         description: "UI labels, chips, badges and small text elements should not inherit large body-text line heights. Use a tighter line-height so spacing is controlled by padding.",

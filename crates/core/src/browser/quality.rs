@@ -934,6 +934,46 @@ mod tests {
     }
 
     #[test]
+    fn label_line_height_matches_self_and_strips_quotes() {
+        let mut d = FakeDom::new();
+        let (_h, body) = d.with_page();
+        // A badge whose own text carries literal quote marks: the snippet
+        // should show them once, not doubled, and the badge itself (not a
+        // wrapping ancestor) is the reported element.
+        let badge = text_el(&mut d, body, "span", "\"Badge 10px / 20px\"", "10px");
+        d.add_selector(badge, "[class*=\"badge\" i]");
+        d.set_style(badge, "lineHeight", "20px");
+        let hits = check_element_quality_dom(&d, badge, &BrowserConfig::default());
+        let hit = hits
+            .iter()
+            .find(|h| h.id == "label-line-height")
+            .unwrap_or_else(|| panic!("expected a label-line-height finding, got {hits:?}"));
+        assert_eq!(
+            hit.snippet,
+            "10px text with 2.00x line-height \"Badge 10px / 20px\""
+        );
+
+        // A plain-text child inside a matching ancestor is not an
+        // independent candidate: only the ancestor's own finding fires.
+        let wrapper = text_el(&mut d, body, "span", "", "10px");
+        d.add_selector(wrapper, "[class*=\"badge\" i]");
+        d.set_style(wrapper, "lineHeight", "20px");
+        let inner = text_el(&mut d, wrapper, "span", "Inner text", "10px");
+        d.set_style(inner, "lineHeight", "20px");
+        let wrapper_hits = check_element_quality_dom(&d, wrapper, &BrowserConfig::default());
+        assert_eq!(
+            wrapper_hits.iter().filter(|h| h.id == "label-line-height").count(),
+            1,
+            "{wrapper_hits:?}"
+        );
+        let inner_hits = check_element_quality_dom(&d, inner, &BrowserConfig::default());
+        assert!(
+            inner_hits.iter().all(|h| h.id != "label-line-height"),
+            "{inner_hits:?}"
+        );
+    }
+
+    #[test]
     fn skipped_heading() {
         let mut d = FakeDom::new();
         let (_h, body) = d.with_page();

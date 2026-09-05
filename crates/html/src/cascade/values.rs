@@ -323,11 +323,16 @@ pub fn normalize_static_css_value(
         // descendant computing 12 * 1.6 = 19.2px. Leaving it unresolved lets
         // `resolve_length_px` at the consuming element (which already knows
         // its own font-size) do that multiplication correctly.
-        let is_bare_number = !resolved.ends_with("px")
+        // `string_to_number` requires the whole (trimmed) string to be a
+        // valid number, unlike `parse_float`'s prefix scan — "20pt" or
+        // "1.5abc" must fall through to the eager px-resolution branch
+        // below, not be treated as a bare multiplier.
+        let is_bare_number = !resolved.is_empty()
+            && !resolved.ends_with("px")
             && !resolved.ends_with("rem")
             && !resolved.ends_with("em")
             && !resolved.ends_with('%')
-            && !js::parse_float(&resolved).is_nan();
+            && !js::string_to_number(&resolved).is_nan();
         if !is_bare_number {
             let base = font_size_base2(current_style, parent_style);
             if let Some(px) = resolve_length_px(&resolved, base) {
