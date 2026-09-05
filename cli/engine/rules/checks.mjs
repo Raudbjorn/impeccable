@@ -3558,7 +3558,7 @@ function checkQuality(opts) {
     }
 
     if (isUILabel && ratio > 1.7) {
-      const text = (el.textContent || '').trim().substring(0, 30);
+      const text = (el.textContent || '').trim().replace(/\s+/g, ' ').replace(/^"+|"+$/g, '').substring(0, 30);
       findings.push({
         id: 'label-line-height',
         snippet: `${fontSize}px text with ${ratio.toFixed(2)}x line-height "${text}"`,
