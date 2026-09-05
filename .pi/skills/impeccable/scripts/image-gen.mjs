@@ -29,6 +29,7 @@ import os from "node:os";
 import path from "node:path";
 import dns from "node:dns";
 import { execFileSync, spawnSync } from "node:child_process";
+import { isPng } from "./lib/png.mjs";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -45,8 +46,13 @@ function loadEnv(...names) {
   if (!fs.existsSync(envPath)) return undefined;
   const vars = {};
   for (const line of fs.readFileSync(envPath, "utf8").split("\n")) {
+    // The trailing `\s*$` here never trims anything on its own: `(.*)` is
+    // greedy and already consumes the trailing whitespace, so an explicit
+    // .trim() is what actually strips a copy-pasted trailing space from an
+    // unquoted value before the quote strip runs (which needs the quote at
+    // the very end to match, so it has to run after the trim, not before).
     const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)\s*$/);
-    if (m) vars[m[1]] = m[2].replace(/^["']|["']$/g, "");
+    if (m) vars[m[1]] = m[2].trim().replace(/^["']|["']$/g, "");
   }
   for (const name of names) if (vars[name]) return vars[name];
   return undefined;
@@ -87,6 +93,25 @@ async function resolveIp(hostname) {
   throw new Error(`cannot resolve ${hostname} via system resolver, dig, 8.8.8.8, or 1.1.1.1`);
 }
 
+// Creates `filePath` exclusively (O_CREAT|O_EXCL via the "wx" flag: refuses
+// a pre-existing symlink or file) and writes `data` to it. `onCreated`
+// fires the instant the exclusive open succeeds -- before the write -- so
+// a caller's cleanup-ownership flag is set even if the write itself later
+// fails partway (e.g. ENOSPC): the file exists on disk and is this
+// process's to remove regardless of whether the write completed. Setting
+// the flag only after writeFileSync(path, ...) returned in full (the prior
+// approach) missed exactly that case: the exception from a failed write
+// skips the assignment, leaking a partial file no cleanup ever owns.
+function writeFileExclusive(filePath, data, mode, onCreated) {
+  const fd = fs.openSync(filePath, "wx", mode);
+  onCreated();
+  try {
+    fs.writeFileSync(fd, data);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 // ----------------------------------------------------------------- curl
 
 // Returns { status, json, text } instead of throwing on HTTP errors, so
@@ -102,21 +127,45 @@ async function curlJson(url, { method = "GET", headers = {}, body } = {}) {
   // file, never argv: an argv header is visible to any same-user process
   // via /proc/<pid>/cmdline or ps while curl runs, and to command telemetry
   // that logs argv. -K reads one "header = ..." line per header.
+  // Declared outside the try so `finally` can always see them, and the
+  // try starts before the first write below: `flag: "wx"` (see the header
+  // file's own comment) is meant to handle exactly the case where a
+  // pre-created path collides and the write throws, and a try/finally that
+  // only wrapped the curl call would leak the header file on that exact
+  // failure -- the temp file that already landed, holding the provider API
+  // key, never gets cleaned up.
   let headerFile;
-  if (Object.keys(headers).length) {
-    headerFile = path.join(os.tmpdir(), `image-gen-headers-${process.pid}-${Date.now()}.txt`);
-    const lines = Object.entries(headers).map(([k, v]) => `header = "${k}: ${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`);
-    fs.writeFileSync(headerFile, lines.join("\n") + "\n", { mode: 0o600 });
-    args.push("-K", headerFile);
-  }
   let bodyFile;
-  if (body !== undefined) {
-    bodyFile = path.join(os.tmpdir(), `image-gen-body-${process.pid}-${Date.now()}.json`);
-    fs.writeFileSync(bodyFile, body);
-    args.push("-d", `@${bodyFile}`);
-  }
-  args.push(url);
+  // Set only after each write actually succeeds: on an exclusive-create
+  // collision, headerFile/bodyFile already names a file this call did not
+  // create, and cleanup must never remove a path it didn't write -- that
+  // would delete the very pre-existing file or symlink `wx` was meant to
+  // leave untouched.
+  let headerCreated = false;
+  let bodyCreated = false;
   try {
+    if (Object.keys(headers).length) {
+      headerFile = path.join(os.tmpdir(), `image-gen-headers-${process.pid}-${Date.now()}.txt`);
+      const lines = Object.entries(headers).map(([k, v]) => `header = "${k}: ${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`);
+      // `mode: 0o600` only takes effect on a fresh create; on a shared,
+      // predictable tmpdir path, another local user could pre-create a
+      // symlink (or a plain file) there, and a plain writeFileSync would
+      // follow the link or truncate the existing file without ever touching
+      // its mode. The exclusive open refuses to write unless this call
+      // creates the file itself.
+      writeFileExclusive(headerFile, lines.join("\n") + "\n", 0o600, () => { headerCreated = true; });
+      args.push("-K", headerFile);
+    }
+    if (body !== undefined) {
+      bodyFile = path.join(os.tmpdir(), `image-gen-body-${process.pid}-${Date.now()}.json`);
+      // Same reasoning as the header file above: the body can carry the full
+      // prompt and a base64 reference image, and a shared tmpdir under a
+      // normal 022 umask would otherwise leave it world-readable for curl's
+      // timeout window.
+      writeFileExclusive(bodyFile, body, 0o600, () => { bodyCreated = true; });
+      args.push("-d", `@${bodyFile}`);
+    }
+    args.push(url);
     const out = execFileSync("curl", args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
     const nl = out.lastIndexOf("\n");
     const status = parseInt(out.slice(nl + 1), 10);
@@ -129,12 +178,10 @@ async function curlJson(url, { method = "GET", headers = {}, body } = {}) {
     }
     return { status, json, text };
   } finally {
-    if (headerFile) fs.rmSync(headerFile, { force: true });
-    if (bodyFile) fs.rmSync(bodyFile, { force: true });
+    if (headerCreated) fs.rmSync(headerFile, { force: true });
+    if (bodyCreated) fs.rmSync(bodyFile, { force: true });
   }
 }
-
-const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 // Downloads to a sibling temp path, checks the PNG signature (BFL is asked
 // for output_format: "png", but a 2xx response body is not proof of that --
@@ -155,7 +202,7 @@ async function download(url, outPath) {
       const buf = fs.existsSync(tmpPath) ? fs.readFileSync(tmpPath) : null;
       if (!buf || buf.length === 0) {
         lastErr = new Error("download produced an empty file");
-      } else if (!buf.subarray(0, 8).equals(PNG_SIGNATURE)) {
+      } else if (!isPng(buf)) {
         lastErr = new Error("downloaded file is not a valid PNG (bad signature)");
       } else {
         fs.renameSync(tmpPath, outPath);
@@ -271,7 +318,7 @@ async function generateBfl({ apiKey, prompt, ref, width, height, out }) {
 // the actual bytes, sniffed from the format signature rather than trusted
 // from the file extension.
 function sniffImageMime(buf) {
-  if (buf.subarray(0, 8).equals(PNG_SIGNATURE)) return "image/png";
+  if (isPng(buf)) return "image/png";
   if (buf.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) return "image/jpeg";
   if (buf.subarray(0, 4).toString("ascii") === "RIFF" && buf.subarray(8, 12).toString("ascii") === "WEBP") return "image/webp";
   fail("--ref file is not a recognized image format (expected PNG, JPEG, or WebP signature)");
@@ -338,14 +385,20 @@ function writeAsPng(buf, out) {
     return;
   }
   const tmp = path.join(os.tmpdir(), `image-gen-raw-${process.pid}-${Date.now()}.img`);
-  fs.writeFileSync(tmp, buf);
-  const converters = [
-    ["sips", ["-s", "format", "png", tmp, "--out", out]],
-    ["magick", [tmp, `png:${out}`]],
-    ["convert", [tmp, `png:${out}`]],
-    ["ffmpeg", ["-y", "-i", tmp, out]],
-  ];
+  // See curlJson's header/body temp files above: exclusive create closes
+  // the same predictable-shared-path symlink/overwrite gap. Ownership is
+  // tracked the same way too: the write itself sat outside any try/finally
+  // here, so a failure partway through it (after the exclusive create had
+  // already landed the file) leaked `tmp` with no cleanup ever reached.
+  let tmpCreated = false;
   try {
+    writeFileExclusive(tmp, buf, 0o600, () => { tmpCreated = true; });
+    const converters = [
+      ["sips", ["-s", "format", "png", tmp, "--out", out]],
+      ["magick", [tmp, `png:${out}`]],
+      ["convert", [tmp, `png:${out}`]],
+      ["ffmpeg", ["-y", "-i", tmp, out]],
+    ];
     for (const [cmd, args] of converters) {
       try {
         execFileSync(cmd, args, { stdio: "ignore" });
@@ -356,7 +409,7 @@ function writeAsPng(buf, out) {
     }
     fail("Provider returned non-PNG image bytes and no converter is available (tried sips, magick, convert, ffmpeg); install one and re-run");
   } finally {
-    fs.rmSync(tmp, { force: true });
+    if (tmpCreated) fs.rmSync(tmp, { force: true });
   }
 }
 

@@ -23,7 +23,10 @@ import {
   validateBundle,
   MAX_BUNDLE_FILE_BYTES,
 } from './design-context/portability.mjs';
-import { SEED_DESIGN_MARKERS } from './lib/staleness-deep.mjs';
+const SEED_DESIGN_MARKERS = ['/', '$'].map((prefix) =>
+  '<!-- SEED: established with the user before implementation; '
+    + `re-run ${prefix}impeccable document once there's code to capture the actual tokens and components. -->`
+);
 
 /* A pickerless interview seed stages a provided logo or moodboard under
    assets/ (and can carry context.json / cue.png from an earlier import)
