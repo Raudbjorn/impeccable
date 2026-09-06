@@ -72,8 +72,23 @@ describe('plugin subtree as an oh-my-pi plugin', () => {
   it('records that plugin-channel agents carry a Claude-only path form', () => {
     // Known limitation, asserted so it cannot regress into a surprise: the
     // plugin agents resolve scripts against ${CLAUDE_PLUGIN_ROOT}, which
-    // oh-my-pi does not substitute. A native .omp/agents install (built by
+    // oh-my-pi does not substitute in an agent body. Its substitution runs
+    // only over MCP stdio config (discovery/claude-plugins.ts), while agent
+    // discovery hands parseAgent the raw file text (task/discovery.ts), so
+    // the literal reaches the model. A native .omp/agents install (built by
     // the omp-md agent format) is the supported path there.
+    //
+    // Degraded, not broken. The prompt treats the written path as
+    // documentation and the parent's resolved scripts path as the one to
+    // trust, and stops to ask when it has neither; the parent supplies it
+    // (skill/reference/new-work.md, the asset-producer handoff). Worst case
+    // under the plugin channel is a stop-and-ask, not a failed invocation.
+    //
+    // No single literal serves both harnesses from one shared file: oh-my-pi
+    // expands neither variable here, and its plugin discovery hardcodes
+    // <root>/agents, so a second manifest cannot redirect it. If this
+    // assertion ever stops holding, that is the moment to revisit whether
+    // the plugin channel can carry agents for oh-my-pi at all.
     const agentsDir = path.join(PLUGIN, 'agents');
     if (!fs.existsSync(agentsDir)) return;
     const agents = fs.readdirSync(agentsDir).filter((name) => name.endsWith('.md'));
