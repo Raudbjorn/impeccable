@@ -58,7 +58,7 @@ const DEFAULT_DEEPSEEK_API_BASE_URL = 'https://api.deepseek.com/anthropic';
 // needing an SDK of its own.
 const DEFAULT_INCEPTION_MODEL = 'mercury-2';
 const DEFAULT_INCEPTION_API_BASE_URL = 'https://api.inceptionlabs.ai/v1';
-// The key is not kept in .env like the other four. It comes from a local
+// The key is not kept in .env like the other three. It comes from a local
 // helper at call time so it never lands in a file. Set the env var to skip the
 // helper; set the command to the empty string to disable the lookup entirely,
 // which is what the unit tests do so they never shell out to a developer's
@@ -220,15 +220,20 @@ const STEER_SYSTEM_INSTRUCTIONS = [
  * @property {(msg: string) => void=} log  Optional logger for debug output.
  */
 
-function inceptionKeyFromHelper(env) {
+function inceptionKeyFromHelper(env, log = () => {}) {
   const command = env.IMPECCABLE_E2E_INCEPTION_KEY_CMD ?? DEFAULT_INCEPTION_KEY_COMMAND;
   if (!command) return undefined;
   try {
     const out = execFileSync(command, { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] });
     return out.trim() || undefined;
-  } catch {
-    // No helper on PATH, or it failed. Treated the same as an unset key: the
-    // runner skips the case rather than failing it.
+  } catch (err) {
+    // ENOENT means no helper on PATH, which is the expected state for anyone
+    // who hasn't installed it; stay silent. Anything else (nonzero exit,
+    // timeout, permission denied) means a helper the caller named is broken,
+    // so name it rather than let every runner report only a missing key.
+    if (err?.code !== 'ENOENT') {
+      log(`inception key helper "${command}" failed: ${err.message}`);
+    }
     return undefined;
   }
 }
@@ -271,7 +276,7 @@ export function resolveLlmAgentConfig(opts = {}, env = process.env) {
     return {
       provider,
       model: opts.model || env.IMPECCABLE_E2E_LLM_MODEL || DEFAULT_INCEPTION_MODEL,
-      apiKey: opts.apiKey || env.INCEPTION_API_KEY || inceptionKeyFromHelper(env),
+      apiKey: opts.apiKey || env.INCEPTION_API_KEY || inceptionKeyFromHelper(env, opts.log),
       requiredEnv: 'INCEPTION_API_KEY',
       baseURL: opts.baseURL || env.INCEPTION_API_BASE_URL || DEFAULT_INCEPTION_API_BASE_URL,
       reasoningEffort: opts.reasoningEffort || env.IMPECCABLE_E2E_LLM_EFFORT || DEFAULT_OPENAI_REASONING_EFFORT,
@@ -292,6 +297,16 @@ function resolveProvider(opts, env) {
   // run the caller did not ask for.
   if (env.INCEPTION_API_KEY) return 'inception';
   return 'openai';
+}
+
+/**
+ * Only Inception rides the Chat Completions path through the OpenAI shim;
+ * OpenAI itself uses the Responses API. Pulled out as its own function so a
+ * regression back to the unsupported Responses path for Inception is a unit
+ * test, not something only the paid, opt-in provider replay would catch.
+ */
+export function requiresChatCompletionsApi(provider) {
+  return provider === 'inception';
 }
 
 /**
@@ -353,7 +368,7 @@ export async function createLlmAgent(opts = {}) {
 
   const liveMd = opts.includeLiveSpec === false ? null : await fs.readFile(LIVE_MD_PATH, 'utf-8');
   const client = provider === 'openai' || provider === 'inception'
-    ? await createOpenAiShim({ apiKey, baseURL, reasoningEffort: config.reasoningEffort, useChatCompletions: provider === 'inception' })
+    ? await createOpenAiShim({ apiKey, baseURL, reasoningEffort: config.reasoningEffort, useChatCompletions: requiresChatCompletionsApi(provider) })
     : new Anthropic({ apiKey, ...(baseURL ? { baseURL } : {}) });
   const systemBlocks = (instructions) => [
     {

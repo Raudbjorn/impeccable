@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -10,6 +10,7 @@ import {
   parseManualEditResponse,
   parseVariantResponse,
   progressiveVariantGuidance,
+  requiresChatCompletionsApi,
   resolveLlmAgentConfig,
   validateManualEditCoverage,
   validateManualEditPlanningCoverage,
@@ -115,15 +116,61 @@ describe('live-e2e LLM agent provider config', () => {
     assert.equal(config.apiKey, 'k');
   });
 
-  it('reads the Inception key from the local helper when the env var is unset', () => {
+  it('reads and trims the Inception key when the local helper emits one', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'impeccable-inception-helper-'));
+    const helperPath = join(dir, 'key-helper.sh');
+    writeFileSync(helperPath, '#!/bin/sh\nprintf \'  sentinel-key-value  \\n\'\n');
+    chmodSync(helperPath, 0o755);
+    try {
+      const config = resolveLlmAgentConfig({}, {
+        IMPECCABLE_E2E_LLM_PROVIDER: 'inception',
+        IMPECCABLE_E2E_INCEPTION_KEY_CMD: helperPath,
+      });
+      assert.equal(config.apiKey, 'sentinel-key-value');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('discards a key when the local helper emits empty output', () => {
     const config = resolveLlmAgentConfig({}, {
       IMPECCABLE_E2E_LLM_PROVIDER: 'inception',
+      // `echo` with no args prints only a newline; the (empty) trimmed
+      // output must be discarded rather than passed through as a key.
       IMPECCABLE_E2E_INCEPTION_KEY_CMD: 'echo',
     });
-    // `echo` with no args prints an empty line, so the helper contributes
-    // nothing and the config reports no key. The point is that the command
-    // ran and its (empty) output was trimmed rather than passed through.
     assert.equal(config.apiKey, undefined);
+  });
+
+  it('discards a key and does not throw when the helper command fails', () => {
+    const config = resolveLlmAgentConfig({}, {
+      IMPECCABLE_E2E_LLM_PROVIDER: 'inception',
+      IMPECCABLE_E2E_INCEPTION_KEY_CMD: 'false',
+    });
+    assert.equal(config.apiKey, undefined);
+  });
+
+  it('logs a diagnostic naming the helper when it exists but fails', () => {
+    const messages = [];
+    const config = resolveLlmAgentConfig({ log: (msg) => messages.push(msg) }, {
+      IMPECCABLE_E2E_LLM_PROVIDER: 'inception',
+      IMPECCABLE_E2E_INCEPTION_KEY_CMD: 'false',
+    });
+    assert.equal(config.apiKey, undefined);
+    assert.ok(
+      messages.some((m) => m.includes('false')),
+      `expected a diagnostic naming the failed helper, got: ${JSON.stringify(messages)}`,
+    );
+  });
+
+  it('stays silent when the helper command is simply not installed', () => {
+    const messages = [];
+    const config = resolveLlmAgentConfig({ log: (msg) => messages.push(msg) }, {
+      IMPECCABLE_E2E_LLM_PROVIDER: 'inception',
+      IMPECCABLE_E2E_INCEPTION_KEY_CMD: '/nonexistent/path/impeccable-does-not-exist',
+    });
+    assert.equal(config.apiKey, undefined);
+    assert.deepEqual(messages, []);
   });
 
   it('does not shell out for a key when the helper command is disabled', () => {
@@ -146,6 +193,13 @@ describe('live-e2e LLM agent provider config', () => {
       () => resolveLlmAgentConfig({}, { IMPECCABLE_E2E_LLM_PROVIDER: 'other' }),
       /Unsupported IMPECCABLE_E2E_LLM_PROVIDER: other/,
     );
+  });
+
+  it('routes only Inception through the Chat Completions API', () => {
+    assert.equal(requiresChatCompletionsApi('inception'), true);
+    assert.equal(requiresChatCompletionsApi('openai'), false);
+    assert.equal(requiresChatCompletionsApi('anthropic'), false);
+    assert.equal(requiresChatCompletionsApi('deepseek'), false);
   });
 });
 
