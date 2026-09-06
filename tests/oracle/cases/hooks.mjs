@@ -187,6 +187,29 @@ export default [
   { id: 'hadmin-ignore-value-inert-scoped', verb: 'hook-admin', workspace: 'hook-project', args: ['ignore-value', 'side-tab', 'Inter', '--file', 'a.css'], files: CACHE_FILES },
   { id: 'hadmin-ignore-value-inert-then-wildcard', verb: 'hook-admin', workspace: 'hook-project', files: CACHE_FILES, steps: [{ args: ['ignore-value', 'cramped-padding', 'padding: 4px 8px'] }, { args: ['ignore-value', 'cramped-padding', '*', '--file', 'index.html'] }, { args: ['status'] }] },
   { id: 'hadmin-reset-empty', verb: 'hook-admin', workspace: 'hook-project', args: ['reset'], files: CACHE_FILES },
+  // `on` writes hook entries into the provider manifests as well as the
+  // config, and `reset` has to undo all three (issue #512): a leftover
+  // manifest entry kept invoking the hook after the config that said "off"
+  // was gone. hadmin-reset-empty only ever exercised reset with nothing
+  // installed, so the pruning path and its "Removed hook entries from:"
+  // line were never recorded.
+  { id: 'hadmin-reset-wired', verb: 'hook-admin', workspace: 'hook-project', files: CACHE_FILES, steps: [{ args: ['on'] }, { args: ['reset'] }, { args: ['status'] }] },
+  // reset prunes the local manifest only. A team-shared .claude/settings.json
+  // is never written by `on`, so finding an impeccable entry there means a
+  // human put it under version control: reset refuses rather than editing a
+  // committed file out from under the team, and says so while preserving the
+  // config.
+  {
+    id: 'hadmin-reset-shared-manifest-refused', verb: 'hook-admin', workspace: 'hook-project',
+    files: [...CACHE_FILES, '.claude/settings.json'],
+    setup: (ws) => {
+      fs.mkdirSync(`${ws}/.claude`, { recursive: true });
+      fs.writeFileSync(`${ws}/.claude/settings.json`, JSON.stringify({
+        hooks: { PostToolUse: [{ matcher: 'Edit', hooks: [{ type: 'command', command: '"${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/impeccable" hook' }] }] },
+      }, null, 2) + '\n');
+    },
+    steps: [{ args: ['on'] }, { args: ['reset'] }, { args: ['status'] }],
+  },
   { id: 'hadmin-full-cycle', verb: 'hook-admin', workspace: 'hook-project', files: CACHE_FILES, steps: [{ args: ['ignore-rule', 'side-tab'] }, { args: ['ignore-file', 'x/**', '--local'] }, { args: ['ignore-value', 'overused-font', 'Inter'] }, { args: ['status'] }, { args: ['reset'] }, { args: ['status'] }] },
   {
     id: 'hadmin-legacy-migration', verb: 'hook-admin', workspace: 'hook-project', files: CACHE_FILES,
