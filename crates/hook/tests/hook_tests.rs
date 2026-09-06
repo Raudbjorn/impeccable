@@ -1754,7 +1754,8 @@ fn reset_refuses_on_malformed_shared_manifest_and_preserves_config() {
     std::fs::create_dir_all(t.0.join(".claude/skills/impeccable")).unwrap();
     let (_, err, code) = admin_run(&r, &["on"]);
     assert_eq!(code, 0, "{err}");
-    admin_run(&r, &["off"]);
+    let (_, err, code) = admin_run(&r, &["off"]);
+    assert_eq!(code, 0, "{err}");
     let disabled = t.read(".impeccable/config.local.json");
     t.write(
         ".claude/settings.json",
