@@ -612,6 +612,24 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn a_response_problem_is_surfaced_under_one_prefix() {
+        // Every assertion in this module uses `contains`, so none of them
+        // notice the wrapper call_retrieval puts on a validate() error. The
+        // contract documents these strings, so pin the whole line.
+        let mut bad: Value = serde_json::from_str(&round_json()).unwrap();
+        bad["record"] = json!(true);
+        let cfg = echo_config(&bad.to_string(), 30_000);
+        let request = serde_json::json!({"op": "start", "round": 0});
+        let err = call_retrieval(&request, ".", &cfg).unwrap_err();
+        assert_eq!(err, "Invalid retrieval response: record must be an object");
+
+        let cfg = echo_config("not json at all", 30_000);
+        let err = call_retrieval(&request, ".", &cfg).unwrap_err();
+        assert!(err.starts_with("Invalid retrieval response: "), "{err}");
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn each_missing_field_names_itself() {
         // One message for five different mistakes told the implementer of a
         // retrieval command nothing, and named a `candidates` field that does
