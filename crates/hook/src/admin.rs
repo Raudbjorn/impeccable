@@ -807,6 +807,13 @@ fn file_has_impeccable_hook_marker(path: &str) -> bool {
     let Some(parsed) = safe_read(path).and_then(|t| serde_json::from_str::<Value>(&t).ok()) else {
         return false;
     };
+    manifest_value_has_impeccable_hook_marker(&parsed)
+}
+
+/// The parsed-manifest half of `fileHasImpeccableHookMarker`, split out so a
+/// caller that already holds the parsed value (`reset`, to check malformed
+/// and marker from one read) doesn't reread and reparse the file.
+fn manifest_value_has_impeccable_hook_marker(parsed: &Value) -> bool {
     let Value::Object(o) = parsed else {
         return false;
     };
@@ -1212,7 +1219,22 @@ fn reset(rt: &Runtime, cwd: &str) -> Result<String, String> {
     let mut pruned: Vec<String> = Vec::new();
     for target in HOOK_MANIFEST_TARGETS {
         if let Some(shared) = target.shared_dest_rel {
-            if file_has_impeccable_hook_marker(&jsp::join(&[cwd, shared])) {
+            let shared_path = jsp::join(&[cwd, shared]);
+            // One read, reused for both checks below: `file_has_impeccable_
+            // hook_marker` parses the file as JSON and returns `false` when
+            // it doesn't parse, the same "unreadable reads as unwired" trap
+            // the `dest_rel` malformed check further down exists to close.
+            // Without this, a corrupted-but-wired shared manifest let reset
+            // delete the disabling config while the shared entry stayed
+            // wired: the hook re-arms with no kill switch (#512-class bug,
+            // shared-manifest side). Reading once (instead of the malformed
+            // check and the marker check each rereading the file) also
+            // means there's nothing for a concurrent write to race between.
+            let shared_raw = read_raw_config_file(&shared_path);
+            if shared_raw.exists && shared_raw.malformed {
+                return Err(format!("Cannot reset malformed shared hook manifest {shared_path}; hook config was preserved."));
+            }
+            if shared_raw.raw.as_ref().is_some_and(manifest_value_has_impeccable_hook_marker) {
                 return Err(format!("Remove the shared hook entry from {shared} before resetting; hook config was preserved."));
             }
         }

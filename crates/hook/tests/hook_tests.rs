@@ -1739,3 +1739,29 @@ fn omp_hook_lifecycle_and_reset_preserves_disabled_config_on_error() {
     assert_eq!(admin_run(&r, &["reset"]).2, 0);
     assert!(!t.exists(".omp/hooks/post/impeccable.js"));
 }
+
+#[test]
+fn reset_refuses_on_malformed_shared_manifest_and_preserves_config() {
+    // `file_has_impeccable_hook_marker` parses JSON and returns `false` when
+    // it can't, so a wired-but-corrupted `.claude/settings.json` used to read
+    // as "not wired" and let reset delete the disabling config out from under
+    // it: the hook re-armed with its kill switch gone. Reset must refuse
+    // instead, the same way it already refuses on a malformed `destRel`
+    // manifest.
+    let t = Tmp::new();
+    let cwd = t.path();
+    let r = rt(&cwd);
+    std::fs::create_dir_all(t.0.join(".claude/skills/impeccable")).unwrap();
+    let (_, err, code) = admin_run(&r, &["on"]);
+    assert_eq!(code, 0, "{err}");
+    let (_, err, code) = admin_run(&r, &["off"]);
+    assert_eq!(code, 0, "{err}");
+    let disabled = t.read(".impeccable/config.local.json");
+    t.write(
+        ".claude/settings.json",
+        r#"{"hooks":{"PostToolUse":[{"matcher":"Edit","hooks":[{"type":"command","command":"node \"${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/hook.mjs\""#,
+    );
+    let (_, err, code) = admin_run(&r, &["reset"]);
+    assert_eq!(code, 1, "{err}");
+    assert_eq!(t.read(".impeccable/config.local.json"), disabled);
+}
