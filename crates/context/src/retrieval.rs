@@ -192,19 +192,22 @@ fn validate(request: &Value, response: &Value) -> Result<(), String> {
     let compositions = record
         .and_then(|r| r.get("compositions"))
         .and_then(Value::as_array);
-    let ok = response.get("session").is_some_and(truthy)
-        && response.get("settings").is_some_and(Value::is_object)
-        && record.is_some_and(truthy)
-        && challengers.is_some_and(|c| !c.is_empty())
-        && compositions.is_some_and(|c| !c.is_empty());
-    if !ok {
-        // Name the field that is wrong rather than the group it sits in: the
-        // shape of `settings` and a missing candidate list send you to
-        // different places in the retrieval command.
-        if !response.get("settings").is_some_and(Value::is_object) {
-            return Err("settings must be an object".into());
-        }
-        return Err("missing candidates or session".into());
+    // One check per field, because these are five different mistakes to make
+    // in a retrieval command and the reader has to know which one they made.
+    if !response.get("session").is_some_and(truthy) {
+        return Err("response has no session".into());
+    }
+    if !response.get("settings").is_some_and(Value::is_object) {
+        return Err("settings must be an object".into());
+    }
+    if !record.is_some_and(truthy) {
+        return Err("response has no record".into());
+    }
+    if !challengers.is_some_and(|c| !c.is_empty()) {
+        return Err("record.challengers must be a non-empty array".into());
+    }
+    if !compositions.is_some_and(|c| !c.is_empty()) {
+        return Err("record.compositions must be a non-empty array".into());
     }
     let (challengers, compositions) = (challengers.unwrap(), compositions.unwrap());
 
@@ -568,6 +571,37 @@ mod tests {
             "settings": {"key": "k1", "candidateCount": number(6.0)},
         });
         assert!(call_retrieval(&request, ".", &cfg).is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn each_missing_field_names_itself() {
+        // One message for five different mistakes told the implementer of a
+        // retrieval command nothing, and named a `candidates` field that does
+        // not exist in the protocol.
+        for (mutate, want) in [
+            (("session", Value::Null), "response has no session"),
+            (("record", Value::Null), "response has no record"),
+        ] {
+            let mut bad: Value = serde_json::from_str(&round_json()).unwrap();
+            bad[mutate.0] = mutate.1;
+            let cfg = echo_config(&bad.to_string(), 30_000);
+            let request = serde_json::json!({"op": "start", "round": 0});
+            let err = call_retrieval(&request, ".", &cfg).unwrap_err();
+            assert!(err.contains(want), "wanted {want}, got {err}");
+        }
+
+        for (group, want) in [
+            ("challengers", "record.challengers must be a non-empty array"),
+            ("compositions", "record.compositions must be a non-empty array"),
+        ] {
+            let mut bad: Value = serde_json::from_str(&round_json()).unwrap();
+            bad["record"][group] = json!([]);
+            let cfg = echo_config(&bad.to_string(), 30_000);
+            let request = serde_json::json!({"op": "start", "round": 0});
+            let err = call_retrieval(&request, ".", &cfg).unwrap_err();
+            assert!(err.contains(want), "wanted {want}, got {err}");
+        }
     }
 
     #[cfg(unix)]
