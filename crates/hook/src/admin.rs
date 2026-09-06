@@ -1212,7 +1212,18 @@ fn reset(rt: &Runtime, cwd: &str) -> Result<String, String> {
     let mut pruned: Vec<String> = Vec::new();
     for target in HOOK_MANIFEST_TARGETS {
         if let Some(shared) = target.shared_dest_rel {
-            if file_has_impeccable_hook_marker(&jsp::join(&[cwd, shared])) {
+            let shared_path = jsp::join(&[cwd, shared]);
+            // `file_has_impeccable_hook_marker` parses the file as JSON and
+            // returns `false` when it doesn't parse, the same "unreadable
+            // reads as unwired" trap the `dest_rel` malformed check below
+            // exists to close. Without this, a corrupted-but-wired shared
+            // manifest let reset delete the disabling config while the
+            // shared entry stayed wired: the hook re-arms with no kill
+            // switch (#512-class bug, shared-manifest side).
+            if exists(&shared_path) && read_raw_config_file(&shared_path).malformed {
+                return Err(format!("Cannot reset malformed shared hook manifest {shared_path}; hook config was preserved."));
+            }
+            if file_has_impeccable_hook_marker(&shared_path) {
                 return Err(format!("Remove the shared hook entry from {shared} before resetting; hook config was preserved."));
             }
         }
