@@ -145,11 +145,55 @@ process.stdin.on('end', () => {
 
     assert.equal(result.content.length, 1);
     for (const p of paths) assert.match(result.content[0].text, new RegExp(`finding for ${p}`));
-    // Generous margin above one delay, and well under the sequential worst
-    // case, so ordinary scheduling jitter cannot flip this assertion.
-    assert.ok(elapsed < delayMs * 2, `expected roughly one delay's worth of wall time (concurrent), took ${elapsed}ms`);
+    // The property under test is "not serial": sequential would cost
+    // delayMs * fileCount. Bounding at fileCount - 1 delays leaves no room
+    // for a fully serial run to sneak under the threshold, while still
+    // giving ordinary scheduling jitter (four Node cold starts) a wide
+    // margin above the one-delay concurrent case.
+    assert.ok(
+      elapsed < delayMs * (fileCount - 1),
+      `expected roughly one delay's worth of wall time (concurrent), took ${elapsed}ms`,
+    );
 
     fs.rmSync(slowDir, { recursive: true, force: true });
+  });
+
+  it('survives a launcher that closes stdin before the payload is fully written', async () => {
+    // Regression: writing to a pipe whose read end has already closed raises
+    // EPIPE on the stdin stream itself -- a distinct event from the child
+    // process "error"/"close" events, and previously uncaught. The payload
+    // path is inflated well past a pipe's kernel buffer (64KiB on Linux) so
+    // the write cannot complete in one syscall, forcing a later chunk to
+    // land after this launcher (which exits on the very first tick) has
+    // already closed its end -- making the EPIPE race deterministic instead
+    // of a timing coin flip.
+    const deadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'imp-omp-mod-dead-'));
+    const moduleDir = path.join(deadDir, '.omp', 'hooks', 'post');
+    fs.mkdirSync(moduleDir, { recursive: true });
+    const launcherDir = path.join(deadDir, '.omp', 'skills', 'impeccable', 'scripts');
+    fs.mkdirSync(launcherDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(launcherDir, 'impeccable'),
+      `#!/usr/bin/env node\nprocess.exit(1);\n`,
+      { mode: 0o755 },
+    );
+    const modulePath = path.join(moduleDir, 'impeccable.js');
+    fs.writeFileSync(modulePath, buildOmpHookModule());
+    const mod = await import(pathToFileURL(modulePath).href);
+    const handlers = {};
+    mod.default({ on: (event, fn) => { handlers[event] = fn; } });
+
+    const oversizedPath = `dead-${'x'.repeat(300_000)}.css`;
+
+    // Must resolve (not throw/crash the process) even though the child is
+    // gone before the module's stdin.write() finishes landing.
+    const result = await handlers.tool_result(
+      { toolName: 'edit', input: { path: oversizedPath }, content: [{ type: 'text', text: 'orig' }] },
+      { cwd: deadDir },
+    );
+    assert.equal(result, undefined, 'a failed scan must not fabricate a finding');
+
+    fs.rmSync(deadDir, { recursive: true, force: true });
   });
 
   it('covers ast_edit, and ignores tools that do not write files', async () => {

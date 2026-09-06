@@ -45,6 +45,15 @@ function runHook(payload, timeoutMs, ctx) {
       clearTimeout(timer);
       fail(err.message);
     });
+    // A launcher that exits (or never opens stdin) before the write lands
+    // raises EPIPE on the stdin stream itself, which `child.on("error")`
+    // above does not catch -- an unhandled stream "error" event throws.
+    child.stdin.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      fail(err.message);
+    });
     child.on("close", (code, signal) => {
       if (settled) return;
       settled = true;
