@@ -220,21 +220,27 @@ const STEER_SYSTEM_INSTRUCTIONS = [
  * @property {(msg: string) => void=} log  Optional logger for debug output.
  */
 
-function inceptionKeyFromHelper(env, log = () => {}) {
+/**
+ * Runs the configured Inception key helper. Returns `{ key, error }` rather
+ * than logging directly: resolveLlmAgentConfig() is called well before a
+ * runner's diagnostic logger exists (it's wired up later, when
+ * createLlmAgent() is called with the already-resolved config), so a helper
+ * failure has to travel on the config itself to reach anything that can
+ * report it.
+ */
+function inceptionKeyFromHelper(env) {
   const command = env.IMPECCABLE_E2E_INCEPTION_KEY_CMD ?? DEFAULT_INCEPTION_KEY_COMMAND;
-  if (!command) return undefined;
+  if (!command) return { key: undefined, error: undefined };
   try {
     const out = execFileSync(command, { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] });
-    return out.trim() || undefined;
+    return { key: out.trim() || undefined, error: undefined };
   } catch (err) {
     // ENOENT means no helper on PATH, which is the expected state for anyone
     // who hasn't installed it; stay silent. Anything else (nonzero exit,
     // timeout, permission denied) means a helper the caller named is broken,
     // so name it rather than let every runner report only a missing key.
-    if (err?.code !== 'ENOENT') {
-      log(`inception key helper "${command}" failed: ${err.message}`);
-    }
-    return undefined;
+    if (err?.code === 'ENOENT') return { key: undefined, error: undefined };
+    return { key: undefined, error: `inception key helper "${command}" failed: ${err.message}` };
   }
 }
 
@@ -273,13 +279,21 @@ export function resolveLlmAgentConfig(opts = {}, env = process.env) {
   }
 
   if (provider === 'inception') {
+    let apiKey = opts.apiKey || env.INCEPTION_API_KEY;
+    let keyHelperError;
+    if (!apiKey) {
+      const helper = inceptionKeyFromHelper(env);
+      apiKey = helper.key;
+      keyHelperError = helper.error;
+    }
     return {
       provider,
       model: opts.model || env.IMPECCABLE_E2E_LLM_MODEL || DEFAULT_INCEPTION_MODEL,
-      apiKey: opts.apiKey || env.INCEPTION_API_KEY || inceptionKeyFromHelper(env, opts.log),
+      apiKey,
       requiredEnv: 'INCEPTION_API_KEY',
       baseURL: opts.baseURL || env.INCEPTION_API_BASE_URL || DEFAULT_INCEPTION_API_BASE_URL,
       reasoningEffort: opts.reasoningEffort || env.IMPECCABLE_E2E_LLM_EFFORT || DEFAULT_OPENAI_REASONING_EFFORT,
+      keyHelperError,
     };
   }
 
@@ -361,10 +375,17 @@ async function createOpenAiShim({ apiKey, baseURL, reasoningEffort, useChatCompl
  */
 export async function createLlmAgent(opts = {}) {
   const config = opts.config || resolveLlmAgentConfig(opts);
-  if (!config.apiKey) return null;
+  const log = opts.log || (() => {});
+  if (!config.apiKey) {
+    // The runners resolve the config before a diagnostic logger exists, so a
+    // broken (as opposed to simply absent) Inception key helper can only be
+    // reported here, at the point where the caller's logger is finally in
+    // scope, right before the skip a missing key produces either way.
+    if (config.keyHelperError) log(config.keyHelperError);
+    return null;
+  }
 
   const { apiKey, baseURL, model, provider } = config;
-  const log = opts.log || (() => {});
 
   const liveMd = opts.includeLiveSpec === false ? null : await fs.readFile(LIVE_MD_PATH, 'utf-8');
   const client = provider === 'openai' || provider === 'inception'

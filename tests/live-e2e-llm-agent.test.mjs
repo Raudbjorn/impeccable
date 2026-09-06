@@ -150,27 +150,25 @@ describe('live-e2e LLM agent provider config', () => {
     assert.equal(config.apiKey, undefined);
   });
 
-  it('logs a diagnostic naming the helper when it exists but fails', () => {
-    const messages = [];
-    const config = resolveLlmAgentConfig({ log: (msg) => messages.push(msg) }, {
+  it('carries a keyHelperError on the config when the helper exists but fails', () => {
+    // resolveLlmAgentConfig() runs before a runner's diagnostic logger
+    // exists (see tests/live-e2e.test.mjs), so a broken helper's reason has
+    // to travel on the config itself rather than through a callback here.
+    const config = resolveLlmAgentConfig({}, {
       IMPECCABLE_E2E_LLM_PROVIDER: 'inception',
       IMPECCABLE_E2E_INCEPTION_KEY_CMD: 'false',
     });
     assert.equal(config.apiKey, undefined);
-    assert.ok(
-      messages.some((m) => m.includes('false')),
-      `expected a diagnostic naming the failed helper, got: ${JSON.stringify(messages)}`,
-    );
+    assert.match(config.keyHelperError, /false/);
   });
 
-  it('stays silent when the helper command is simply not installed', () => {
-    const messages = [];
-    const config = resolveLlmAgentConfig({ log: (msg) => messages.push(msg) }, {
+  it('carries no keyHelperError when the helper command is simply not installed', () => {
+    const config = resolveLlmAgentConfig({}, {
       IMPECCABLE_E2E_LLM_PROVIDER: 'inception',
       IMPECCABLE_E2E_INCEPTION_KEY_CMD: '/nonexistent/path/impeccable-does-not-exist',
     });
     assert.equal(config.apiKey, undefined);
-    assert.deepEqual(messages, []);
+    assert.equal(config.keyHelperError, undefined);
   });
 
   it('does not shell out for a key when the helper command is disabled', () => {
@@ -230,6 +228,28 @@ describe('live-e2e LLM agent createLlmAgent', () => {
       },
     });
     assert.equal(agent, null);
+  });
+
+  it('logs a pre-resolved keyHelperError before returning null', async () => {
+    // Mirrors the real runner shape: resolveLlmAgentConfig() ran earlier
+    // without a logger, then createLlmAgent() is called with that config
+    // plus the runner's diagnostic logger.
+    const messages = [];
+    const agent = await createLlmAgent({
+      config: {
+        provider: 'inception',
+        model: 'mercury-2',
+        apiKey: undefined,
+        requiredEnv: 'INCEPTION_API_KEY',
+        keyHelperError: 'inception key helper "false" failed: Command failed: false',
+      },
+      log: (m) => messages.push(m),
+    });
+    assert.equal(agent, null);
+    assert.ok(
+      messages.some((m) => m.includes('helper "false" failed')),
+      `expected the helper failure to be logged, got: ${JSON.stringify(messages)}`,
+    );
   });
 });
 
