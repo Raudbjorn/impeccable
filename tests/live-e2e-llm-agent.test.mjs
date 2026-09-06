@@ -102,6 +102,45 @@ describe('live-e2e LLM agent provider config', () => {
     assert.equal(config.baseURL, 'https://proxy.example.test/anthropic');
   });
 
+  it('resolves Inception Mercury when explicitly selected, key from env', () => {
+    const config = resolveLlmAgentConfig({}, {
+      IMPECCABLE_E2E_LLM_PROVIDER: 'inception',
+      INCEPTION_API_KEY: 'k',
+      IMPECCABLE_E2E_INCEPTION_KEY_CMD: '',
+    });
+    assert.equal(config.provider, 'inception');
+    assert.equal(config.model, 'mercury-2');
+    assert.equal(config.baseURL, 'https://api.inceptionlabs.ai/v1');
+    assert.equal(config.requiredEnv, 'INCEPTION_API_KEY');
+    assert.equal(config.apiKey, 'k');
+  });
+
+  it('reads the Inception key from the local helper when the env var is unset', () => {
+    const config = resolveLlmAgentConfig({}, {
+      IMPECCABLE_E2E_LLM_PROVIDER: 'inception',
+      IMPECCABLE_E2E_INCEPTION_KEY_CMD: 'echo',
+    });
+    // `echo` with no args prints an empty line, so the helper contributes
+    // nothing and the config reports no key. The point is that the command
+    // ran and its (empty) output was trimmed rather than passed through.
+    assert.equal(config.apiKey, undefined);
+  });
+
+  it('does not shell out for a key when the helper command is disabled', () => {
+    const config = resolveLlmAgentConfig({}, {
+      IMPECCABLE_E2E_LLM_PROVIDER: 'inception',
+      IMPECCABLE_E2E_INCEPTION_KEY_CMD: '',
+    });
+    assert.equal(config.apiKey, undefined);
+  });
+
+  it('never auto-selects Inception from the key helper alone', () => {
+    // A helper on PATH must not hijack a run nobody asked for; only an
+    // explicit provider or INCEPTION_API_KEY in the environment selects it.
+    assert.equal(resolveLlmAgentConfig({}, {}).provider, 'openai');
+    assert.equal(resolveLlmAgentConfig({}, { INCEPTION_API_KEY: 'k' }).provider, 'inception');
+  });
+
   it('rejects unsupported providers', () => {
     assert.throws(
       () => resolveLlmAgentConfig({}, { IMPECCABLE_E2E_LLM_PROVIDER: 'other' }),
