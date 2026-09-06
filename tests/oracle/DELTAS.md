@@ -169,3 +169,20 @@ CLI 4.0.0 release; it is what the binary prints when run directly.
 
 - `pin-usage-one-arg`, `pin-bad-command`, `pin-bad-command-teach`: append the restored `design-context` command to the available-command list; all other output and exit behavior is unchanged.
 - `context-native-ios`, `context-adaptive`, `context-android`, `context-adaptive-word`: reflect main's removal of the iOS guide and its revised Android guidance. Only the reviewed guide prose changed.
+
+## Recorded 2026-09-06: `retrieval` joins the recognized config keys
+
+`retrieval.command` in `.impeccable/config.local.json` is what selects the
+local retrieval path, but the staleness check's key list never learned about
+it, so the doctor reported a correctly configured project as carrying a
+top-level key nothing reads. The key is now listed, between `buildPath` and
+`$schema`.
+
+The only line that changed in each golden is the `Recognized keys are ...`
+sentence; the findings, their order, severity, exit codes, and every written
+file are unchanged.
+
+- `context-legacy`, `context-staleness-throttle`, `context-staleness-cache-env`,
+  `doctor-order-boot-and-deep`, `doctor-legacy-json`, `doctor-legacy-fix`,
+  `doctor-legacy-fix-json`, `doctor-legacy-fix-twice`,
+  `doctor-legacy-fix-no-overwrite`, `doctor-config-local-and-shared`.

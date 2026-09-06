@@ -51,6 +51,8 @@ pub const RESTATED_SURFACE: &str = "DEALT INDICES (restated for truncated reader
 
 pub const RESTATED_REGISTER: &str = "REGISTER (restated for truncated readers): @@REGISTER@@, user-requested; the\nassigned index is suspended this round; seed key @@KEY@@.";
 
+pub const RETRIEVAL_BLOCK: &str = "LOCAL SESSION: @@SESSION@@\n  Continue this session with --session @@SESSION@@ --reroll <n>, adding\n  --register <safer|bolder> only for an explicitly steered direction round,\n  or --replay to read a saved round back without re-running retrieval.\n  Record the outcome against this exact round with --chosen <challenger-id>\n  --kind <assigned|pick|challenger|canon> --session @@SESSION@@. The choice\n  goes to the retrieval command, so nothing reaches the roll service.\n  Source references for this round are under .impeccable/retrieval/@@SESSION@@/.\n";
+
 pub const MAIN: &str = "@@SCOPE_UPPER@@ CONCEPT SEED (key: @@KEY@@; mode: @@MODE_OR_UNSCOPED@@; source: @@DATA_SOURCE@@; approved pool: @@DATA_POOLREVISION@@; @@DATA_APPROVEDCOUNT@@/@@DATA_CATALOGCOUNT@@ human-approved; rerun with --scope @@SCOPE@@@@MODE_FLAG@@ --from @@KEY@@@@REROLL_FLAG@@@@REGISTER_FLAG@@ --candidate-count @@CANDIDATECOUNT@@ to reproduce this roll against this catalog revision)\n@@REROLLBLOCK@@@@ASSIGNEDBLOCK@@\n@@CHALLENGERSECTION@@@@AUTHORITYINSTRUCTION@@\n@@RICHNESSINSTRUCTION@@\n@@TELEMETRYBLOCK@@A user- or brief-pinned decision beats the roll, always.\n@@RESTATED@@\n";
 
 pub const RENDER_CHALLENGER: &str = "  @@INDEX_PLUS_ONE@@. @@CONCEPT_FORM@@\n     SOURCE ID: @@CONCEPT_ID@@\n     CREATIVE SPARK: @@CONCEPT_SPARK@@\n     SYSTEM GRAMMAR:\n@@SYSTEM@@\n     WEB LEVERAGE: @@CONCEPT_WEBLEVERAGE@@\n     QUALITY BAR: board @@BOARD@@ · hero @@HERO@@";

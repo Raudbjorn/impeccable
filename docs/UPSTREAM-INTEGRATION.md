@@ -70,9 +70,15 @@ have written somewhere temporary.
   middleware), so it was kept; the two config extensions are a separate, smaller
   gap that can be closed on their own.
 - The fork's `crates/` lead upstream by the `.omp` provider, `omp-hook.js`, the
-  label-line-height rule and the live glob tests, but the launcher downloads
-  engine binaries from `pbakaus/impeccable` and this fork publishes no engine
-  release. Anyone who does not build from source runs an upstream binary without
-  that work. `ENGINE_VERSION` is 0.1.1 here, which is a real upstream release
-  with published npm platform packages, so the release gate passes; it does not
-  mean fork engine changes reach users.
+  label-line-height rule, the live glob tests and now local retrieval, but the
+  launcher downloads engine binaries from `pbakaus/impeccable` and this fork
+  publishes no engine release. Anyone who does not build from source runs an
+  upstream binary without that work, whatever `ENGINE_VERSION` says. The pin
+  stays at main's 0.1.0 here: this branch is a merge, not a release, and moving
+  the number does not move the binary. Closing the gap means publishing a fork
+  engine release and pointing the launcher's download base at it, which is its
+  own change with its own release steps.
+- Retrieval rounds are the only source that renders compositions without
+  `IMPECCABLE_COMPOSITIONS=1`, because a round is validated for a non-empty
+  composition list and a staging drawn from it. The flag still gates the other
+  sources.

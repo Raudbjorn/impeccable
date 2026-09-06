@@ -193,7 +193,7 @@ fn validate(request: &Value, response: &Value) -> Result<(), String> {
         .and_then(|r| r.get("compositions"))
         .and_then(Value::as_array);
     let ok = response.get("session").is_some_and(truthy)
-        && response.get("settings").is_some_and(truthy)
+        && response.get("settings").is_some_and(Value::is_object)
         && record.is_some_and(truthy)
         && challengers.is_some_and(|c| !c.is_empty())
         && compositions.is_some_and(|c| !c.is_empty());
@@ -207,8 +207,12 @@ fn validate(request: &Value, response: &Value) -> Result<(), String> {
             return Err("session mismatch".into());
         }
     }
-    let want_round = request.get("round").and_then(Value::as_i64).unwrap_or(0);
-    if response.get("round").and_then(Value::as_i64).unwrap_or(-1) != want_round {
+    // Both ends of this protocol serialize numbers from floats, so the same
+    // round arrives as `1` from one writer and `1.0` from another. `as_i64`
+    // answers None for the second spelling, which used to collapse every
+    // request round to 0 and reject every round after the first.
+    let want_round = request.get("round").and_then(Value::as_f64).unwrap_or(0.0);
+    if response.get("round").and_then(Value::as_f64) != Some(want_round) {
         return Err("round mismatch".into());
     }
     let norm = |v: Option<&Value>| match v {
@@ -216,14 +220,15 @@ fn validate(request: &Value, response: &Value) -> Result<(), String> {
         Some(other) => other.clone(),
     };
     if norm(response.get("register")) != norm(request.get("register")) {
-        return Err("round mismatch".into());
+        return Err("register mismatch".into());
     }
     if let Some(settings) = request.get("settings").and_then(Value::as_object) {
         for (key, value) in settings {
             if value.is_null() {
                 continue;
             }
-            if response.get("settings").and_then(|s| s.get(key)) != Some(value) {
+            let got = response.get("settings").and_then(|s| s.get(key));
+            if !got.is_some_and(|got| same_value(got, value)) {
                 return Err(format!("settings mismatch: {key}"));
             }
         }
@@ -271,6 +276,20 @@ fn truthy(v: &Value) -> bool {
     crate::staleness::js_truthy(v)
 }
 
+/// `Value` equality is spelling equality for numbers: a `candidateCount` sent
+/// as `6.0` is not equal to the `6` a JSON writer echoes back, though no
+/// retrieval command can tell the two apart. Compare numbers by value and
+/// everything else structurally.
+fn same_value(a: &Value, b: &Value) -> bool {
+    match (a, b) {
+        (Value::Number(x), Value::Number(y)) => match (x.as_f64(), y.as_f64()) {
+            (Some(x), Some(y)) => x == y,
+            _ => x == y,
+        },
+        _ => a == b,
+    }
+}
+
 fn hashed_name(bytes: &[u8], source: &str) -> String {
     let digest = format!("{:x}", Sha256::digest(bytes));
     match source.rfind('.') {
@@ -280,6 +299,18 @@ fn hashed_name(bytes: &[u8], source: &str) -> String {
             format!("{digest}{}", &source[idx..])
         }
         _ => digest,
+    }
+}
+
+/// A JSON number for a value that arithmetic produced as a float. `6.0` and
+/// `6` are different `Value`s to a comparison but the same number to every
+/// retrieval command, so integral values cross the protocol as integers and a
+/// response echoing `6` matches a request that asked for `6.0`.
+pub fn number(n: f64) -> Value {
+    if n.is_finite() && n.fract() == 0.0 && n.abs() < 9_007_199_254_740_992.0 {
+        json!(n as i64)
+    } else {
+        json!(n)
     }
 }
 
@@ -357,12 +388,20 @@ pub fn materialize_round(response: &Value, cwd: &str) -> Result<Value, String> {
         }
     }
 
-    let register = response
-        .get("register")
-        .and_then(Value::as_str)
-        .filter(|s| !s.is_empty())
-        .unwrap_or("normal");
-    let round = response.get("round").and_then(Value::as_i64).unwrap_or(0);
+    // The register lands in a filename, so it is matched against the vocabulary
+    // the CLI accepts rather than copied out of the response. A round answering
+    // `../../../outside` would otherwise write through the session directory.
+    let register = match response.get("register").and_then(Value::as_str) {
+        Some("safer") => "safer",
+        Some("bolder") => "bolder",
+        _ => "normal",
+    };
+    let round = response
+        .get("round")
+        .and_then(Value::as_f64)
+        .filter(|n| n.is_finite() && *n >= 0.0)
+        .map(|n| n as u64)
+        .unwrap_or(0);
     let file = jsp::join(&[&directory, &format!("round-{round}-{register}.json")]);
     let mut text = serde_json::to_string_pretty(&local).map_err(|e| e.to_string())?;
     text.push('\n');
@@ -481,6 +520,93 @@ mod tests {
         let request = serde_json::json!({"op": "start", "round": 0, "settings": {"key": "other"}});
         let err = call_retrieval(&request, ".", &cfg).unwrap_err();
         assert!(err.contains("settings mismatch: key"), "{err}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_nonzero_round_survives_the_float_spelling_the_cli_sends() {
+        // The CLI builds `round` from an f64, so it arrives as `1.0` while a
+        // retrieval command answers `1`. Comparing with `as_i64` read the
+        // request as None, defaulted it to 0, and rejected every round past
+        // the first. The fixture has to use the same builder the CLI does.
+        let mut ok: Value = serde_json::from_str(&round_json()).unwrap();
+        ok["round"] = json!(1);
+        let cfg = echo_config(&ok.to_string(), 30_000);
+        let request = serde_json::json!({
+            "op": "round",
+            "round": number(1.0),
+            "settings": {"key": "k1"},
+        });
+        let out = call_retrieval(&request, ".", &cfg).unwrap();
+        assert_eq!(out["round"], json!(1));
+
+        // The other direction: a command written in a language whose JSON
+        // writer prints 1.0 for an integral float. Only comparing the numbers
+        // rather than their spelling accepts both.
+        ok["round"] = json!(1.0);
+        let cfg = echo_config(&ok.to_string(), 30_000);
+        let out = call_retrieval(&request, ".", &cfg).unwrap();
+        assert_eq!(out["round"].as_f64(), Some(1.0));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_settings_number_matches_across_spellings() {
+        let mut ok: Value = serde_json::from_str(&round_json()).unwrap();
+        ok["settings"] = json!({"key": "k1", "candidateCount": 6});
+        let cfg = echo_config(&ok.to_string(), 30_000);
+        // `--candidate-count 6` reaches here as 6.0; the command echoes 6.
+        let request = serde_json::json!({
+            "op": "start",
+            "round": number(0.0),
+            "settings": {"key": "k1", "candidateCount": number(6.0)},
+        });
+        assert!(call_retrieval(&request, ".", &cfg).is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn settings_has_to_be_an_object() {
+        // `"settings": true` is truthy, and every later read of it answers
+        // None, so the round would render with its settings silently dropped.
+        let mut bad: Value = serde_json::from_str(&round_json()).unwrap();
+        bad["settings"] = json!(true);
+        let cfg = echo_config(&bad.to_string(), 30_000);
+        let request = serde_json::json!({"op": "start", "round": 0});
+        let err = call_retrieval(&request, ".", &cfg).unwrap_err();
+        assert!(err.contains("missing candidates or session"), "{err}");
+    }
+
+    #[test]
+    fn a_register_never_escapes_the_session_directory() {
+        // materialize_round names the round file after the register. Copying
+        // an unvalidated one out of the response let a retrieval command write
+        // anywhere the process could reach.
+        let ws = workspace(None);
+        let cwd = ws.to_string_lossy().to_string();
+        let mut round: Value = serde_json::from_str(&round_json()).unwrap();
+        round["register"] = json!("../../../outside");
+        materialize_round(&round, &cwd).unwrap();
+
+        let session_dir = ws.join(".impeccable/retrieval").join("a".repeat(64));
+        let written: Vec<String> = std::fs::read_dir(&session_dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
+            .collect();
+        assert_eq!(written, vec!["round-0-normal.json".to_string()]);
+        // `jsp::join` normalizes the way Node's path.join does, so the `..`
+        // segments collapsed lexically and the write landed here, three levels
+        // out of the session directory, before the register was restricted.
+        assert!(!ws.join("outside.json").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_register_mismatch_says_register_not_round() {
+        let cfg = echo_config(&round_json(), 30_000);
+        let request = serde_json::json!({"op": "round", "round": 0, "register": "bolder"});
+        let err = call_retrieval(&request, ".", &cfg).unwrap_err();
+        assert!(err.contains("register mismatch"), "{err}");
     }
 
     #[cfg(unix)]
