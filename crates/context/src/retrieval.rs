@@ -194,14 +194,21 @@ fn validate(request: &Value, response: &Value) -> Result<(), String> {
         .and_then(Value::as_array);
     // One check per field, because these are five different mistakes to make
     // in a retrieval command and the reader has to know which one they made.
-    if !response.get("session").is_some_and(truthy) {
-        return Err("response has no session".into());
+    if !response
+        .get("session")
+        .and_then(Value::as_str)
+        .is_some_and(|s| !s.is_empty())
+    {
+        // Truthy alone let `"session": true` through to materialize_round,
+        // which rejected it as an invalid session ID three steps later.
+        return Err("session must be a non-empty string".into());
     }
     if !response.get("settings").is_some_and(Value::is_object) {
         return Err("settings must be an object".into());
     }
-    if !record.is_some_and(truthy) {
-        return Err("response has no record".into());
+    if !record.is_some_and(Value::is_object) {
+        // A truthy non-object record reported its challengers as the problem.
+        return Err("record must be an object".into());
     }
     if !challengers.is_some_and(|c| !c.is_empty()) {
         return Err("record.challengers must be a non-empty array".into());
@@ -254,29 +261,59 @@ fn validate(request: &Value, response: &Value) -> Result<(), String> {
         list.len() == items.len()
             && list.iter().collect::<std::collections::BTreeSet<_>>().len() == list.len()
     };
-    let challenger_ok = |c: &Value| {
-        c.get("id").is_some_and(truthy)
-            && c.get("system").is_some_and(|s| s.is_array())
-            && c.get("wellTier")
-                .and_then(Value::as_str)
-                .is_some_and(|t| WELL_TIERS.contains(&t))
+    let challenger_problem = |c: &Value| -> Option<String> {
+        if !c.get("id").is_some_and(truthy) {
+            return Some("a challenger has no id".to_string());
+        }
+        let id = c.get("id").and_then(Value::as_str).unwrap_or_default();
+        if !c.get("system").is_some_and(|s| s.is_array()) {
+            return Some(format!("challenger {id}: system must be an array"));
+        }
+        match c.get("wellTier").and_then(Value::as_str) {
+            Some(t) if WELL_TIERS.contains(&t) => None,
+            Some(t) => Some(format!("challenger {id}: unknown well tier {t}")),
+            None => Some(format!(
+                "challenger {id}: wellTier must be one of {}",
+                WELL_TIERS.join(", ")
+            )),
+        }
     };
-    let composition_ok =
-        |c: &Value| c.get("id").is_some_and(truthy) && c.get("grammar").is_some_and(|g| g.is_array());
+    let composition_problem = |c: &Value| -> Option<String> {
+        if !c.get("id").is_some_and(truthy) {
+            return Some("a composition has no id".to_string());
+        }
+        let id = c.get("id").and_then(Value::as_str).unwrap_or_default();
+        if !c.get("grammar").is_some_and(|g| g.is_array()) {
+            return Some(format!("composition {id}: grammar must be an array"));
+        }
+        None
+    };
     let staging = record.and_then(|r| r.get("staging"));
     let staging_present = staging.is_some_and(|s| compositions.iter().any(|c| c == s));
     let stagings_ok = match record.and_then(|r| r.get("stagings")) {
         None | Some(Value::Null) => true,
         Some(list) => list.as_array().is_some_and(|l| l == compositions),
     };
-    if !unique(challengers)
-        || !challengers.iter().all(challenger_ok)
-        || !unique(compositions)
-        || !compositions.iter().all(composition_ok)
-        || !staging_present
-        || !stagings_ok
-    {
-        return Err("invalid candidate roles or staging".into());
+    // Six more distinct mistakes, for the same reason as the fields above: a
+    // round rejected as "invalid" tells the implementer nothing about which
+    // candidate, or which of its parts, the reader could not use.
+    if !unique(challengers) {
+        return Err("record.challengers has duplicate or missing ids".into());
+    }
+    if let Some(problem) = challengers.iter().find_map(challenger_problem) {
+        return Err(problem);
+    }
+    if !unique(compositions) {
+        return Err("record.compositions has duplicate or missing ids".into());
+    }
+    if let Some(problem) = compositions.iter().find_map(composition_problem) {
+        return Err(problem);
+    }
+    if !staging_present {
+        return Err("record.staging must be one of record.compositions".into());
+    }
+    if !stagings_ok {
+        return Err("record.stagings must equal record.compositions".into());
     }
     Ok(())
 }
@@ -580,8 +617,10 @@ mod tests {
         // retrieval command nothing, and named a `candidates` field that does
         // not exist in the protocol.
         for (mutate, want) in [
-            (("session", Value::Null), "response has no session"),
-            (("record", Value::Null), "response has no record"),
+            (("session", Value::Null), "session must be a non-empty string"),
+            (("session", json!(true)), "session must be a non-empty string"),
+            (("record", Value::Null), "record must be an object"),
+            (("record", json!(true)), "record must be an object"),
         ] {
             let mut bad: Value = serde_json::from_str(&round_json()).unwrap();
             bad[mutate.0] = mutate.1;
@@ -657,7 +696,7 @@ mod tests {
         let cfg = echo_config(&bad.to_string(), 30_000);
         let request = serde_json::json!({"op": "start", "round": 0});
         let err = call_retrieval(&request, ".", &cfg).unwrap_err();
-        assert!(err.contains("invalid candidate roles or staging"), "{err}");
+        assert!(err.contains("record.staging must be one of record.compositions"), "{err}");
     }
 
     #[cfg(unix)]
@@ -667,7 +706,8 @@ mod tests {
         bad["record"]["challengers"][0]["wellTier"] = serde_json::json!("sparkle");
         let cfg = echo_config(&bad.to_string(), 30_000);
         let request = serde_json::json!({"op": "start", "round": 0});
-        assert!(call_retrieval(&request, ".", &cfg).is_err());
+        let err = call_retrieval(&request, ".", &cfg).unwrap_err();
+        assert!(err.contains("challenger c1: unknown well tier sparkle"), "{err}");
     }
 
     #[cfg(unix)]
