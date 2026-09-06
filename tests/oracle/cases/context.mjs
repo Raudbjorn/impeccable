@@ -146,6 +146,17 @@ function tinyPng() {
   const idat = zlib.deflateSync(Buffer.from([0, 255, 0, 0]));
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), pngChunk('IHDR', ihdr), pngChunk('IDAT', idat), pngChunk('IEND', Buffer.alloc(0))]);
 }
+// A PNG carrying the literal bytes `IEND` inside a tEXt chunk, before the real
+// terminator chunk. An embedder that located the terminator with a byte search
+// (buf.indexOf('IEND')) would splice at the decoy and corrupt the file; the
+// engine walks the chunk list instead. Nothing else in the corpus has metadata
+// that can impersonate the terminator.
+function pngWithIendDecoy() {
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(1, 0); ihdr.writeUInt32BE(1, 4); ihdr[8] = 8; ihdr[9] = 2; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
+  const idat = zlib.deflateSync(Buffer.from([0, 255, 0, 0]));
+  const decoy = pngChunk('tEXt', Buffer.from('Comment\u0000synthetic IEND source marker', 'latin1'));
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), pngChunk('IHDR', ihdr), decoy, pngChunk('IDAT', idat), pngChunk('IEND', Buffer.alloc(0))]);
+}
 function tinyJpeg() {
   // SOI, APP0 (JFIF), SOS, EOI. Enough structure for the COM reader/writer.
   const app0 = Buffer.from([0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00]);
@@ -166,7 +177,7 @@ const imagesSetup = (ws) => {
   fs.writeFileSync(path.join(ws, 'prompt.txt'), 'A prompt read from a file.\nSecond line.\n');
 };
 
-const CATALOG = `${REPO}/tests/oracle/fixtures/concept-catalog`;
+const CATALOG = `${REPO}/tests/fixtures/concept-catalog`;
 const seedEnv = (extra = {}) => env({ IMPECCABLE_CATALOG_DIR: CATALOG, IMPECCABLE_API_URL: 'http://127.0.0.1:9/api', IMPECCABLE_API_TIMEOUT: '300', ...extra });
 const degradedEnv = (extra = {}) => env({ IMPECCABLE_CATALOG_DIR: `${WS}/no-such-catalog`, IMPECCABLE_API_URL: 'http://127.0.0.1:9/api', IMPECCABLE_API_TIMEOUT: '300', ...extra });
 
@@ -189,8 +200,8 @@ const cases = [
   { id: 'context-target-missing-value', verb: 'context', workspace: 'ctx-full', setup: sidecarNewer, args: ['--target'], env: env() },
   { id: 'context-target-eq-empty', verb: 'context', workspace: 'ctx-full', setup: sidecarNewer, args: ['--target='], env: env() },
   { id: 'context-target-followed-by-flag', verb: 'context', workspace: 'ctx-full', setup: sidecarNewer, args: ['--target', '--help'], env: env() },
-  { id: 'context-native-ios', verb: 'context', workspace: 'ctx-native-ios', env: env({ IMPECCABLE_SKILL_DIR: `${REPO}/tests/oracle/fixtures/native-skill` }), files: IMPECCABLE_FILES },
-  { id: 'context-adaptive', verb: 'context', workspace: 'ctx-adaptive', env: env({ IMPECCABLE_SKILL_DIR: `${REPO}/tests/oracle/fixtures/native-skill` }), files: IMPECCABLE_FILES },
+  { id: 'context-native-ios', verb: 'context', workspace: 'ctx-native-ios', env: env(), files: IMPECCABLE_FILES },
+  { id: 'context-adaptive', verb: 'context', workspace: 'ctx-adaptive', env: env(), files: IMPECCABLE_FILES },
   { id: 'context-bad-platform', verb: 'context', workspace: 'ctx-bad-platform', env: env(), files: IMPECCABLE_FILES },
   { id: 'context-monorepo-root', verb: 'context', workspace: 'ctx-monorepo', env: env(), files: IMPECCABLE_FILES },
   { id: 'context-monorepo-target-a', verb: 'context', workspace: 'ctx-monorepo', args: ['--target', 'apps/a/src/App.tsx'], env: env(), files: IMPECCABLE_FILES },
@@ -318,8 +329,8 @@ const cases = [
   { id: 'context-lowercase-product-name', platforms: ['darwin', 'win32'], verb: 'context', workspace: 'ctx-empty', setup: (ws) => write(ws, 'product.md', '# lower\n\n<!-- impeccable:product-schema 1 -->\n\n## Positioning\nLowercase filename.\n'), env: env(), files: IMPECCABLE_FILES },
   { id: 'context-design-only', verb: 'context', workspace: 'ctx-empty', setup: (ws) => write(ws, 'DESIGN.md', '---\nname: Only\n---\n# Design: Only\n\n## Colors\n- **Ink** (#111): Text.\n'), env: env(), files: IMPECCABLE_FILES },
   { id: 'context-empty-platform-section', verb: 'context', workspace: 'ctx-empty', setup: (ws) => write(ws, 'PRODUCT.md', '# P\n\n<!-- impeccable:product-schema 1 -->\n\n## Platform\n\n## Positioning\nEmpty platform section.\n'), env: env(), files: IMPECCABLE_FILES },
-  { id: 'context-android', verb: 'context', workspace: 'ctx-empty', setup: (ws) => write(ws, 'PRODUCT.md', '# P\n\n<!-- impeccable:product-schema 1 -->\n\n## Platform\n\nAndroid\n\n## Positioning\nNative android.\n'), env: env({ IMPECCABLE_SKILL_DIR: `${REPO}/tests/oracle/fixtures/native-skill` }), files: IMPECCABLE_FILES },
-  { id: 'context-adaptive-word', verb: 'context', workspace: 'ctx-empty', setup: (ws) => write(ws, 'PRODUCT.md', '# P\n\n<!-- impeccable:product-schema 1 -->\n\n## Platform\n\nadaptive\n\n## Positioning\nAdaptive keyword.\n'), env: env({ IMPECCABLE_SKILL_DIR: `${REPO}/tests/oracle/fixtures/native-skill` }), files: IMPECCABLE_FILES },
+  { id: 'context-android', verb: 'context', workspace: 'ctx-empty', setup: (ws) => write(ws, 'PRODUCT.md', '# P\n\n<!-- impeccable:product-schema 1 -->\n\n## Platform\n\nAndroid\n\n## Positioning\nNative android.\n'), env: env(), files: IMPECCABLE_FILES },
+  { id: 'context-adaptive-word', verb: 'context', workspace: 'ctx-empty', setup: (ws) => write(ws, 'PRODUCT.md', '# P\n\n<!-- impeccable:product-schema 1 -->\n\n## Platform\n\nadaptive\n\n## Positioning\nAdaptive keyword.\n'), env: env(), files: IMPECCABLE_FILES },
   { id: 'context-native-evidence-web', verb: 'context', workspace: 'ctx-product-only', setup: (ws) => write(ws, 'ios/Podfile', "platform :ios, '15.0'\n"), env: env(), files: IMPECCABLE_FILES },
   { id: 'context-build-path-unset-with-surfaces', verb: 'context', workspace: 'ctx-product-only', setup: (ws) => write(ws, '.impeccable/surfaces/src-app-tsx.md', '---\nversion: 1\nslug: "src-app-tsx"\nprimary_target: "src/App.tsx"\nrelated_targets: []\n---\n\n# Surface brief: App\n'), env: env(), files: IMPECCABLE_FILES },
   { id: 'context-project-roots-match-nothing', verb: 'context', workspace: 'ctx-monorepo', setup: (ws) => write(ws, '.impeccable/config.json', JSON.stringify({ projectRoots: ['services/*'] }, null, 2) + '\n'), env: env(), files: IMPECCABLE_FILES },
@@ -576,6 +587,12 @@ const cases = [
     { args: ['assets/a.png', '--read'] },
   ] },
   { id: 'embed-png-malformed', verb: 'embed-prompt', workspace: 'ctx-empty', setup: (ws) => { imagesSetup(ws); fs.writeFileSync(path.join(ws, 'assets/bad.png'), Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('garbage-not-chunks')])); }, args: ['assets/bad.png', '--prompt', 'x'], env: env(), files: ['assets/bad.png*'] },
+  { id: 'embed-png-iend-in-metadata', verb: 'embed-prompt', workspace: 'ctx-empty', setup: (ws) => { imagesSetup(ws); fs.writeFileSync(path.join(ws, 'assets/iend.png'), pngWithIendDecoy()); }, env: env(), files: ['assets/iend.png*'], steps: [
+    { args: ['assets/iend.png', '--prompt', 'First production prompt.'] },
+    { args: ['assets/iend.png', '--read'] },
+    { args: ['assets/iend.png', '--prompt', 'Replacement production prompt.'] },
+    { args: ['assets/iend.png', '--read'] },
+  ] },
   { id: 'embed-jpeg', verb: 'embed-prompt', workspace: 'ctx-empty', setup: imagesSetup, env: env(), files: ['assets/b.jpg*'], steps: [
     { args: ['assets/b.jpg', '--prompt', 'JPEG prompt one.'] },
     { args: ['assets/b.jpg', '--read'] },
@@ -632,7 +649,7 @@ const cases = [
   { id: 'csp-proxy-src', verb: 'detect-csp', workspace: 'ctx-csp-none', setup: (ws) => write(ws, 'src/proxy.ts', PROXY_CSP_SOURCE), env: env() },
   {
     id: 'csp-proxy-nested-app', verb: 'detect-csp', workspace: 'ctx-csp-none',
-    setup: (ws) => { write(ws, 'apps/web/app/page.tsx', 'export default function Page() { return null; }\n'); write(ws, 'apps/web/proxy.ts', PROXY_CSP_SOURCE); },
+    setup: (ws) => { write(ws, 'apps/web/next.config.mjs', 'export default {};\n'); write(ws, 'apps/web/app/page.tsx', 'export default function Page() { return null; }\n'); write(ws, 'apps/web/proxy.ts', PROXY_CSP_SOURCE); },
     env: env(),
   },
   {

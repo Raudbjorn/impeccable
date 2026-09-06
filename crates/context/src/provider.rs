@@ -8,7 +8,7 @@
 //! - **Skill dir**: `IMPECCABLE_SKILL_DIR` when set; otherwise walk up from the
 //!   executable's path (the binary ships at `<skill>/scripts/bin/<target>/` or
 //!   is launched via `<skill>/scripts/impeccable`) until a directory holding
-//!   `reference/ios.md` is found. `None` when neither works (source checkouts
+//!   `SKILL.md` is found. `None` when neither works (source checkouts
 //!   running `target/debug/impeccable` need the env var).
 //! - **Provider id**: `IMPECCABLE_PROVIDER_ID` when set; otherwise derived from
 //!   the skill dir's harness folder (`<root>/.codex/skills/impeccable` ->
@@ -20,6 +20,8 @@
 
 use crate::jsp;
 use crate::util::Env;
+
+pub const OMP_HOOK_MODULE: &str = include_str!("../assets/omp-hook.js");
 
 pub const SOURCE_PROVIDER: &str = "source";
 
@@ -41,7 +43,7 @@ fn exe_path() -> Option<String> {
 fn find_skill_dir_from(start: &str) -> Option<String> {
     let mut dir = start.to_string();
     loop {
-        if crate::util::exists(&jsp::join(&[&dir, "reference", "ios.md"])) {
+        if crate::util::exists(&jsp::join(&[&dir, "SKILL.md"])) {
             return Some(dir);
         }
         let parent = jsp::dirname(&dir);
@@ -74,6 +76,8 @@ fn provider_from_skill_dir(skill_dir: &str) -> Option<&'static str> {
         ".trae-cn" => "trae-cn",
         ".rovodev" => "rovo-dev",
         ".vibe" => "vibe",
+        ".veto" => "veto",
+        ".omp" => "omp",
         ".grok" => "grok",
         ".agent" => "antigravity",
         ".hermes" => "hermes",
@@ -94,7 +98,7 @@ pub fn detect(env: &Env, cwd: &str) -> Provider {
             .unwrap_or(SOURCE_PROVIDER)
             .to_string(),
     };
-    let command_prefix = if id == "codex" { "$" } else { "/" }.to_string();
+    let command_prefix = if id == "codex" { "$" } else if id == "omp" { "/skill:" } else { "/" }.to_string();
     let command = format!("{}impeccable", command_prefix);
     let self_cmd = match env.get("IMPECCABLE_SELF").filter(|v| !v.trim().is_empty()) {
         Some(v) => v.trim().to_string(),
@@ -116,5 +120,23 @@ impl Provider {
     /// `node <scripts>/<verb>.mjs`.
     pub fn verb_cmd(&self, verb: &str) -> String {
         format!("{} {}", self.self_cmd, verb)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn veto_provider_from_installed_skill() {
+        let mut env = Env::new();
+        env.insert("IMPECCABLE_SKILL_DIR".into(), ".veto/skills/impeccable".into());
+        let provider = detect(&env, &std::env::temp_dir().to_string_lossy());
+        assert_eq!(provider.id, "veto");
+        assert_eq!(provider.command, "/impeccable");
+        env.insert("IMPECCABLE_SKILL_DIR".into(), ".omp/skills/impeccable".into());
+        let provider = detect(&env, &std::env::temp_dir().to_string_lossy());
+        assert_eq!(provider.id, "omp");
+        assert_eq!(provider.command, "/skill:impeccable");
     }
 }

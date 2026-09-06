@@ -19,53 +19,6 @@ rem   ARM64 the arm64 asset is tried first and the x64 asset is the
 rem   fallback (Windows on ARM runs x64 binaries).
 if not defined IMPECCABLE_SKILL_DIR set "IMPECCABLE_SKILL_DIR=%~dp0.."
 if not defined IMPECCABLE_SELF set "IMPECCABLE_SELF=%~f0"
-if "%IMPECCABLE_NATIVE%"=="1" goto native_engine
-if "%~1"=="build-phase" goto fork_command
-if "%~1"=="comp-diff" goto fork_command
-if "%~1"=="comp-spec" goto fork_command
-if "%~1"=="concept-seed" goto fork_command
-if "%~1"=="context" goto fork_command
-if "%~1"=="context-signals" goto fork_command
-if "%~1"=="critique-storage" goto fork_command
-if "%~1"=="design-context-export" goto fork_command
-if "%~1"=="design-context-import" goto fork_command
-if "%~1"=="detect" goto fork_command
-if "%~1"=="detect-csp" goto fork_command
-if "%~1"=="doctor" goto fork_command
-if "%~1"=="embed-prompt" goto fork_command
-if "%~1"=="font-match" goto fork_command
-if "%~1"=="generate-image" goto fork_command
-if "%~1"=="hook" goto fork_command
-if "%~1"=="hook-admin" goto fork_command
-if "%~1"=="hooks" goto fork_command
-if "%~1"=="image-gen" goto fork_command
-if "%~1"=="live" goto fork_command
-if "%~1"=="live-accept" goto fork_command
-if "%~1"=="live-commit-manual-edits" goto fork_command
-if "%~1"=="live-complete" goto fork_command
-if "%~1"=="live-copy-edit-agent" goto fork_command
-if "%~1"=="live-discard-manual-edits" goto fork_command
-if "%~1"=="live-inject" goto fork_command
-if "%~1"=="live-insert" goto fork_command
-if "%~1"=="live-manual-edit-evidence" goto fork_command
-if "%~1"=="live-poll" goto fork_command
-if "%~1"=="live-resume" goto fork_command
-if "%~1"=="live-server" goto fork_command
-if "%~1"=="live-status" goto fork_command
-if "%~1"=="live-target" goto fork_command
-if "%~1"=="live-wrap" goto fork_command
-if "%~1"=="palette" goto fork_command
-if "%~1"=="pin" goto fork_command
-if "%~1"=="score-evidence" goto fork_command
-if "%~1"=="serve-question" goto fork_command
-if "%~1"=="signals" goto fork_command
-if "%~1"=="surface-brief" goto fork_command
-if "%~1"=="visual-cues" goto fork_command
-goto native_engine
-:fork_command
-node "%~dp0fork-command.mjs" %*
-exit /b
-:native_engine
 set "arch=x64"
 if /I "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "arch=arm64"
 

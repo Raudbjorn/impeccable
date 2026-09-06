@@ -32,7 +32,7 @@ import { fileURLToPath } from 'node:url';
 import { after, before, beforeEach, describe, it } from 'node:test';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PKG_PATH = path.join(REPO, 'cli', 'native', 'package.json');
+const PKG_PATH = path.join(REPO, 'package.json');
 const VERSION = JSON.parse(fs.readFileSync(PKG_PATH, 'utf8'))
   .optionalDependencies['@impeccable/cli-darwin-arm64'];
 const TARGET = `${{ darwin: 'darwin', linux: 'linux', win32: 'windows' }[process.platform] || process.platform}`
@@ -90,8 +90,8 @@ beforeEach(() => { requests = []; });
 function stageShim() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-shim-'));
   fs.mkdirSync(path.join(dir, 'cli', 'bin'), { recursive: true });
-  fs.copyFileSync(PKG_PATH, path.join(dir, 'cli', 'package.json'));
-  fs.copyFileSync(path.join(REPO, 'cli', 'native', 'bin', 'cli.js'), path.join(dir, 'cli', 'bin', 'cli.js'));
+  fs.copyFileSync(PKG_PATH, path.join(dir, 'package.json'));
+  fs.copyFileSync(path.join(REPO, 'cli', 'bin', 'cli.js'), path.join(dir, 'cli', 'bin', 'cli.js'));
   return { dir, shim: path.join(dir, 'cli', 'bin', 'cli.js') };
 }
 

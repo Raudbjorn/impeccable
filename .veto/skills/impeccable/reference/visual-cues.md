@@ -455,4 +455,3 @@ If the references are missing because the interview was skipped, say in one line
 Parse the finished file as JSON and verify its version, specimen, preview (every field above), six unique ids, six unique heading families, role names, weights, and short `why` fields before continuing.
 
 Done when: `fonts.json` is parseable, contains exactly six ranked pairs, every family name has been checked against Google Fonts, and the preview copy reads as this product, not generic SaaS filler.
-

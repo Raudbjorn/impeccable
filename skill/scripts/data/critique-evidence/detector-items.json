@@ -358,6 +358,13 @@
       "impact_source": "default"
     },
     {
+      "id": "label-line-height",
+      "impact": -1,
+      "heuristic_id": "amd",
+      "source": "detector",
+      "impact_source": "default"
+    },
+    {
       "id": "text-overflow",
       "impact": -1,
       "heuristic_id": "amd",

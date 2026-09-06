@@ -692,6 +692,23 @@ fn repair_hook_manifests(cwd: &str) -> Result<Repaired, String> {
         already: vec![],
         backups: vec![],
     };
+    if exists(&jsp::join(&[cwd, ".omp/skills/impeccable"])) {
+        let dest = jsp::join(&[cwd, ".omp/hooks/post/impeccable.js"]);
+        let current = safe_read(&dest);
+        let fresh = impeccable_context::provider::OMP_HOOK_MODULE;
+        if current.as_deref() == Some(fresh) {
+            result.already.push(".omp".into());
+        } else {
+            if current.is_some() {
+                let backup = format!("{dest}.bak");
+                std::fs::copy(&dest, &backup).map_err(|e| e.to_string())?;
+                result.backups.push(backup);
+            }
+            std::fs::create_dir_all(jsp::dirname(&dest)).map_err(|e| e.to_string())?;
+            std::fs::write(&dest, fresh).map_err(|e| e.to_string())?;
+            result.written.push(".omp".into());
+        }
+    }
     for target in HOOK_MANIFEST_TARGETS {
         if !exists(&jsp::join(&[cwd, target.skill_rel])) {
             continue;
@@ -1191,7 +1208,27 @@ fn add_ignore_value(rt: &Runtime, cwd: &str, args: &[String]) -> Result<String, 
 }
 
 /// JS: reset(cwd)
-fn reset(rt: &Runtime, cwd: &str) -> String {
+fn reset(rt: &Runtime, cwd: &str) -> Result<String, String> {
+    let mut pruned: Vec<String> = Vec::new();
+    for target in HOOK_MANIFEST_TARGETS {
+        if let Some(shared) = target.shared_dest_rel {
+            if file_has_impeccable_hook_marker(&jsp::join(&[cwd, shared])) {
+                return Err(format!("Remove the shared hook entry from {shared} before resetting; hook config was preserved."));
+            }
+        }
+        let dest = jsp::join(&[cwd, target.dest_rel]);
+        if exists(&dest) && read_raw_config_file(&dest).malformed {
+            return Err(format!("Cannot reset malformed hook manifest {dest}; hook config was preserved."));
+        }
+        if prune_impeccable_hook_from_manifest(&dest)? {
+            pruned.push(target.provider.to_string());
+        }
+    }
+    let omp = jsp::join(&[cwd, ".omp/hooks/post/impeccable.js"]);
+    if safe_read(&omp).is_some_and(|s| s.contains("export default function impeccableHook(")) {
+        std::fs::remove_file(&omp).map_err(|e| e.to_string())?;
+        pruned.push(".omp".into());
+    }
     let mut removed: Vec<String> = Vec::new();
     for file_path in [get_config_path(cwd), get_local_config_path(cwd)] {
         let raw = read_raw_config_file(&file_path).raw;
@@ -1222,22 +1259,6 @@ fn reset(rt: &Runtime, cwd: &str) -> String {
             removed.push(rel_or(rt, cwd, &file_path));
         }
     }
-    // JS #668: `on` writes three things: config, consent, and hook entries in
-    // the provider manifests. Reset must undo all three (issue #512), or a
-    // leftover manifest entry keeps invoking the hook after the config was
-    // deleted. destRel only (the local manifest `on` writes); never the
-    // team-shared sharedDestRel. No skill-folder gate: a reset mid-uninstall is
-    // exactly the case that needs the prune. The manifest entries are the
-    // launcher-era shape the engine writes (`impeccable hook ...`), not the old
-    // `node hook.mjs` form; prune_impeccable_hook_from_manifest keys on the
-    // impeccable marker, so it removes whichever form is present.
-    let mut pruned: Vec<String> = Vec::new();
-    for target in HOOK_MANIFEST_TARGETS {
-        let dest = jsp::join(&[cwd, target.dest_rel]);
-        if let Ok(true) = prune_impeccable_hook_from_manifest(&dest) {
-            pruned.push(target.provider.to_string());
-        }
-    }
     let mut parts: Vec<String> = Vec::new();
     if !removed.is_empty() {
         parts.push(format!(
@@ -1249,9 +1270,9 @@ fn reset(rt: &Runtime, cwd: &str) -> String {
         parts.push(format!("Removed hook entries from: {}.", pruned.join(", ")));
     }
     if parts.is_empty() {
-        "No hook config or cache to remove. Already at defaults.".to_string()
+        Ok("No hook config or cache to remove. Already at defaults.".to_string())
     } else {
-        parts.join(" ")
+        Ok(parts.join(" "))
     }
 }
 
@@ -1279,7 +1300,7 @@ pub fn run(rt: &Runtime, args: &[String], io: &mut impeccable_common::Io) -> i32
         "ignore-rule" => add_ignore_rule(rt, &cwd, &rest),
         "ignore-file" => add_ignore_file(rt, &cwd, &rest),
         "ignore-value" => add_ignore_value(rt, &cwd, &rest),
-        "reset" => Ok(reset(rt, &cwd)),
+        "reset" => reset(rt, &cwd),
         _ => Ok(String::new()),
     };
     match out {

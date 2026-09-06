@@ -20,7 +20,7 @@ Prompt template: [reference/evidence-collection.md](reference/evidence-collectio
 
 Run:
 ```bash
-node .pi/skills/impeccable/scripts/detect.mjs --json [target]
+.pi/skills/impeccable/scripts/impeccable detect --json [target]
 ```
 
 Translate each finding into a detector item: each finding's `antipattern` field (the rule id, e.g. `"side-tab"`, per `cli/engine/findings.mjs`) is the lookup key into the matching `id` in `.pi/skills/impeccable/scripts/data/critique-evidence/detector-items.json`. Each detector hit becomes a negative evidence item with `source: "detector"`, carrying that entry's `impact`, `heuristic_id`, and `impact_source` (see Coverage note below) onto the emitted item.

@@ -403,7 +403,7 @@ pub fn normalize_font_name(value: &str) -> String {
 /// JS `splitFontStack`.
 pub fn split_font_stack(stack: &str) -> Vec<String> {
     let t = IMPORTANT_TAIL_RE.replace(stack, "");
-    t.split(',')
+    impeccable_core::fonts::split_font_family_list(&t).into_iter()
         .map(normalize_font_name)
         .filter(|f| !f.is_empty())
         .collect()

@@ -311,9 +311,33 @@ pub fn normalize_static_css_value(
         }
     }
     if prop == "lineHeight" && resolved != "normal" {
-        let base = font_size_base2(current_style, parent_style);
-        if let Some(px) = resolve_length_px(&resolved, base) {
-            resolved = format!("{}px", js::number_to_string(px));
+        // A bare `<number>` line-height (no unit, e.g. `1.6`) computes, for
+        // inheritance, to the specified number itself (CSS2.1 10.8.1): each
+        // inheriting descendant multiplies it by ITS OWN font-size. px/em/
+        // rem/% forms do fix to an absolute length here and inherit as that
+        // fixed value, matching spec. Resolving the bare-number form eagerly
+        // (using this declaring element's own base) and inheriting the
+        // result as a flat px string would make every descendant use this
+        // element's font-size instead of its own — e.g. a 16px/1.6 body
+        // flat-copying 25.6px onto a 12px descendant instead of that
+        // descendant computing 12 * 1.6 = 19.2px. Leaving it unresolved lets
+        // `resolve_length_px` at the consuming element (which already knows
+        // its own font-size) do that multiplication correctly.
+        // `string_to_number` requires the whole (trimmed) string to be a
+        // valid number, unlike `parse_float`'s prefix scan — "20pt" or
+        // "1.5abc" must fall through to the eager px-resolution branch
+        // below, not be treated as a bare multiplier.
+        let is_bare_number = !resolved.is_empty()
+            && !resolved.ends_with("px")
+            && !resolved.ends_with("rem")
+            && !resolved.ends_with("em")
+            && !resolved.ends_with('%')
+            && !js::string_to_number(&resolved).is_nan();
+        if !is_bare_number {
+            let base = font_size_base2(current_style, parent_style);
+            if let Some(px) = resolve_length_px(&resolved, base) {
+                resolved = format!("{}px", js::number_to_string(px));
+            }
         }
     }
     resolved

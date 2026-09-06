@@ -144,7 +144,6 @@ fn sh_launcher_passes_skill_dir_to_the_env_bin() {
         .arg(&launcher)
         .arg("context")
         .env("IMPECCABLE_BIN", &stub)
-        .env("IMPECCABLE_NATIVE", "1")
         .env_remove("IMPECCABLE_SKILL_DIR")
         .output()
         .expect("run launcher");

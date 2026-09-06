@@ -2,7 +2,7 @@
 # Impeccable launcher. Runs the platform binary shipped next to this script:
 #   <this dir>/bin/<os>-<arch>/impeccable
 # Order: $IMPECCABLE_BIN, the sibling binary, ~/.impeccable/bin/impeccable,
-# the version-pinned cache, then `impeccable` on PATH. Fork commands retain their Node runtime.
+# the version-pinned cache, then `impeccable` on PATH. Never needs Node.
 # The unversioned home binary and the PATH candidate are validated with the
 # engine-probe handshake first: the retired 3.x npm CLI also installed a bin
 # named `impeccable`, and exec'ing it would fail every verb with
@@ -37,24 +37,6 @@ dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 : "${IMPECCABLE_SKILL_DIR:=$(CDPATH= cd -- "$dir/.." && pwd)}"
 : "${IMPECCABLE_SELF:=$0}"
 export IMPECCABLE_SKILL_DIR IMPECCABLE_SELF
-
-# Preserve fork behavior while the native ports are evaluated. In particular,
-# concept-seed must never silently select the upstream remote roll service.
-# Only simple command names may address a sibling script; no path traversal.
-if [ "${IMPECCABLE_NATIVE:-}" != 1 ]; then
-  verb=${1:-}
-  case "$verb" in
-    hooks) verb=hook-admin ;;
-    signals) verb=context-signals ;;
-  esac
-  case "$verb" in
-    ''|*[!a-z-]*) ;;
-    *) if [ -f "$dir/$verb.mjs" ]; then
-         shift
-         exec node "$dir/$verb.mjs" "$@"
-       fi ;;
-  esac
-fi
 
 if [ -n "${IMPECCABLE_BIN:-}" ] && [ -x "${IMPECCABLE_BIN}" ]; then
   exec "${IMPECCABLE_BIN}" "$@"

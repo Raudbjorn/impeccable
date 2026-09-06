@@ -394,7 +394,7 @@ Group the questions into one `AskUserQuestion` interaction. Options must be conc
    - Committed: one saturated color carries 30–60% of the surface
    - Full palette: 3–4 named color roles, each deliberate
    - Drenched: the surface IS the color
-   
+
    Then: one hue family or anchor reference ("deep teal", "mustard", "Klim #ff4500 orange").
 
 2. **Typography direction.** Pick one (specific fonts come later):
