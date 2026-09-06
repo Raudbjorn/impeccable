@@ -815,7 +815,11 @@ mod retrieval_render_tests {
     fn a_retrieval_round_renders_compositions_without_the_preview_flag() {
         let a = seed(Some(retrieval_round()));
         let bare = render(Env::new(), &a);
-        assert!(bare.contains("They carry\nstructure only"), "composition block missing: {bare}");
+        // Structure, not copy: the section renders each composition with its
+        // SOURCE ID, and pinning the surrounding paragraph would fail on an
+        // editorial pass that changed nothing about behavior.
+        assert!(bare.contains("SOURCE ID: p1"), "composition block missing: {bare}");
+        assert!(bare.contains("COMPOSITION GRAMMAR:"), "composition block missing: {bare}");
 
         // The flag gates the other sources, so setting it changes nothing here.
         let mut env = Env::new();

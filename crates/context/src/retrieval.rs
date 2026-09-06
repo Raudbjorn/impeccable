@@ -256,16 +256,21 @@ fn validate(request: &Value, response: &Value) -> Result<(), String> {
             .filter_map(|c| c.get("id").and_then(Value::as_str).map(str::to_string))
             .collect()
     };
-    let unique = |items: &[Value]| -> bool {
+    // Duplicates only. A missing or non-string id is the per-entry check's to
+    // report, and folding it in here masked that message with a vaguer one.
+    let duplicated = |items: &[Value]| -> bool {
         let list = ids(items);
-        list.len() == items.len()
-            && list.iter().collect::<std::collections::BTreeSet<_>>().len() == list.len()
+        list.iter().collect::<std::collections::BTreeSet<_>>().len() != list.len()
     };
+    // The protocol's ids are strings, so a number passes a truthy test and then
+    // interpolates as nothing, printing `challenger : ...`.
+    fn entry_id(c: &Value) -> Option<&str> {
+        c.get("id").and_then(Value::as_str).filter(|s| !s.is_empty())
+    }
     let challenger_problem = |c: &Value| -> Option<String> {
-        if !c.get("id").is_some_and(truthy) {
-            return Some("a challenger has no id".to_string());
-        }
-        let id = c.get("id").and_then(Value::as_str).unwrap_or_default();
+        let Some(id) = entry_id(c) else {
+            return Some("a challenger needs a non-empty string id".to_string());
+        };
         if !c.get("system").is_some_and(|s| s.is_array()) {
             return Some(format!("challenger {id}: system must be an array"));
         }
@@ -279,10 +284,9 @@ fn validate(request: &Value, response: &Value) -> Result<(), String> {
         }
     };
     let composition_problem = |c: &Value| -> Option<String> {
-        if !c.get("id").is_some_and(truthy) {
-            return Some("a composition has no id".to_string());
-        }
-        let id = c.get("id").and_then(Value::as_str).unwrap_or_default();
+        let Some(id) = entry_id(c) else {
+            return Some("a composition needs a non-empty string id".to_string());
+        };
         if !c.get("grammar").is_some_and(|g| g.is_array()) {
             return Some(format!("composition {id}: grammar must be an array"));
         }
@@ -297,17 +301,17 @@ fn validate(request: &Value, response: &Value) -> Result<(), String> {
     // Six more distinct mistakes, for the same reason as the fields above: a
     // round rejected as "invalid" tells the implementer nothing about which
     // candidate, or which of its parts, the reader could not use.
-    if !unique(challengers) {
-        return Err("record.challengers has duplicate or missing ids".into());
-    }
     if let Some(problem) = challengers.iter().find_map(challenger_problem) {
         return Err(problem);
     }
-    if !unique(compositions) {
-        return Err("record.compositions has duplicate or missing ids".into());
+    if duplicated(challengers) {
+        return Err("record.challengers has duplicate ids".into());
     }
     if let Some(problem) = compositions.iter().find_map(composition_problem) {
         return Err(problem);
+    }
+    if duplicated(compositions) {
+        return Err("record.compositions has duplicate ids".into());
     }
     if !staging_present {
         return Err("record.staging must be one of record.compositions".into());
@@ -659,6 +663,35 @@ mod tests {
             let err = call_retrieval(&request, ".", &cfg).unwrap_err();
             assert!(err.contains(want), "wanted {want}, got {err}");
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_candidate_id_has_to_be_a_non_empty_string() {
+        // A number is truthy but is not a string, so it used to interpolate as
+        // nothing and print `challenger : system must be an array`. A missing
+        // id was masked entirely by the uniqueness check.
+        for (id, want) in [
+            (json!(7), "a challenger needs a non-empty string id"),
+            (json!(""), "a challenger needs a non-empty string id"),
+            (Value::Null, "a challenger needs a non-empty string id"),
+        ] {
+            let mut bad: Value = serde_json::from_str(&round_json()).unwrap();
+            bad["record"]["challengers"][0]["id"] = id;
+            let cfg = echo_config(&bad.to_string(), 30_000);
+            let request = serde_json::json!({"op": "start", "round": 0});
+            let err = call_retrieval(&request, ".", &cfg).unwrap_err();
+            assert!(err.contains(want), "{err}");
+        }
+
+        // Duplicates keep their own message, now that it means only that.
+        let mut bad: Value = serde_json::from_str(&round_json()).unwrap();
+        let one = bad["record"]["challengers"][0].clone();
+        bad["record"]["challengers"] = json!([one.clone(), one]);
+        let cfg = echo_config(&bad.to_string(), 30_000);
+        let request = serde_json::json!({"op": "start", "round": 0});
+        let err = call_retrieval(&request, ".", &cfg).unwrap_err();
+        assert!(err.contains("record.challengers has duplicate ids"), "{err}");
     }
 
     #[cfg(unix)]
