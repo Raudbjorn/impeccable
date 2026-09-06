@@ -1,64 +1,78 @@
-# Upstream integration, 2026-09-05
+# Upstream integration
 
-This merge joins fork commit `03eacfe903d46e95e9cdf9c73494a1653eb46990` with upstream main `381d52b3`. The histories diverged by 13 fork commits and 80 upstream commits. A normal merge preserves both histories and avoids replaying overlapping squash imports.
+This merge joins the fork's `lets-roll` work with `main` after `main` had
+already moved to the Rust engine. An earlier revision of this file recorded the
+opposite outcome, that the JavaScript runtime stayed the default and the fork
+features had explicitly not been ported. That is no longer true, and the note is
+kept rather than deleted because the reasoning it records is what the current
+shape has to answer.
 
 ## Runtime decision
 
-The fork's working JavaScript runtime remains the default. Upstream's Rust workspace, native engine, frozen oracle corpus, WASM browser bundle and extension changes are included alongside it. This is an integration of both codebases, **not a claim that the fork features have been ported to Rust**. Retaining the complete JavaScript dependency closure avoids leaving surviving entrypoints with deleted imports.
+There is one runtime: the Rust engine behind `skill/scripts/impeccable`. The
+JavaScript duplicates of engine verbs are gone.
 
-`node skill/scripts/<command>.mjs` keeps its existing behavior. The new `skill/scripts/impeccable <command>` launcher also runs a sibling JavaScript command when one exists, preserving arguments, working directory and exit status. `hooks` and `signals` retain their aliases. A native-only verb uses upstream's engine discovery and checksum-verified download path. `IMPECCABLE_NATIVE=1` explicitly selects native behavior; an `IMPECCABLE_BIN` override alone does not bypass the fork command path.
+The merge that produced `lets-roll` had upstream's launcher migration on one
+side and the fork's pre-Rust tree on the other, and kept the fork's. Some of
+that was collateral: `package.json` went back to 3.6.1 with only puppeteer in
+`optionalDependencies` while the commit that made it claimed CLI 4.0.2.
 
-The upstream native npm shim is retained separately at `cli/native/bin/cli.js`, with its pinned platform-package manifest and checksum/download tests. It can be invoked explicitly with Node.
+One part was not collateral. The fork's launcher carried an `IMPECCABLE_NATIVE`
+bridge that routed each verb to a sibling `.mjs` file, with a comment giving the
+reason: concept-seed must never silently select the upstream remote roll
+service. That guard is why the JavaScript runtime was still the default, and it
+was written to hold "while the native ports are evaluated".
 
-The npm CLI remains the fork's JavaScript CLI. Its version is not advanced to the upstream native CLI version. No packages or releases are published by this merge.
+The bridge is now gone, and it is only safe to remove it because the thing it
+was guarding has been ported.
 
-## Features retained
+## Local retrieval
 
-| Fork behavior | Implementation and verification |
-| --- | --- |
-| Local retrieval, reranking backend protocol, stable sessions, replay and choice recording | `concept-seed.mjs`, `lib/retrieval-client.mjs`, retrieval-client and concept-seed tests; launcher retrieval regression |
-| Choice validation before a build starts | `build-phase.mjs`, build-phase and new-work end-to-end tests |
-| Evidence-item critique scoring and storage | `score-evidence.mjs`, critique evidence data, critique-storage and score-evidence tests |
-| Design-context import/export and provenance | `design-context/`, import/export/portability tests |
-| Image generation, visual cues and asset production in the consuming project | `image-gen.mjs`, `generate-image.mjs`, `visual-cues.mjs`, source agent guidance and image/visual-cues tests |
-| OMP detection, hook installation and safe hook execution | Fork provider configuration, hooks, CLI installer and hook/skills tests |
-| Provider exclusions, issue gate, palette guardrails and inverse slop guidance | Fork provider table, issue-gate workflow and tests, source skill/reference guidance |
-| JavaScript detector profiling, vendored parser, virtual device paths, gray-on-color and CSP fixes | Complete `cli/engine/` implementation and detector/framework/hook tests |
+`crates/context/src/retrieval.rs` is the port of `lib/retrieval-client.mjs`. The
+contract is unchanged: a command named under `retrieval` in
+`.impeccable/config.local.json` receives one JSON request on stdin and answers
+with one JSON response on stdout.
 
-The fork's `overused-font` fixture is retained as `tests/fixtures/fork/overused-font.html`. Upstream's original fixture remains at `overused-font.html` for its frozen oracle. Neither runtime's findings were weakened to reconcile the different inputs.
+Three properties are worth stating because they are what the guard was
+protecting:
 
-## Native evaluation
+- A configured retrieval command wins outright in `concept_seed`. It is checked
+  before the local catalog and before the API, and a failure is an error rather
+  than a fallback. There is no path where a broken local command quietly becomes
+  a remote roll.
+- A `.impeccable/config.local.json` that exists but does not parse is an error
+  for the same reason. Treating a typo as "not configured" would reintroduce the
+  silent fallback through the back door.
+- Choice recording (`--chosen`) goes through the retrieval command's `choose`
+  op when retrieval is configured, so the remote `/chosen` endpoint is not
+  pinged either.
 
-```sh
-cargo test --workspace
-cargo build --release -p impeccable
-# Cargo may use a configured shared target directory; use the emitted binary path.
-IMPECCABLE_BIN=/absolute/path/to/impeccable node tests/oracle/run.mjs
-IMPECCABLE_NATIVE=1 IMPECCABLE_BIN=/absolute/path/to/impeccable skill/scripts/impeccable detect --json example.html
-```
+The response is validated rather than trusted: protocol version, session and
+round agreement with the request, settings agreement, unique challenger and
+composition ids, known well tiers, and a staging that is actually one of the
+compositions. A round that fails any of these is rejected where the error can
+still name the field, instead of surfacing later as a confusing deck.
 
-Native `concept-seed` still has upstream's remote `/roll` behavior and native commands do not yet implement all fork extensions. Do not use native mode for the retrieval workflow. Moving a command to native requires explicit parity coverage for the fork behavior first. The fork launcher defaults and direct JavaScript references prevent an incidental upgrade from replacing local retrieval with remote rolls.
+`materialize_round` copies every asset the round references into
+`.impeccable/retrieval/<session>/` under a content-addressed name and rewrites
+the paths, so a later render does not depend on files the retrieval command may
+have written somewhere temporary.
 
-The extension uses upstream's native/WASM pipeline (`cargo xtask bundle`, `bun run build:extension`). The fork JavaScript browser detector is built separately with `bun run build:browser`. Each pipeline keeps its own source and tests.
+## Known gaps
 
-## Preservation
-
-`backup/lets-roll-before-upstream-20260905` preserves the original branch. The named pre-rebase stash preserves the previously unstaged generated artifacts; it is not applied over the integrated source. Provider artifacts are regenerated from the merged source instead. External catalog databases, embeddings, archives and evaluation caches are outside this merge and are not deleted or rewritten.
-
-## Validation
-
-- Complete default fork suite (`bun run test`): passed, including generated hooks, detector/browser, live, framework, plugin and upstream-helper checks.
-- Rust workspace: 391 tests passed, one ignored.
-- Native oracle and server-cleanup suite: passed, with no changed goldens or regenerated function vectors. The oracle uses its original platform-reference and reviewed-catalog inputs under `tests/oracle/fixtures/`.
-- New-work browser flow: all 22 cases passed.
-- A saved session from the real candidate retrieval database replayed through the merged launcher successfully, without an embedding or reranking request.
-- Production catalog preservation check: 638 entries, 1,300 pages, 23,948 spans, and 25,886 embeddings.
-- Distribution and native Chrome extension builds passed. The upstream Firefox package builds but still lacks its required offscreen API; this merge does not claim Firefox scanning support.
-
-The native oracle probes local framework ports. On a workstation with unrelated services, Linux can give it an isolated loopback network. Dropping namespace capabilities also preserves the unreadable-file cases:
-
-```sh
-unshare -Urn -- sh -c 'ip link set lo up && exec setpriv --bounding-set=-all --inh-caps=-all --ambient-caps=-all env IMPECCABLE_BIN=/absolute/path/to/impeccable node scripts/run-tests.mjs native'
-```
-
-The default fork suite is `bun run test`; native parity is separately available as `bun run test:native` with `IMPECCABLE_BIN` set.
+- The Rust port kills a timed-out retrieval command with `kill` on the child
+  process. The JavaScript version spawned detached on unix and killed the whole
+  process group, so a retrieval command that itself spawns children can still
+  leave grandchildren behind on timeout.
+- Upstream's `detect_csp` treats `next.config.cjs` and `next.config.cts` as Next
+  config files and this fork's does not. The fork's narrower version is
+  deliberate and pinned by a test (`apps/legacy/proxy.ts` must not read as
+  middleware), so it was kept; the two config extensions are a separate, smaller
+  gap that can be closed on their own.
+- The fork's `crates/` lead upstream by the `.omp` provider, `omp-hook.js`, the
+  label-line-height rule and the live glob tests, but the launcher downloads
+  engine binaries from `pbakaus/impeccable` and this fork publishes no engine
+  release. Anyone who does not build from source runs an upstream binary without
+  that work. `ENGINE_VERSION` is 0.1.1 here, which is a real upstream release
+  with published npm platform packages, so the release gate passes; it does not
+  mean fork engine changes reach users.

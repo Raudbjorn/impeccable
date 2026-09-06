@@ -250,6 +250,10 @@ pub struct SeedArgs {
     pub grain: Option<Option<String>>,
     pub platform: Option<Option<String>>,
     pub candidate_count: f64,
+    /// A materialized local-retrieval round, when `retrieval.command` is
+    /// configured. Present means the roll is already decided and neither the
+    /// local catalog nor the remote service is consulted.
+    pub resolved: Option<Value>,
 }
 
 fn unit(scope: &str, salt: &str, key: &str) -> f64 {
@@ -327,7 +331,22 @@ fn render_concept_seed(env: &Env, cwd: &str, budget: &mut ApiBudget, a: &SeedArg
     let catalog_dir = env.get("IMPECCABLE_CATALOG_DIR").filter(|v| !v.is_empty()).cloned().unwrap_or_else(|| {
         crate::provider::detect(env, cwd).skill_dir.map(|d| jsp::join(&[&d, "scripts"])).unwrap_or_else(|| ".".to_string())
     });
-    let data: Option<RollData> = if let Some(local) = load_local(&catalog_dir) {
+    let data: Option<RollData> = if let Some(round) = a.resolved.as_ref() {
+        // The fork's whole reason for local retrieval is that concept-seed must
+        // never silently reach the remote roll service, so a configured round
+        // wins outright rather than being one candidate among three.
+        let record = round.get("record").cloned().unwrap_or(Value::Null);
+        let arr = |k: &str| record.get(k).and_then(|v| v.as_array()).cloned().unwrap_or_default();
+        Some(RollData {
+            source: "retrieval".into(),
+            pool_revision: vs(&record, "poolRevision"),
+            approved_count: vs(&record, "approvedCount"),
+            catalog_count: vs(&record, "catalogCount"),
+            challengers: arr("challengers"),
+            compositions: arr("compositions"),
+            composition_match: None,
+        })
+    } else if let Some(local) = load_local(&catalog_dir) {
         let sel = select_approved_challengers(scope, key, reroll, mode, &local.concepts)?;
         let comps = select_approved_compositions(scope, key, reroll, mode, grain, platform, &local.compositions, 3);
         Some(RollData {
@@ -503,6 +522,47 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
     let kind = val("--kind");
     if chosen.is_some() || kind.is_some() {
         let flat = |v: &Option<Option<String>>| -> Option<String> { v.clone().flatten() };
+        // With retrieval configured the choice belongs to the local session, and
+        // pinging the remote /chosen endpoint would be the leak this feature
+        // exists to close.
+        match crate::retrieval::retrieval_config(&cwd) {
+            Err(e) => {
+                io.err(&format!("{e}\n"));
+                return 1;
+            }
+            Ok(Some(cfg)) => {
+                let Some(session) = flat(&val("--session")) else {
+                    io.err("A local retrieval choice requires --session <saved session ID>\n");
+                    return 1;
+                };
+                let mut settings = serde_json::Map::new();
+                for (name, flag) in [("key", "--from"), ("scope", "--scope"), ("mode", "--mode")] {
+                    if let Some(v) = flat(&val(flag)) {
+                        settings.insert(name.into(), Value::String(v));
+                    }
+                }
+                let request = serde_json::json!({
+                    "op": "choose",
+                    "session": session,
+                    "round": flat(&val("--reroll")).map(|v| crate::critique_storage::js_number(&v)).unwrap_or(0.0),
+                    "register": flat(&val("--register")),
+                    "kind": flat(&kind).or_else(|| flat(&chosen).map(|_| "challenger".to_string())),
+                    "entry": flat(&chosen),
+                    "settings": Value::Object(settings),
+                });
+                return match crate::retrieval::call_retrieval(&request, &cwd, &cfg) {
+                    Ok(_) => {
+                        io.out("choice recorded\n");
+                        0
+                    }
+                    Err(e) => {
+                        io.err(&format!("{e}\n"));
+                        1
+                    }
+                };
+            }
+            Ok(None) => {}
+        }
         let sent = ping_chosen(
             &env,
             &mut budget,
@@ -538,7 +598,102 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
         grain: val("--grain"),
         platform: val("--platform"),
         candidate_count: num(val("--candidate-count")).unwrap_or(7.0),
+        resolved: None,
     };
+    let mut seed = seed;
+    let brief_file = val("--brief-file").flatten();
+    let session = val("--session").flatten();
+    let replay = idx("--replay").is_some();
+    let retrieval = match crate::retrieval::retrieval_config(&cwd) {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            io.err(&format!("{e}\n"));
+            return 1;
+        }
+    };
+    if retrieval.is_some() || session.is_some() || replay || brief_file.is_some() {
+        let Some(cfg) = retrieval else {
+            io.err("Configure retrieval.command in .impeccable/config.local.json\n");
+            return 1;
+        };
+        let mut settings = serde_json::Map::new();
+        for (name, flag) in [
+            ("key", "--from"),
+            ("scope", "--scope"),
+            ("mode", "--mode"),
+            ("grain", "--grain"),
+            ("platform", "--platform"),
+        ] {
+            if let Some(v) = val(flag).flatten() {
+                settings.insert(name.into(), Value::String(v));
+            }
+        }
+        if let Some(n) = num(val("--candidate-count")) {
+            settings.insert("candidateCount".into(), serde_json::json!(n));
+        }
+        let op = if replay {
+            "replay"
+        } else if session.is_some() {
+            "round"
+        } else {
+            "start"
+        };
+        let mut request = serde_json::Map::new();
+        request.insert("op".into(), Value::String(op.into()));
+        if let Some(s) = &session {
+            request.insert("session".into(), Value::String(s.clone()));
+        }
+        request.insert("round".into(), serde_json::json!(num(val("--reroll")).unwrap_or(0.0)));
+        request.insert("register".into(), match val("--register").flatten() {
+            Some(r) => Value::String(r),
+            None => Value::Null,
+        });
+        if session.is_none() {
+            // A first round has no server-side settings to inherit, so the
+            // brief is what the retrieval command has to work from.
+            let Some(path) = &brief_file else {
+                io.err("Local retrieval requires --brief-file <task brief> for the first round\n");
+                return 1;
+            };
+            match std::fs::read_to_string(path) {
+                Ok(text) => {
+                    request.insert("brief".into(), Value::String(text));
+                }
+                Err(e) => {
+                    io.err(&format!("Cannot read --brief-file {path}: {e}\n"));
+                    return 1;
+                }
+            }
+            if !settings.contains_key("key") {
+                settings.insert("key".into(), Value::String(seed.key.clone()));
+            }
+        } else if brief_file.is_some() {
+            io.err("A session brief is fixed; omit --session to start with a new brief\n");
+            return 1;
+        }
+        request.insert("settings".into(), Value::Object(settings));
+        let request = Value::Object(request);
+        let round = match crate::retrieval::call_retrieval(&request, &cwd, &cfg)
+            .and_then(|r| crate::retrieval::materialize_round(&r, &cwd))
+        {
+            Ok(round) => round,
+            Err(e) => {
+                io.err(&format!("{e}\n"));
+                return 1;
+            }
+        };
+        // Settings the session already fixed outrank the flags on this call.
+        if let Some(s) = round.get("settings") {
+            let take = |k: &str| s.get(k).and_then(Value::as_str).map(str::to_string);
+            if let Some(v) = take("scope") { seed.scope = Some(v); }
+            if let Some(v) = take("key") { seed.key = v; }
+            if let Some(v) = take("mode") { seed.mode = Some(Some(v)); }
+            if let Some(v) = take("grain") { seed.grain = Some(Some(v)); }
+            if let Some(v) = take("platform") { seed.platform = Some(Some(v)); }
+            if let Some(n) = s.get("candidateCount").and_then(Value::as_f64) { seed.candidate_count = n; }
+        }
+        seed.resolved = Some(round);
+    }
     match render_concept_seed(&env, &cwd, &mut budget, &seed) {
         Ok(text) => {
             io.out(&text);
