@@ -446,7 +446,14 @@ pub fn copy_provider_hooks(sys: &crate::providers::Sys, bundle_dir: &str, root: 
                 }
                 let mut module = util::read_text(&artifact.src)?;
                 if skill_root != root {
-                    let launcher = jsp::join(&[skill_root, ".omp/skills/impeccable/scripts/impeccable"]);
+                    // Global installs place the skill under the provider's
+                    // home-dir override when it has one (oh-my-pi reads user
+                    // skills from ~/.omp/agent/skills, not ~/.omp/skills), so
+                    // the rewritten launcher path must go through the same
+                    // resolver `sys.user_provider_skills_dir` uses, not a
+                    // hardcoded `<provider>/skills` join.
+                    let skills_dir = sys.user_provider_skills_dir(skill_root, provider);
+                    let launcher = jsp::join(&[&skills_dir, "impeccable/scripts/impeccable"]);
                     let declaration = format!("const HOOK_SCRIPT = {} + (process.platform === \"win32\" ? \".cmd\" : \"\");", json_string(&launcher));
                     module = module.lines().map(|line| {
                         if line.starts_with("const HOOK_SCRIPT =") { declaration.as_str() } else { line }

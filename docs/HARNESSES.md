@@ -103,7 +103,6 @@ oh-my-pi installs plugins with `omp plugin marketplace add <owner/repo>`, readin
 |---------|------------------|-------------|
 | Claude Code | `.claude/agents/` (installed plugin) | Markdown with YAML frontmatter |
 | Codex CLI | `<skill>/agents/` (nested, auto-discovered) | TOML |
-
 | oh-my-pi | `.omp/agents/` (project), `~/.omp/agent/agents/` (user) | Markdown with YAML frontmatter |
 
 oh-my-pi's agents carry `autoloadSkills: [impeccable]`, which injects the skill into the spawned agent before its first prompt. That is the documented answer to a subagent that would otherwise start without the skill defining its job. `tools` is deliberately not emitted: oh-my-pi's tool vocabulary differs from ours, and omitting it grants the default set rather than an intersection we cannot verify.

@@ -800,7 +800,9 @@ mod tests {
         assert_eq!(written, vec![".omp"]);
         assert!(crate::hook_manifest::hook_installed_for_provider(&sys.cwd, ".omp"));
         let module = std::fs::read_to_string(project.join(".omp/hooks/post/impeccable.js")).unwrap();
-        assert!(module.contains(&crate::hook_manifest::json_string(&jsp::join(&[&sys.home, ".omp/skills/impeccable/scripts/impeccable"]))));
+        // Global installs place the skill under the home-dir override
+        // (~/.omp/agent/skills), never the bare ~/.omp/skills.
+        assert!(module.contains(&crate::hook_manifest::json_string(&jsp::join(&[&sys.home, ".omp/agent/skills/impeccable/scripts/impeccable"]))));
 
         std::fs::remove_dir_all(root).unwrap();
     }
