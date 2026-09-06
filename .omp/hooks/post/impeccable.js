@@ -61,30 +61,47 @@ function hasUriScheme(value) {
 
 export default function impeccableHook(pi) {
   pi.on("tool_result", async (event, ctx) => {
-    if (event.toolName !== "edit" && event.toolName !== "write") return;
-    const filePath =
+    // ast_edit mutates files like edit and write do; omitting it left a whole
+    // class of edits unscanned. apply_patch is deliberately absent: that is a
+    // Claude/Codex tool name, not one oh-my-pi has.
+    if (event.toolName !== "edit" && event.toolName !== "write" && event.toolName !== "ast_edit") return;
+    // `input.paths` is the authoritative multi-target list a multi-file edit
+    // carries; the runner drops the single-target `path`/`tool_input.file_path`
+    // convenience entirely once an edit touches two or more files, so reading
+    // only one of those skipped every multi-file edit.
+    const input = event.input || {};
+    const singlePath =
       (event.tool_input && typeof event.tool_input.file_path === 'string' && event.tool_input.file_path) ||
-      (event.input && typeof event.input.path === 'string' && event.input.path) ||
+      (typeof input.path === 'string' && input.path) ||
       null;
-    if (!filePath) return;
-    // Some tool surfaces carry a scheme-prefixed identifier that is not a
-    // real filesystem target. Spawning hook.mjs on them is wasted work —
-    // hook-lib.mjs downstream file-missing skip is the only thing keeping
-    // it cheap. Reject at the adapter so the spawn never happens.
-    if (hasUriScheme(filePath)) return;
-    const text = runHook({
-      hook_event_name: "PostToolUse",
-      tool_name: event.toolName,
-      tool_input: { file_path: filePath },
-      cwd: ctx.cwd,
-    }, 5000, ctx);
-    if (!text) return;
+    const targets = Array.isArray(input.paths)
+      ? input.paths.filter((entry) => typeof entry === "string" && entry.length > 0)
+      : singlePath
+        ? [singlePath]
+        : [];
+    if (targets.length === 0) return;
+    const findings = [];
+    for (const filePath of targets) {
+      // Some tool surfaces carry a scheme-prefixed identifier that is not a
+      // real filesystem target. Spawning the hook on them is wasted work —
+      // the hook's own file-missing skip is the only thing keeping it cheap.
+      // Reject at the adapter so the spawn never happens.
+      if (hasUriScheme(filePath)) continue;
+      const text = runHook({
+        hook_event_name: "PostToolUse",
+        tool_name: event.toolName,
+        tool_input: { file_path: filePath },
+        cwd: ctx.cwd,
+      }, 5000, ctx);
+      if (text) findings.push(text);
+    }
+    if (findings.length === 0) return;
     // ToolResultEventResult.content is a replacement content-block array, not
     // a string: the runner takes `result.content ?? tool.content`, so a bare
     // string both discards the edit's own output and hands back a shape the
     // provider cannot render. Append a text block to what the tool produced.
     const blocks = Array.isArray(event.content) ? event.content : [];
-    return { content: [...blocks, { type: "text", text }] };
+    return { content: [...blocks, { type: "text", text: findings.join("\n\n") }] };
   });
 
   pi.on("session_stop", async (event, ctx) => {

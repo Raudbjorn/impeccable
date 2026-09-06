@@ -99,13 +99,16 @@ fn home_skills_dir_override(env: &Env, cwd: &str, provider: &str, home: &str) ->
         ".agent" => Some(jsp::join(&[home, ".gemini", "config", "skills"])),
         ".hermes" => Some(jsp::join(&[&hermes_global_home(env, cwd, home), "skills"])),
         ".pi" => Some(jsp::join(&[home, ".pi", "agent", "skills"])),
+        // oh-my-pi reads user skills from ~/.omp/agent/skills, the same
+        // `agent` segment Pi uses; ~/.omp/skills is never scanned.
+        ".omp" => Some(jsp::join(&[home, ".omp", "agent", "skills"])),
         ".opencode" => Some(jsp::join(&[&opencode_global_config_dir(env, home), "skills"])),
         _ => None,
     }
 }
 
 fn has_home_override(provider: &str) -> bool {
-    matches!(provider, ".agent" | ".hermes" | ".pi" | ".opencode")
+    matches!(provider, ".agent" | ".hermes" | ".pi" | ".omp" | ".opencode")
 }
 
 /// Everything the scans need from the process: env, cwd, and the resolved
@@ -841,6 +844,22 @@ mod tests {
         assert_eq!(extract_version("---  \nversion: 4.1.3\n---  \n").as_deref(), Some("4.1.3"));
         assert_eq!(extract_version("version: 4.1.3\n"), None);
         assert_eq!(extract_version("---\nversion:\n---\n"), None);
+    }
+
+    #[test]
+    fn omp_global_scope_reads_the_agent_skills_dir_not_the_bare_dot_omp() {
+        // P0: oh-my-pi reads user skills from ~/.omp/agent/skills, not
+        // ~/.omp/skills. Before this override existed, `--scope global`
+        // installed to a path the harness never scans.
+        let home = std::env::temp_dir().join(format!(
+            "impeccable-omp-home-override-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        let sys = Sys { env: Env::new(), cwd: home.to_string_lossy().into_owned(), home: home.to_string_lossy().into_owned() };
+        let home_str = home.to_string_lossy();
+        assert_eq!(sys.user_provider_skills_dir(&home_str, ".omp"), jsp::join(&[&home_str, ".omp", "agent", "skills"]));
+        assert!(has_home_override(".omp"));
     }
 
     #[test]

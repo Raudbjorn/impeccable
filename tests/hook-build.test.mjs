@@ -202,7 +202,7 @@ describe('hook manifest builders', () => {
     // (packages/coding-agent/src/extensibility/shared-events.ts): the runner
     // takes `result.content ?? tool.content`, so returning a bare string both
     // discarded the edit's own output and handed back an unrenderable shape.
-    assert.match(source, /content: \[\.\.\.blocks, \{ type: "text", text \}\]/);
+    assert.match(source, /content: \[\.\.\.blocks, \{ type: "text", text: findings\.join\("/);
     assert.doesNotMatch(source, /return \{ content: text \}/);
     // SessionStopEventResult only reaches a continuation when `continue: true`
     // or a blocking decision accompanies the context; additionalContext on its
@@ -215,6 +215,46 @@ describe('hook manifest builders', () => {
       'module must register tool_result and session_stop handlers',
     );
     assert.ok(/hasUriScheme\(filePath\)/.test(source), 'module must guard filePath');
+    // ast_edit mutates files like edit and write do; omitting it left a whole
+    // class of edits unscanned. apply_patch is deliberately absent: that is a
+    // Claude/Codex tool name, not one oh-my-pi has.
+    assert.match(source, /event\.toolName !== "ast_edit"/);
+    assert.doesNotMatch(source, /toolName !== "apply_patch"/);
+    // `input.paths` is the authoritative multi-target list: the runner drops
+    // the single-target `path`/`tool_input.file_path` convenience entirely
+    // once an edit touches two or more files, so reading only one of those
+    // left every multi-file edit unscanned.
+    assert.match(source, /Array\.isArray\(input\.paths\)/);
+    assert.match(source, /for \(const filePath of targets\)/);
+  });
+  it('oh-my-pi adapter scans every path in a multi-file edit, guarding each for a URI scheme', () => {
+    // Extracted the same way the URI-scheme test below does: syntactic
+    // structure is verified without importing (import.meta.url would be
+    // data:... under a data: URL, breaking HOOK_SCRIPT resolution), so the
+    // target-selection logic is pulled out and run directly.
+    const source = buildOmpHookModule();
+    const fnMatch = source.match(/const input = event\.input[\s\S]*?const targets = [\s\S]*?: \[\];/);
+    assert.ok(fnMatch, 'module must compute a multi-target list from event.input.paths');
+    const pickTargets = new Function(
+      'event',
+      `${fnMatch[0]}\nreturn targets;`,
+    );
+    assert.deepEqual(
+      pickTargets({ input: { paths: ['a.tsx', 'b.tsx'] } }),
+      ['a.tsx', 'b.tsx'],
+      'a multi-file edit must scan every path, not just the first',
+    );
+    assert.deepEqual(
+      pickTargets({ tool_input: { file_path: 'single.tsx' } }),
+      ['single.tsx'],
+      'a single-target Claude Code shaped event must still resolve one target',
+    );
+    assert.deepEqual(
+      pickTargets({ input: { path: 'single.tsx' } }),
+      ['single.tsx'],
+      'a single-target OMP shaped event must still resolve one target',
+    );
+    assert.deepEqual(pickTargets({}), [], 'an event with no target carries none');
   });
   it('oh-my-pi adapter rejects device URI tool targets before spawning hook.mjs', () => {
     // Some tool surfaces (e.g. `xd://` LSP targets, or scheme-only virtual
@@ -278,7 +318,8 @@ describe('hook manifest builders', () => {
     // doesn't accidentally drop the Claude Code fallback and re-introduce the
     // bug only for that harness.
     assert.match(source, /event\.tool_input\.file_path/);
-    assert.match(source, /event\.input\.path/);
+    assert.match(source, /const input = event\.input/);
+    assert.match(source, /input\.path/);
   });
 
   it('runs hook scripts with node when OMP owns process.execPath', async () => {
