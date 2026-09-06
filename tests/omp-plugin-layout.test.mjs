@@ -55,6 +55,17 @@ describe('plugin subtree as an oh-my-pi plugin', () => {
     }
   });
 
+  it('ships the omp detector hook as a file, not just the Claude hooks.json manifest', () => {
+    // oh-my-pi discovers hooks as files under hooks/pre|post, never reads
+    // hooks/hooks.json (that manifest is the Claude Code plugin-loader
+    // format). Without this file, a marketplace-installed omp plugin loads
+    // the skill but the detector hook never runs.
+    const hookPath = path.join(PLUGIN, 'hooks', 'post', 'impeccable.js');
+    assert.ok(fs.existsSync(hookPath), 'plugin/hooks/post/impeccable.js must exist for the omp plugin channel');
+    const text = fs.readFileSync(hookPath, 'utf-8');
+    assert.match(text, /@impeccable-hook-module/, 'must be the generated omp hook module, not a stray file');
+  });
+
   it('records that plugin-channel agents carry a Claude-only path form', () => {
     // Known limitation, asserted so it cannot regress into a surprise: the
     // plugin agents resolve scripts against ${CLAUDE_PLUGIN_ROOT}, which

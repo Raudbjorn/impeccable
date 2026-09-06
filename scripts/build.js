@@ -750,6 +750,19 @@ async function build() {
       JSON.stringify(buildClaudePluginHooksManifest(), null, 2) + '\n',
     );
 
+    // oh-my-pi reads this same subtree via its .claude-plugin/plugin.json
+    // fallback (docs/HARNESSES.md), but it discovers hooks as files under
+    // hooks/pre|post rather than a hooks.json manifest. Without this, a
+    // marketplace-installed omp plugin loads the skill but never runs the
+    // detector hook.
+    const ompHooks = hooksJsonFor('omp', { configDir: PROVIDERS.omp.configDir });
+    if (ompHooks?.isModule) {
+      const ompHookRel = PROVIDERS.omp.hooksManifestRel || path.join('hooks', 'post', 'impeccable.js');
+      const ompHookDest = path.join(pluginHooksDir, ompHookRel.replace(/^hooks[\\/]/, ''));
+      fs.mkdirSync(path.dirname(ompHookDest), { recursive: true });
+      fs.writeFileSync(ompHookDest, ompHooks.content);
+    }
+
     console.log('📦 Built Claude Code plugin subtree at ./plugin/');
   } else {
     console.log('📋 Skipped root harness and plugin sync (--skip-root-sync)');
