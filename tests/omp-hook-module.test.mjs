@@ -6,6 +6,15 @@
  * module and drive it through a stand-in `pi`, so a refactor that keeps the
  * text recognizable but breaks the contract fails here.
  *
+ * The module resolves its launcher two directories up from wherever it sits
+ * (`join(dirname(import.meta.url), "..", "..", "skills", "impeccable",
+ * "scripts", "impeccable")`), matching the real install layout
+ * `.omp/hooks/post/impeccable.js` -> `.omp/skills/impeccable/scripts/impeccable`.
+ * The stand-in below reproduces that layout so the module's own path
+ * resolution is exercised, not bypassed, and the "launcher" stand-in is an
+ * executable script (spawned directly, not via `node`), matching how
+ * `runHook()` actually invokes it.
+ *
  * The contract comes from oh-my-pi's own source, checked out at
  * ../oh-my-pi when this was written:
  *   packages/coding-agent/src/extensibility/shared-events.ts
@@ -24,10 +33,10 @@ import { pathToFileURL } from 'node:url';
 
 import { buildOmpHookModule } from '../scripts/lib/transformers/hooks.js';
 
-// A hook.mjs stand-in: echoes back one finding per file it is asked about, in
-// the same envelope the real script emits, so the module's parsing is what is
-// under test rather than the detector.
-const FAKE_HOOK = `
+// A launcher `hook` verb stand-in: echoes back one finding per file it is
+// asked about, in the same envelope the real binary emits, so the module's
+// parsing is what is under test rather than the detector.
+const FAKE_LAUNCHER = `#!/usr/bin/env node
 let raw = '';
 process.stdin.on('data', (c) => { raw += c; });
 process.stdin.on('end', () => {
@@ -46,13 +55,21 @@ describe('generated oh-my-pi hook module', () => {
 
   before(async () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'imp-omp-mod-'));
-    const hookScript = path.join(dir, 'hook.mjs');
-    fs.writeFileSync(hookScript, FAKE_HOOK);
-    const modulePath = path.join(dir, 'impeccable.mjs');
-    fs.writeFileSync(modulePath, buildOmpHookModule({ hookScript }));
+    // Mirrors the real install layout: .omp/hooks/post/impeccable.js resolves
+    // its launcher at .omp/skills/impeccable/scripts/impeccable.
+    const moduleDir = path.join(dir, '.omp', 'hooks', 'post');
+    fs.mkdirSync(moduleDir, { recursive: true });
+    const launcherDir = path.join(dir, '.omp', 'skills', 'impeccable', 'scripts');
+    fs.mkdirSync(launcherDir, { recursive: true });
+    const launcherPath = path.join(launcherDir, 'impeccable');
+    fs.writeFileSync(launcherPath, FAKE_LAUNCHER, { mode: 0o755 });
+
+    const modulePath = path.join(moduleDir, 'impeccable.js');
+    fs.writeFileSync(modulePath, buildOmpHookModule());
     const mod = await import(pathToFileURL(modulePath).href);
 
-    // Stand-in for `pi`: capture the handlers the module registers.
+    // Stand-in for `pi`: capture the handlers the module registers. No
+    // `hasUI`, matching a harness with no UI surface to notify on error.
     load = () => {
       const handlers = {};
       mod.default({ on: (event, fn) => { handlers[event] = fn; } });

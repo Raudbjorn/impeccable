@@ -63,7 +63,10 @@ describe('plugin subtree as an oh-my-pi plugin', () => {
     const hookPath = path.join(PLUGIN, 'hooks', 'post', 'impeccable.js');
     assert.ok(fs.existsSync(hookPath), 'plugin/hooks/post/impeccable.js must exist for the omp plugin channel');
     const text = fs.readFileSync(hookPath, 'utf-8');
-    assert.match(text, /@impeccable-hook-module/, 'must be the generated omp hook module, not a stray file');
+    // Matches the function-signature check crates/hook's admin repair and
+    // crates/skills' hook_manifest use to recognize their own module: no
+    // marker-comment stamp, byte content is the whole contract.
+    assert.match(text, /export default function impeccableHook\(/, 'must be the generated omp hook module, not a stray file');
   });
 
   it('records that plugin-channel agents carry a Claude-only path form', () => {

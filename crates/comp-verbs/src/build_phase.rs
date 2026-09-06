@@ -63,7 +63,10 @@ fn now() -> String {
     util::iso_now()
 }
 
-fn load_raster(io: &Io, p: &str) -> Result<Image, String> {
+/// JS: loadRaster(io, p) -- resolves and decodes any raster the build-phase
+/// gates read (a comp, a plate). Public: `impeccable generate-image --plate`
+/// reads the same comp this gate scores plates against.
+pub fn load_raster(io: &Io, p: &str) -> Result<Image, String> {
     let (d, _) = png_io::load_raster(&abs(io, p))?;
     Ok(d.image)
 }
@@ -307,7 +310,9 @@ fn gate_comps(io: &Io) -> Gate {
     g
 }
 
-fn spec_regions(spec: &Value) -> Vec<Value> {
+/// JS: spec.regions. Public: `impeccable generate-image --plate <id>` looks
+/// its region up the same way the plates gate does.
+pub fn spec_regions(spec: &Value) -> Vec<Value> {
     spec.get("regions").and_then(Value::as_array).cloned().unwrap_or_default()
 }
 
@@ -452,6 +457,100 @@ fn plate_verdict(region: &Value, score: &Score) -> (bool, Vec<String>) {
     (reasons.is_empty(), reasons)
 }
 
+/// The whole per-plate gate for one raster region: existence, decodability,
+/// the size floor, the comp-fidelity score, and the comp-crop-identity
+/// refusal. Shared by `gate_plates()` (the build-phase `advance` gate) and
+/// `impeccable generate-image --plate <id> --score-only` (a subagent scoring
+/// a plate it produced with a native image tool), so the two verdicts can
+/// never disagree. `file_override` scores a plate written somewhere other
+/// than the region's own recorded `plate` path.
+pub struct PlateGate {
+    pub reasons: Vec<String>,
+    pub score: Option<Score>,
+    pub status: &'static str,
+    pub file: Option<String>,
+    pub size: Option<(usize, usize)>,
+}
+
+pub fn gate_one_plate(io: &Io, spec: &Value, comp: Option<&Image>, region: &Value, file_override: Option<&str>) -> PlateGate {
+    let id = region.get("id").and_then(Value::as_str).unwrap_or("").to_string();
+    let mut reasons: Vec<String> = Vec::new();
+    let candidate: Option<String> = file_override.map(|f| f.to_string()).or_else(|| region.get("plate").and_then(Value::as_str).map(String::from));
+    let Some(file) = candidate.clone().filter(|f| abs(io, f).exists()) else {
+        reasons.push(format!(
+            "plate missing for {id}: expected {}; produce it from comp-spec.mjs --crop {id} with generate-image.mjs --plate",
+            candidate.clone().unwrap_or_else(|| "(no path)".into())
+        ));
+        return PlateGate { reasons, score: None, status: "missing", file: candidate, size: None };
+    };
+    let img = match std::fs::read(abs(io, &file)).map_err(|e| e.to_string()).and_then(|b| png_io::decode_png(&b)) {
+        Ok(d) => d,
+        Err(e) => {
+            reasons.push(format!("plate {file} is not a decodable PNG: {e}"));
+            return PlateGate { reasons, score: None, status: "unreadable", file: Some(file), size: None };
+        }
+    };
+    let is_texture = region.get("kind").and_then(Value::as_str) == Some("texture");
+    let px_w = region.pointer("/px/w").and_then(Value::as_f64).unwrap_or(0.0);
+    let min_w = 1536f64.min(px_w * 1.5);
+    if !is_texture && (img.image.width as f64) < min_w {
+        reasons.push(format!(
+            "plate {file} is {}px wide; the comp region is {}px and a shipping plate needs at least {}px. Regenerate at asset size, do not crop the comp.",
+            img.image.width, px_w as i64, round(min_w) as i64
+        ));
+    }
+    let mut score_val: Option<Score> = None;
+    if let Some(comp) = comp {
+        let refimg = plate_reference(comp, spec, region);
+        // composite keyed plates over the region's sampled ground
+        let mut build = img.image.clone();
+        let mut transparent = 0usize;
+        let mut i = 3;
+        while i < img.image.data.len() {
+            if img.image.data[i] < 128 {
+                transparent += 1;
+            }
+            i += 4;
+        }
+        if transparent as f64 > (img.image.data.len() / 4) as f64 * 0.05 {
+            let ground = region
+                .pointer("/palette/0/hex")
+                .and_then(Value::as_str)
+                .and_then(hex_rgba)
+                .unwrap_or([255, 255, 255, 255]);
+            let mut over = r::create_image(img.image.width, img.image.height, ground);
+            r::blit(&mut over, &img.image, 0.0, 0.0);
+            build = over;
+        }
+        let kind = region.get("kind").and_then(Value::as_str);
+        let res = compare(&refimg, &build, None, "cover", "", kind);
+        let score = res.whole.clone();
+        let (_, vreasons) = plate_verdict(region, &score);
+        for reason in vreasons {
+            reasons.push(format!("plate {file}: {reason}"));
+        }
+        let is_fake = img.text.get("impeccable:fake").map(|v| v == "1").unwrap_or(false);
+        if !is_texture && !is_fake {
+            let raw = r::crop(
+                comp,
+                region.pointer("/px/x").and_then(Value::as_f64).unwrap_or(0.0),
+                region.pointer("/px/y").and_then(Value::as_f64).unwrap_or(0.0),
+                px_w,
+                region.pointer("/px/h").and_then(Value::as_f64).unwrap_or(0.0),
+            );
+            let same = impeccable_comp::metrics::structure_score(&raw, &r::resize(&img.image, raw.width as f64, raw.height as f64), 256);
+            if same >= 0.95 {
+                reasons.push(format!(
+                    "plate {file} is the comp crop of region {id} (structure {}% against the raw region, a resample of the same pixels): a crop of the comp is never a plate; generate the plate from the crop as reference (generate-image.mjs --plate {id})",
+                    to_fixed(same * 100.0, 0)
+                ));
+            }
+        }
+        score_val = Some(score);
+    }
+    PlateGate { reasons, score: score_val, status: "ok", file: Some(file), size: Some((img.image.width, img.image.height)) }
+}
+
 fn gate_plates(io: &Io) -> Gate {
     let Some(spec) = load_spec(&abs(io, SPEC_PATH)) else {
         return Gate::fail(vec!["no spec".into()]);
@@ -468,86 +567,19 @@ fn gate_plates(io: &Io) -> Gate {
     let mut plates: Vec<Value> = Vec::new();
     for rr in &raster_regions {
         let id = rr.get("id").and_then(Value::as_str).unwrap_or("").to_string();
-        let file = rr.get("plate").and_then(Value::as_str).map(String::from);
-        let Some(file) = file.clone().filter(|f| abs(io, f).exists()) else {
-            reasons.push(format!(
-                "plate missing for {id}: expected {}; produce it from comp-spec.mjs --crop {id} with generate-image.mjs --plate",
-                file.clone().unwrap_or_else(|| "(no path)".into())
-            ));
-            plates.push(json!({ "id": id, "file": file, "status": "missing" }));
-            continue;
-        };
-        let img = match std::fs::read(abs(io, &file)).map_err(|e| e.to_string()).and_then(|b| png_io::decode_png(&b)) {
-            Ok(d) => d,
-            Err(e) => {
-                reasons.push(format!("plate {file} is not a decodable PNG: {e}"));
-                plates.push(json!({ "id": id, "file": file, "status": "unreadable" }));
-                continue;
+        let g = gate_one_plate(io, &spec, comp.as_ref(), rr, None);
+        reasons.extend(g.reasons);
+        let mut entry = Map::new();
+        entry.insert("id".into(), json!(id));
+        entry.insert("file".into(), json!(g.file));
+        entry.insert("status".into(), json!(g.status));
+        if g.status == "ok" {
+            if let Some((w, h)) = g.size {
+                entry.insert("size".into(), json!(format!("{w}x{h}")));
             }
-        };
-        let is_texture = rr.get("kind").and_then(Value::as_str) == Some("texture");
-        let px_w = rr.pointer("/px/w").and_then(Value::as_f64).unwrap_or(0.0);
-        let min_w = 1536f64.min(px_w * 1.5);
-        if !is_texture && (img.image.width as f64) < min_w {
-            reasons.push(format!(
-                "plate {file} is {}px wide; the comp region is {}px and a shipping plate needs at least {}px. Regenerate at asset size, do not crop the comp.",
-                img.image.width, px_w as i64, round(min_w) as i64
-            ));
+            entry.insert("score".into(), g.score.as_ref().map(|s| util::num(s.overall)).unwrap_or(Value::Null));
         }
-        let mut score_val: Option<f64> = None;
-        if let Some(comp) = &comp {
-            let refimg = plate_reference(comp, &spec, rr);
-            // composite keyed plates over the region's sampled ground
-            let mut build = img.image.clone();
-            let mut transparent = 0usize;
-            let mut i = 3;
-            while i < img.image.data.len() {
-                if img.image.data[i] < 128 {
-                    transparent += 1;
-                }
-                i += 4;
-            }
-            if transparent as f64 > (img.image.data.len() / 4) as f64 * 0.05 {
-                let ground = rr
-                    .pointer("/palette/0/hex")
-                    .and_then(Value::as_str)
-                    .and_then(hex_rgba)
-                    .unwrap_or([255, 255, 255, 255]);
-                let mut over = r::create_image(img.image.width, img.image.height, ground);
-                r::blit(&mut over, &img.image, 0.0, 0.0);
-                build = over;
-            }
-            let kind = rr.get("kind").and_then(Value::as_str);
-            let res = compare(&refimg, &build, None, "cover", "", kind);
-            let score = res.whole.clone();
-            score_val = Some(score.overall);
-            let (_, vreasons) = plate_verdict(rr, &score);
-            for reason in vreasons {
-                reasons.push(format!("plate {file}: {reason}"));
-            }
-            let is_fake = img.text.get("impeccable:fake").map(|v| v == "1").unwrap_or(false);
-            if !is_texture && !is_fake {
-                let raw = r::crop(
-                    comp,
-                    rr.pointer("/px/x").and_then(Value::as_f64).unwrap_or(0.0),
-                    rr.pointer("/px/y").and_then(Value::as_f64).unwrap_or(0.0),
-                    px_w,
-                    rr.pointer("/px/h").and_then(Value::as_f64).unwrap_or(0.0),
-                );
-                let same = impeccable_comp::metrics::structure_score(&raw, &r::resize(&img.image, raw.width as f64, raw.height as f64), 256);
-                if same >= 0.95 {
-                    reasons.push(format!(
-                        "plate {file} is the comp crop of region {id} (structure {}% against the raw region, a resample of the same pixels): a crop of the comp is never a plate; generate the plate from the crop as reference (generate-image.mjs --plate {id})",
-                        to_fixed(same * 100.0, 0)
-                    ));
-                }
-            }
-        }
-        plates.push(json!({
-            "id": id, "file": file, "status": "ok",
-            "size": format!("{}x{}", img.image.width, img.image.height),
-            "score": score_val.map(util::num).unwrap_or(Value::Null)
-        }));
+        plates.push(Value::Object(entry));
     }
     let ok_count = plates.iter().filter(|p| p.get("status").and_then(Value::as_str) == Some("ok")).count();
     let mut g = if reasons.is_empty() { Gate::ok(format!("{ok_count}/{} plates", raster_regions.len())) } else { Gate::fail(reasons) };

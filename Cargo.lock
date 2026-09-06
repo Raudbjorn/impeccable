@@ -587,6 +587,8 @@ version = "0.1.0"
 dependencies = [
  "flate2",
  "impeccable-common",
+ "impeccable-comp",
+ "impeccable-comp-verbs",
  "impeccable-core",
  "once_cell",
  "regex",
