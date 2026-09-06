@@ -57,7 +57,7 @@ Notes:
 - Codex CLI hooks ship under `[features].hooks = true` (still flagged), require `/hooks` trust ceremony per-update, and are disabled on Windows.
 - Kiro recognizes `user-invocable` and `disable-model-invocation` per community reports but does not formally document them.
 - Antigravity supports standard Agent Skills spec frontmatter fields (`name`, `description`, `license`, `compatibility`, `metadata`, `allowed-tools`).
-- Impeccable does not emit `allowed-tools` for oh-my-pi: the field is parsed and never enforced there, and the value would have to name a scripts path that differs between a project and a user install.
+- OpenCode 1.18.10 recognises only the spec subset on SKILL.md (`name`, `description`, `license`, `compatibility`, `metadata`). Claude-style extensions (`user-invocable`, `argument-hint`, `allowed-tools`, `model`, `agent`) are silently ignored; Impeccable still emits them today for other harnesses, but they have no effect in OpenCode. Use `commands/<name>.md` (see Placeholder / Variable Substitution below) for slash UX; OpenCode honours only `description`, `agent`, `model`, `variant`, `subtask` on command files.
 - oh-my-pi's own supported frontmatter set is `name`, `description`, `globs`, `alwaysApply`, `hide`, `disableModelInvocation` (kebab-case `disable-model-invocation` is normalized to this); everything else is parsed and preserved as unknown metadata but not interpreted, same as Gemini's spec fields.
 - Unknown fields are silently ignored by all harnesses.
 
@@ -68,7 +68,7 @@ Notes:
 | Claude Code | Yes (`PostToolUse`) | No | `.claude/settings.json` | Project-local settings entry installed by `npx impeccable skills install/update`. Runs `.claude/skills/impeccable/scripts/hook.mjs`. |
 | Codex CLI | Yes (`PostToolUse`) | No | `.codex/hooks.json` | Project-local manifest installed with the `.agents/skills/impeccable` payload. Runs `.agents/skills/impeccable/scripts/hook.mjs` from the git root. Requires normal `/hooks` trust approval. |
 | GitHub Copilot | Yes (`PostToolUse`) | No | `.github/hooks/impeccable.json` | Team-shared, committed repo-level manifest. Runs `.github/skills/impeccable/scripts/hook.mjs`. |
-| oh-my-pi | Yes (`tool_result`) | Yes (`session_stop`) | `.omp/hooks/post/impeccable.js` | The only module-shaped target: a loaded JS module, not a JSON manifest, so it is recognized by an `@impeccable-hook-module` stamp rather than a command string. Matches `edit`, `write`, and `ast_edit`, and scans every entry of the event's `paths`. The Stop pass returns `continue: true` alongside `additionalContext`, which is what oh-my-pi requires to schedule the continuation. |
+| oh-my-pi | Yes (`tool_result`) | Yes (`session_stop`) | `.omp/hooks/post/impeccable.js` | The only module-shaped target: a loaded JS module (`crates/context/assets/omp-hook.js`, embedded in the binary and read by the JS build alike), not a JSON manifest, so it is recognized by content (byte-equality in `hook-admin`'s repair, the `impeccableHook(` function-signature substring elsewhere) rather than a command string. Matches `edit`, `write`, and `ast_edit`, and scans every entry of the event's `paths`. The Stop pass returns `continue: true` alongside `additionalContext`, which is what oh-my-pi requires to schedule the continuation. |
 | All other harnesses | No | No | n/a | No documented hook surface today. Skill and commands still ship. |
 
 ## Skill Directory Structure
@@ -126,8 +126,8 @@ Some harnesses have separate "custom commands" systems (distinct from skills) wi
 
 | Harness | Command system | Substitution syntax |
 |---------|---------------|-------------------|
+| OpenCode | `.opencode/commands/` (Markdown) | `$ARGUMENTS`, `$1`-`$N`, `` !`shell` ``, `@file` |
 | Gemini CLI | `.gemini/commands/` (TOML) | `{{args}}`, `!{shell}`, `@{file}` |
 | Codex CLI | `.codex/prompts/` | `$ARGNAME` |
-| OpenCode | `.opencode/commands/` | `$ARGUMENTS`, `$1`-`$N`, `` !`shell` `` |
 
 Our build system handles cross-provider placeholders at compile time via `replacePlaceholders()` for `{{model}}`, `{{config_file}}`, `{{ask_instruction}}`, and `{{available_commands}}`.

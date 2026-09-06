@@ -99,7 +99,7 @@ For each issue, document:
 - **Impact**: How it affects users
 - **WCAG/Standard**: Which standard it violates (if applicable)
 - **Recommendation**: How to fix it
-- **Suggested command**: Which command to use (prefer: /skill:impeccable adapt, /skill:impeccable animate, /skill:impeccable audit, /skill:impeccable bolder, /skill:impeccable clarify, /skill:impeccable colorize, /skill:impeccable critique, /skill:impeccable delight, /skill:impeccable distill, /skill:impeccable document, /skill:impeccable harden, /skill:impeccable layout, /skill:impeccable onboard, /skill:impeccable optimize, /skill:impeccable overdrive, /skill:impeccable polish, /skill:impeccable quieter, /skill:impeccable shape, /skill:impeccable typeset)
+- **Suggested command**: Which command to use (prefer: /skill:impeccable adapt, /skill:impeccable animate, /skill:impeccable audit, /skill:impeccable bolder, /skill:impeccable clarify, /skill:impeccable colorize, /skill:impeccable critique, /skill:impeccable delight, /skill:impeccable design-context, /skill:impeccable distill, /skill:impeccable document, /skill:impeccable harden, /skill:impeccable layout, /skill:impeccable onboard, /skill:impeccable optimize, /skill:impeccable overdrive, /skill:impeccable polish, /skill:impeccable quieter, /skill:impeccable shape, /skill:impeccable typeset)
 
 ### Patterns & Systemic Issues
 
@@ -118,7 +118,7 @@ List recommended commands in priority order (P0 first, then P1, then P2):
 1. **[P?] `/skill:command-name`**: Brief description (specific context from audit findings)
 2. **[P?] `/skill:command-name`**: Brief description (specific context)
 
-**Rules**: Only recommend commands from: /skill:impeccable adapt, /skill:impeccable animate, /skill:impeccable audit, /skill:impeccable bolder, /skill:impeccable clarify, /skill:impeccable colorize, /skill:impeccable critique, /skill:impeccable delight, /skill:impeccable distill, /skill:impeccable document, /skill:impeccable harden, /skill:impeccable layout, /skill:impeccable onboard, /skill:impeccable optimize, /skill:impeccable overdrive, /skill:impeccable polish, /skill:impeccable quieter, /skill:impeccable shape, /skill:impeccable typeset. Map findings to the most appropriate command. End with `/skill:impeccable polish` as the final step if any fixes were recommended.
+**Rules**: Only recommend commands from: /skill:impeccable adapt, /skill:impeccable animate, /skill:impeccable audit, /skill:impeccable bolder, /skill:impeccable clarify, /skill:impeccable colorize, /skill:impeccable critique, /skill:impeccable delight, /skill:impeccable design-context, /skill:impeccable distill, /skill:impeccable document, /skill:impeccable harden, /skill:impeccable layout, /skill:impeccable onboard, /skill:impeccable optimize, /skill:impeccable overdrive, /skill:impeccable polish, /skill:impeccable quieter, /skill:impeccable shape, /skill:impeccable typeset. Map findings to the most appropriate command. End with `/skill:impeccable polish` as the final step if any fixes were recommended.
 
 After presenting the summary, tell the user:
 
