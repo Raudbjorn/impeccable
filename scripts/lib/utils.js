@@ -70,8 +70,8 @@ function readSkillScripts(scriptsDir) {
       scripts.push({
         name: relPath,
         content: fs.readFileSync(entryPath, isBinary ? undefined : 'utf-8'),
-        mode: fs.statSync(entryPath).mode & 0o777,
         filePath: entryPath,
+        mode: fs.statSync(entryPath).mode & 0o777,
       });
     }
   };
