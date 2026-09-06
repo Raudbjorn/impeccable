@@ -1,30 +1,71 @@
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const HOOK_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "skills", "impeccable", "scripts", process.platform === "win32" ? "impeccable.cmd" : "impeccable");
 
+// Async (not spawnSync): a multi-file edit scans every touched path, and a
+// synchronous spawn per path serializes their timeouts, so N files could
+// block the tool-result handler for up to timeoutMs * N. Spawned
+// concurrently and awaited via Promise.all, the wall-clock cost is bounded
+// by the single slowest scan instead.
 function runHook(payload, timeoutMs, ctx) {
-  const result = spawnSync(HOOK_SCRIPT, ["hook"], {
-    shell: process.platform === "win32",
-    input: JSON.stringify(payload),
-    encoding: "utf8",
-    cwd: payload.cwd,
-    timeout: timeoutMs,
+  return new Promise((resolve) => {
+    const fail = (reason) => {
+      const message = `Impeccable hook failed to run: ${reason}`;
+      if (ctx.hasUI) ctx.ui.notify(message, "error");
+      else console.error(message);
+      resolve(null);
+    };
+    let child;
+    try {
+      child = spawn(HOOK_SCRIPT, ["hook"], {
+        shell: process.platform === "win32",
+        cwd: payload.cwd,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } catch (err) {
+      fail(err.message);
+      return;
+    }
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill();
+      fail(`timed out after ${timeoutMs}ms`);
+    }, timeoutMs);
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      fail(err.message);
+    });
+    child.on("close", (code, signal) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (code !== 0) {
+        fail(signal || stderr.trim() || `exit code ${code}`);
+        return;
+      }
+      if (!stdout) {
+        resolve(null);
+        return;
+      }
+      try {
+        resolve(JSON.parse(stdout)?.hookSpecificOutput?.additionalContext || null);
+      } catch {
+        resolve(null);
+      }
+    });
+    child.stdin.write(JSON.stringify(payload));
+    child.stdin.end();
   });
-  if (result.error || result.status !== 0) {
-    const reason = result.error?.message || result.signal || result.stderr?.trim() || `exit code ${result.status}`;
-    const message = `Impeccable hook failed to run: ${reason}`;
-    if (ctx.hasUI) ctx.ui.notify(message, "error");
-    else console.error(message);
-    return null;
-  }
-  if (!result.stdout) return null;
-  try {
-    return JSON.parse(result.stdout)?.hookSpecificOutput?.additionalContext || null;
-  } catch {
-    return null;
-  }
 }
 
 // RFC 3986 authority-style scheme ("scheme://..."): essentially no real
@@ -80,21 +121,21 @@ export default function impeccableHook(pi) {
         ? [singlePath]
         : [];
     if (targets.length === 0) return;
-    const findings = [];
-    for (const filePath of targets) {
-      // Some tool surfaces carry a scheme-prefixed identifier that is not a
-      // real filesystem target. Spawning the hook on them is wasted work —
-      // the hook's own file-missing skip is the only thing keeping it cheap.
-      // Reject at the adapter so the spawn never happens.
-      if (hasUriScheme(filePath)) continue;
-      const text = runHook({
-        hook_event_name: "PostToolUse",
-        tool_name: event.toolName,
-        tool_input: { file_path: filePath },
-        cwd: ctx.cwd,
-      }, 5000, ctx);
-      if (text) findings.push(text);
-    }
+    // Some tool surfaces carry a scheme-prefixed identifier that is not a
+    // real filesystem target. Spawning the hook on them is wasted work — the
+    // hook's own file-missing skip is the only thing keeping it cheap.
+    // Reject at the adapter so the spawn never happens.
+    const scannable = targets.filter((filePath) => !hasUriScheme(filePath));
+    if (scannable.length === 0) return;
+    // Scan every target concurrently: see the note on runHook() for why this
+    // is not a sequential loop.
+    const results = await Promise.all(scannable.map((filePath) => runHook({
+      hook_event_name: "PostToolUse",
+      tool_name: event.toolName,
+      tool_input: { file_path: filePath },
+      cwd: ctx.cwd,
+    }, 5000, ctx)));
+    const findings = results.filter(Boolean);
     if (findings.length === 0) return;
     // ToolResultEventResult.content is a replacement content-block array, not
     // a string: the runner takes `result.content ?? tool.content`, so a bare
@@ -105,7 +146,7 @@ export default function impeccableHook(pi) {
   });
 
   pi.on("session_stop", async (event, ctx) => {
-    const text = runHook({
+    const text = await runHook({
       hook_event_name: "Stop",
       stop_hook_active: event.stop_hook_active === true,
       cwd: ctx.cwd,

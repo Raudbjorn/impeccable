@@ -185,19 +185,25 @@ describe('hook manifest builders', () => {
     assert.match(source, /hook_event_name: "PostToolUse"/);
     assert.match(source, /hook_event_name: "Stop"/);
     assert.match(source, /stop_hook_active: event\.stop_hook_active === true/);
-    // Uses raw spawnSync (pi.exec() has no stdin option, and hook.mjs
-    // requires stdin), and parses Claude's default payload() JSON envelope
-    // back out on its own side.
-    assert.match(source, /spawnSync\(HOOK_SCRIPT, \["hook"\]/);
+    // Uses async spawn, not spawnSync (pi.exec() has no stdin option, and
+    // hook.mjs requires stdin): a multi-file edit awaits every target's scan
+    // via Promise.all, and a synchronous spawn per target would serialize
+    // their timeouts, so N files could block the handler for up to
+    // timeoutMs * N instead of one timeoutMs.
+    assert.match(source, /spawn\(HOOK_SCRIPT, \["hook"\]/);
+    assert.doesNotMatch(source, /spawnSync\(/);
     assert.match(source, /hookSpecificOutput\?\.additionalContext/);
     // A hung hook.mjs must not block edit/stop handling indefinitely. Each
     // event passes its own timeout, matching the JSON providers' own
-    // TIMEOUT_SECONDS/STOP_TIMEOUT_SECONDS split; spawnSync's timeout reaches
-    // the same explicit error-reporting path as other subprocess failures.
+    // TIMEOUT_SECONDS/STOP_TIMEOUT_SECONDS split; spawn has no built-in
+    // timeout option (unlike spawnSync), so the module enforces it with its
+    // own setTimeout + child.kill(), reaching the same explicit
+    // error-reporting path as other subprocess failures.
     assert.match(source, /function runHook\(payload, timeoutMs, ctx\)/);
-    assert.match(source, /timeout: timeoutMs/);
+    assert.match(source, /setTimeout\(\(\) => \{[\s\S]*?child\.kill\(\)/);
+    assert.match(source, /Promise\.all\(scannable\.map/);
     assert.match(source, /runHook\(\{[\s\S]*?hook_event_name: "PostToolUse"[\s\S]*?\}, 5000, ctx\)/);
-    assert.match(source, /runHook\(\{[\s\S]*?hook_event_name: "Stop"[\s\S]*?\}, 30000, ctx\)/);
+    assert.match(source, /await runHook\(\{[\s\S]*?hook_event_name: "Stop"[\s\S]*?\}, 30000, ctx\)/);
     // ToolResultEventResult.content is a replacement content-block array
     // (packages/coding-agent/src/extensibility/shared-events.ts): the runner
     // takes `result.content ?? tool.content`, so returning a bare string both
@@ -225,7 +231,7 @@ describe('hook manifest builders', () => {
     // once an edit touches two or more files, so reading only one of those
     // left every multi-file edit unscanned.
     assert.match(source, /Array\.isArray\(input\.paths\)/);
-    assert.match(source, /for \(const filePath of targets\)/);
+    assert.match(source, /scannable\.map\(\(filePath\) => runHook/);
   });
   it('oh-my-pi adapter scans every path in a multi-file edit, guarding each for a URI scheme', () => {
     // Extracted the same way the URI-scheme test below does: syntactic

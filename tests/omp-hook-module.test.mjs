@@ -107,6 +107,51 @@ describe('generated oh-my-pi hook module', () => {
     assert.match(result.content[0].text, /finding for b\.css/);
   });
 
+  it('scans multiple files concurrently, not one at a time', async () => {
+    // A launcher that sleeps before replying. Scanned sequentially, N files
+    // would cost N * delay; scanned concurrently (Promise.all), wall time is
+    // bounded by one delay regardless of N.
+    const slowDir = fs.mkdtempSync(path.join(os.tmpdir(), 'imp-omp-mod-slow-'));
+    const moduleDir = path.join(slowDir, '.omp', 'hooks', 'post');
+    fs.mkdirSync(moduleDir, { recursive: true });
+    const launcherDir = path.join(slowDir, '.omp', 'skills', 'impeccable', 'scripts');
+    fs.mkdirSync(launcherDir, { recursive: true });
+    const delayMs = 200;
+    fs.writeFileSync(
+      path.join(launcherDir, 'impeccable'),
+      `#!/usr/bin/env node
+let raw = '';
+process.stdin.on('data', (c) => { raw += c; });
+process.stdin.on('end', () => {
+  setTimeout(() => {
+    const event = JSON.parse(raw);
+    process.stdout.write(JSON.stringify({ hookSpecificOutput: { additionalContext: \`finding for \${event.tool_input.file_path}\` } }));
+  }, ${delayMs});
+});
+`,
+      { mode: 0o755 },
+    );
+    const modulePath = path.join(moduleDir, 'impeccable.js');
+    fs.writeFileSync(modulePath, buildOmpHookModule());
+    const mod = await import(pathToFileURL(modulePath).href);
+    const handlers = {};
+    mod.default({ on: (event, fn) => { handlers[event] = fn; } });
+
+    const fileCount = 4;
+    const paths = Array.from({ length: fileCount }, (_, i) => `f${i}.css`);
+    const started = Date.now();
+    const result = await handlers.tool_result({ toolName: 'edit', input: { paths }, content: [] }, { cwd: slowDir });
+    const elapsed = Date.now() - started;
+
+    assert.equal(result.content.length, 1);
+    for (const p of paths) assert.match(result.content[0].text, new RegExp(`finding for ${p}`));
+    // Generous margin above one delay, and well under the sequential worst
+    // case, so ordinary scheduling jitter cannot flip this assertion.
+    assert.ok(elapsed < delayMs * 2, `expected roughly one delay's worth of wall time (concurrent), took ${elapsed}ms`);
+
+    fs.rmSync(slowDir, { recursive: true, force: true });
+  });
+
   it('covers ast_edit, and ignores tools that do not write files', async () => {
     const handlers = load();
     const edited = await handlers.tool_result(
