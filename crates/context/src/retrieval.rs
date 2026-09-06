@@ -198,6 +198,12 @@ fn validate(request: &Value, response: &Value) -> Result<(), String> {
         && challengers.is_some_and(|c| !c.is_empty())
         && compositions.is_some_and(|c| !c.is_empty());
     if !ok {
+        // Name the field that is wrong rather than the group it sits in: the
+        // shape of `settings` and a missing candidate list send you to
+        // different places in the retrieval command.
+        if !response.get("settings").is_some_and(Value::is_object) {
+            return Err("settings must be an object".into());
+        }
         return Err("missing candidates or session".into());
     }
     let (challengers, compositions) = (challengers.unwrap(), compositions.unwrap());
@@ -574,7 +580,7 @@ mod tests {
         let cfg = echo_config(&bad.to_string(), 30_000);
         let request = serde_json::json!({"op": "start", "round": 0});
         let err = call_retrieval(&request, ".", &cfg).unwrap_err();
-        assert!(err.contains("missing candidates or session"), "{err}");
+        assert!(err.contains("settings must be an object"), "{err}");
     }
 
     #[test]

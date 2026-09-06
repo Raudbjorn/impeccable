@@ -269,6 +269,7 @@ fn unit(scope: &str, salt: &str, key: &str) -> f64 {
 /// a bad flag before it spawns a retrieval command and writes a round file.
 /// Rendering still validates: a session can hand back settings of its own, and
 /// those have not been through this.
+#[cfg_attr(test, derive(Debug))]
 struct SeedOptions<'a> {
     scope: &'a str,
     reroll: usize,
@@ -747,5 +748,103 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
             io.err(&format!("{}\n", msg));
             1
         }
+    }
+}
+
+#[cfg(test)]
+mod retrieval_render_tests {
+    use super::*;
+
+    const SESSION: &str = "d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5";
+
+    fn retrieval_round() -> Value {
+        serde_json::json!({
+            "protocol": 1,
+            "session": SESSION,
+            "round": 0,
+            "register": null,
+            "settings": {"key": "k1"},
+            "record": {
+                "poolRevision": "abc123def456",
+                "approvedCount": 4,
+                "catalogCount": 9,
+                "challengers": [{
+                    "id": "c1", "name": "One", "wellTier": "graphic",
+                    "form": "a form", "spark": "a spark", "system": ["one rule"]
+                }],
+                "compositions": [{"id": "p1", "form": "a shape", "grammar": ["one rule"]}],
+                "staging": {"id": "p1", "form": "a shape", "grammar": ["one rule"]}
+            }
+        })
+    }
+
+    fn seed(resolved: Option<Value>) -> SeedArgs {
+        SeedArgs {
+            scope: Some("direction".to_string()),
+            key: "k1".to_string(),
+            reroll: 0.0,
+            register: None,
+            mode: None,
+            grain: None,
+            platform: None,
+            candidate_count: 7.0,
+            resolved,
+        }
+    }
+
+    fn render(env: Env, a: &SeedArgs) -> String {
+        let mut budget = ApiBudget::new(&env);
+        render_concept_seed(&env, ".", &mut budget, a).unwrap()
+    }
+
+    #[test]
+    fn a_retrieval_round_prints_the_session_and_how_to_continue_it() {
+        // Without this the round is a dead end: --session, --replay and
+        // --chosen all need an ID that nothing else hands the user.
+        let out = render(Env::new(), &seed(Some(retrieval_round())));
+        assert!(out.contains(&format!("LOCAL SESSION: {SESSION}")), "{out}");
+        assert!(out.contains(&format!("--session {SESSION} --reroll <n>")), "{out}");
+        assert!(out.contains("--chosen <challenger-id>"), "{out}");
+        assert!(out.contains("source: retrieval"), "{out}");
+        // The remote telemetry block belongs to API rolls; this path exists to
+        // keep the roll service out of it.
+        assert!(!out.contains("TELEMETRY:"), "{out}");
+    }
+
+    #[test]
+    fn a_retrieval_round_renders_compositions_without_the_preview_flag() {
+        let a = seed(Some(retrieval_round()));
+        let bare = render(Env::new(), &a);
+        assert!(bare.contains("They carry\nstructure only"), "composition block missing: {bare}");
+
+        // The flag gates the other sources, so setting it changes nothing here.
+        let mut env = Env::new();
+        env.insert("IMPECCABLE_COMPOSITIONS".to_string(), "1".to_string());
+        assert_eq!(bare, render(env, &a));
+    }
+
+    #[test]
+    fn a_round_without_a_session_prints_no_session_block() {
+        let mut round = retrieval_round();
+        round["session"] = Value::Null;
+        let out = render(Env::new(), &seed(Some(round)));
+        assert!(!out.contains("LOCAL SESSION"), "{out}");
+    }
+
+    #[test]
+    fn bad_flags_are_rejected_before_anything_with_a_side_effect_runs() {
+        // run() calls this ahead of the retrieval subprocess and the round
+        // file, so these have to fail here rather than at render time.
+        let mut a = seed(None);
+        a.register = Some(Some("wild".to_string()));
+        assert!(validate_seed_args(&a).unwrap_err().contains("--register must be safer or bolder"));
+
+        let mut a = seed(None);
+        a.reroll = -1.0;
+        assert!(validate_seed_args(&a).unwrap_err().contains("--reroll must be a non-negative integer"));
+
+        let mut a = seed(None);
+        a.candidate_count = 9.0;
+        assert!(validate_seed_args(&a).unwrap_err().contains("--candidate-count must be an integer from 5 to 7"));
     }
 }
