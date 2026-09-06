@@ -187,7 +187,7 @@ describe('hook manifest builders', () => {
     assert.match(source, /stop_hook_active: event\.stop_hook_active === true/);
     // Uses async spawn, not spawnSync (pi.exec() has no stdin option, and
     // hook.mjs requires stdin): a multi-file edit awaits every target's scan
-    // via Promise.all, and a synchronous spawn per target would serialize
+    // concurrently, and a synchronous spawn per target would serialize
     // their timeouts, so N files could block the handler for up to
     // timeoutMs * N instead of one timeoutMs.
     assert.match(source, /spawn\(HOOK_SCRIPT, \["hook"\]/);
@@ -201,7 +201,13 @@ describe('hook manifest builders', () => {
     // error-reporting path as other subprocess failures.
     assert.match(source, /function runHook\(payload, timeoutMs, ctx\)/);
     assert.match(source, /setTimeout\(\(\) => \{[\s\S]*?child\.kill\(\)/);
-    assert.match(source, /Promise\.all\(scannable\.map/);
+    // A launcher that exits before the payload lands raises EPIPE on the
+    // stdin stream, a distinct event from child.on("error")/("close").
+    assert.match(source, /child\.stdin\.on\("error"/);
+    // Concurrent, but bounded: an unbounded Promise.all over every target
+    // risks exhausting process/fd limits on a large batch edit.
+    assert.match(source, /const MAX_CONCURRENT_SCANS = \d+/);
+    assert.match(source, /mapWithConcurrencyLimit\(scannable, MAX_CONCURRENT_SCANS/);
     assert.match(source, /runHook\(\{[\s\S]*?hook_event_name: "PostToolUse"[\s\S]*?\}, 5000, ctx\)/);
     assert.match(source, /await runHook\(\{[\s\S]*?hook_event_name: "Stop"[\s\S]*?\}, 30000, ctx\)/);
     // ToolResultEventResult.content is a replacement content-block array
@@ -231,7 +237,7 @@ describe('hook manifest builders', () => {
     // once an edit touches two or more files, so reading only one of those
     // left every multi-file edit unscanned.
     assert.match(source, /Array\.isArray\(input\.paths\)/);
-    assert.match(source, /scannable\.map\(\(filePath\) => runHook/);
+    assert.match(source, /mapWithConcurrencyLimit\(scannable, MAX_CONCURRENT_SCANS, \(filePath\) => runHook/);
   });
   it('oh-my-pi adapter scans every path in a multi-file edit, guarding each for a URI scheme', () => {
     // Extracted the same way the URI-scheme test below does: syntactic

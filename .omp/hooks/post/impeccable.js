@@ -109,6 +109,25 @@ function hasUriScheme(value) {
   return KNOWN_SCHEMELESS_VIRTUAL_PREFIXES.some((prefix) => value.startsWith(prefix));
 }
 
+// A bulk edit can carry an arbitrarily long target list; spawning one engine
+// process per path with no cap risks exhausting the OS's process/file
+// descriptor limits on a large batch. Cap how many run at once instead of
+// bounding only by the target list's own size.
+const MAX_CONCURRENT_SCANS = 8;
+
+async function mapWithConcurrencyLimit(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await fn(items[index]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
 export default function impeccableHook(pi) {
   pi.on("tool_result", async (event, ctx) => {
     // ast_edit mutates files like edit and write do; omitting it left a whole
@@ -136,14 +155,15 @@ export default function impeccableHook(pi) {
     // Reject at the adapter so the spawn never happens.
     const scannable = targets.filter((filePath) => !hasUriScheme(filePath));
     if (scannable.length === 0) return;
-    // Scan every target concurrently: see the note on runHook() for why this
-    // is not a sequential loop.
-    const results = await Promise.all(scannable.map((filePath) => runHook({
+    // Scan targets concurrently (see the note on runHook() for why this is
+    // not a sequential loop), up to MAX_CONCURRENT_SCANS at once so a large
+    // batch edit cannot launch an unbounded number of engine processes.
+    const results = await mapWithConcurrencyLimit(scannable, MAX_CONCURRENT_SCANS, (filePath) => runHook({
       hook_event_name: "PostToolUse",
       tool_name: event.toolName,
       tool_input: { file_path: filePath },
       cwd: ctx.cwd,
-    }, 5000, ctx)));
+    }, 5000, ctx));
     const findings = results.filter(Boolean);
     if (findings.length === 0) return;
     // ToolResultEventResult.content is a replacement content-block array, not

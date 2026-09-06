@@ -158,6 +158,57 @@ process.stdin.on('end', () => {
     fs.rmSync(slowDir, { recursive: true, force: true });
   });
 
+  it('caps how many scans run at once, so a large batch cannot spawn unbounded processes', async () => {
+    // Matches MAX_CONCURRENT_SCANS in the module: more targets than the cap
+    // (10 vs. 8) must take roughly two delays, not one -- if the cap were
+    // removed (plain Promise.all), all 10 would run at once and this would
+    // finish in roughly one delay instead, tripping the lower bound below.
+    const poolDir = fs.mkdtempSync(path.join(os.tmpdir(), 'imp-omp-mod-pool-'));
+    const moduleDir = path.join(poolDir, '.omp', 'hooks', 'post');
+    fs.mkdirSync(moduleDir, { recursive: true });
+    const launcherDir = path.join(poolDir, '.omp', 'skills', 'impeccable', 'scripts');
+    fs.mkdirSync(launcherDir, { recursive: true });
+    const delayMs = 100;
+    fs.writeFileSync(
+      path.join(launcherDir, 'impeccable'),
+      `#!/usr/bin/env node
+let raw = '';
+process.stdin.on('data', (c) => { raw += c; });
+process.stdin.on('end', () => {
+  setTimeout(() => {
+    const event = JSON.parse(raw);
+    process.stdout.write(JSON.stringify({ hookSpecificOutput: { additionalContext: \`finding for \${event.tool_input.file_path}\` } }));
+  }, ${delayMs});
+});
+`,
+      { mode: 0o755 },
+    );
+    const modulePath = path.join(moduleDir, 'impeccable.js');
+    fs.writeFileSync(modulePath, buildOmpHookModule());
+    const mod = await import(pathToFileURL(modulePath).href);
+    const handlers = {};
+    mod.default({ on: (event, fn) => { handlers[event] = fn; } });
+
+    const fileCount = 10;
+    const paths = Array.from({ length: fileCount }, (_, i) => `p${i}.css`);
+    const started = Date.now();
+    const result = await handlers.tool_result({ toolName: 'edit', input: { paths }, content: [] }, { cwd: poolDir });
+    const elapsed = Date.now() - started;
+
+    assert.equal(result.content.length, 1);
+    for (const p of paths) assert.match(result.content[0].text, new RegExp(`finding for ${p}`));
+    assert.ok(
+      elapsed > delayMs * 1.5,
+      `expected the 10 targets to spill into a second batch past the concurrency cap, took ${elapsed}ms`,
+    );
+    assert.ok(
+      elapsed < delayMs * (fileCount - 1),
+      `expected two batches' worth of wall time, not a serial run of ${fileCount}, took ${elapsed}ms`,
+    );
+
+    fs.rmSync(poolDir, { recursive: true, force: true });
+  });
+
   it('survives a launcher that closes stdin before the payload is fully written', async () => {
     // Regression: writing to a pipe whose read end has already closed raises
     // EPIPE on the stdin stream itself -- a distinct event from the child
