@@ -186,7 +186,15 @@ export default function impeccableHook(pi) {
           ? [details.path]
           : [];
       if (fromDetails.length > 0) {
+        // Real, confirmed per-file targets take priority even on a partial
+        // failure (isError with some perFileResults entries still written).
         targets = fromDetails;
+      } else if (event.isError) {
+        // No confirmed details and the call itself failed: nothing was
+        // written, so a request-side path guess would scan a file this
+        // edit never touched and could append an unrelated finding to the
+        // tool's own error output.
+        targets = [];
       } else {
         // `input.paths` is the authoritative multi-target list a multi-file
         // edit carries; the runner drops the single-target
@@ -204,6 +212,11 @@ export default function impeccableHook(pi) {
             ? [singlePath]
             : [];
       }
+    } else if (event.isError) {
+      // write has no details at all (always undefined), so a failed write
+      // leaves no confirmed evidence anything was written; same reasoning
+      // as the edit/apply_patch branch above.
+      targets = [];
     } else {
       // write
       const input = event.input || {};

@@ -255,6 +255,10 @@ describe('hook manifest builders', () => {
     // ast_edit previews (dry-run) apply nothing; only an applied result's
     // files are real, on-disk changes worth scanning.
     assert.match(source, /details\.applied === true && Array\.isArray\(details\.files\)/);
+    // A failed tool call with no confirmed details wrote nothing; falling
+    // back to its request-side input would scan a file the call never
+    // touched and could append an unrelated finding to its error output.
+    assert.match(source, /\} else if \(event\.isError\) \{/);
     assert.match(source, /mapWithConcurrencyLimit\(scannable, MAX_CONCURRENT_SCANS, \(filePath\) => runHook/);
   });
   it('oh-my-pi adapter scans every path in a multi-file edit, guarding each for a URI scheme', () => {
@@ -332,6 +336,29 @@ describe('hook manifest builders', () => {
       pickTargets({ toolName: 'ast_edit', input: { paths: ['src/**/*.ts'] }, details: { applied: true } }),
       [],
       'ast_edit must never fall back to input.paths, which are search scopes, not changed files',
+    );
+    // A failed call with no confirmed details wrote nothing; its input path
+    // is only a guess, and scanning it would attach an unrelated finding to
+    // an error result.
+    assert.deepEqual(
+      pickTargets({ toolName: 'edit', input: { path: 'q.css' }, isError: true }),
+      [],
+      'a failed edit with no confirmed details must not fall back to its input path',
+    );
+    assert.deepEqual(
+      pickTargets({ toolName: 'write', input: { path: 'q.css' }, isError: true }),
+      [],
+      'a failed write must not fall back to its input path either',
+    );
+    assert.deepEqual(
+      pickTargets({
+        toolName: 'edit',
+        input: {},
+        isError: true,
+        details: { perFileResults: [{ path: 'q.css' }] },
+      }),
+      ['q.css'],
+      'a partial failure with confirmed per-file details still scans those real changes',
     );
   });
   it('oh-my-pi adapter rejects device URI tool targets before spawning hook.mjs', () => {

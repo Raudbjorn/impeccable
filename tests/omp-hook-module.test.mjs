@@ -302,6 +302,45 @@ process.stdin.on('end', () => {
     }
   });
 
+  it('skips a failed tool result rather than guessing targets from its input', async () => {
+    const handlers = load();
+    // A failed edit's input still names a path, but nothing was written --
+    // details carries nothing either, since the tool errored before
+    // producing a result. Scanning the input-named path anyway would append
+    // an unrelated finding to the error output.
+    assert.equal(
+      await handlers.tool_result(
+        { toolName: 'edit', input: { path: 'q.css' }, isError: true, content: [] },
+        { cwd: dir },
+      ),
+      undefined,
+      'a failed edit with no confirmed details must not scan its input path',
+    );
+    assert.equal(
+      await handlers.tool_result(
+        { toolName: 'write', input: { path: 'q.css' }, isError: true, content: [] },
+        { cwd: dir },
+      ),
+      undefined,
+      'a failed write must not scan its input path either',
+    );
+
+    // A partial failure can still carry confirmed per-file results for the
+    // files that did succeed; those are real changes and stay worth scanning.
+    const partial = await handlers.tool_result(
+      {
+        toolName: 'edit',
+        input: {},
+        isError: true,
+        details: { perFileResults: [{ path: 'q.css' }] },
+        content: [],
+      },
+      { cwd: dir },
+    );
+    assert.equal(partial.content.length, 1);
+    assert.match(partial.content[0].text, /finding for q\.css/);
+  });
+
   it('asks to continue the session when the Stop pass has findings', async () => {
     // additionalContext on its own is discarded as the session settles.
     const result = await load().session_stop({ stop_hook_active: false }, { cwd: dir });
