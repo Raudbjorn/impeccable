@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -11,6 +11,7 @@ import {
   parseManualEditResponse,
   parseVariantResponse,
   progressiveVariantGuidance,
+  requiresChatCompletionsApi,
   resolveLlmAgentConfig,
   validateManualEditCoverage,
   validateManualEditPlanningCoverage,
@@ -116,11 +117,101 @@ describe('live-e2e LLM agent provider config', () => {
     assert.equal(config.baseURL, 'https://proxy.example.test/anthropic');
   });
 
+  it('resolves Inception Mercury when explicitly selected, key from env', () => {
+    const config = resolveLlmAgentConfig({}, {
+      IMPECCABLE_E2E_LLM_PROVIDER: 'inception',
+      INCEPTION_API_KEY: 'k',
+      IMPECCABLE_E2E_INCEPTION_KEY_CMD: '',
+    });
+    assert.equal(config.provider, 'inception');
+    assert.equal(config.model, 'mercury-2');
+    assert.equal(config.baseURL, 'https://api.inceptionlabs.ai/v1');
+    assert.equal(config.requiredEnv, 'INCEPTION_API_KEY');
+    assert.equal(config.apiKey, 'k');
+  });
+
+  it('reads and trims the Inception key when the local helper emits one', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'impeccable-inception-helper-'));
+    const helperPath = join(dir, 'key-helper.sh');
+    writeFileSync(helperPath, '#!/bin/sh\nprintf \'  sentinel-key-value  \\n\'\n');
+    chmodSync(helperPath, 0o755);
+    try {
+      const config = resolveLlmAgentConfig({}, {
+        IMPECCABLE_E2E_LLM_PROVIDER: 'inception',
+        IMPECCABLE_E2E_INCEPTION_KEY_CMD: helperPath,
+      });
+      assert.equal(config.apiKey, 'sentinel-key-value');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('discards a key when the local helper emits empty output', () => {
+    const config = resolveLlmAgentConfig({}, {
+      IMPECCABLE_E2E_LLM_PROVIDER: 'inception',
+      // `echo` with no args prints only a newline; the (empty) trimmed
+      // output must be discarded rather than passed through as a key.
+      IMPECCABLE_E2E_INCEPTION_KEY_CMD: 'echo',
+    });
+    assert.equal(config.apiKey, undefined);
+  });
+
+  it('discards a key and does not throw when the helper command fails', () => {
+    const config = resolveLlmAgentConfig({}, {
+      IMPECCABLE_E2E_LLM_PROVIDER: 'inception',
+      IMPECCABLE_E2E_INCEPTION_KEY_CMD: 'false',
+    });
+    assert.equal(config.apiKey, undefined);
+  });
+
+  it('carries a keyHelperError on the config when the helper exists but fails', () => {
+    // resolveLlmAgentConfig() runs before a runner's diagnostic logger
+    // exists (see tests/live-e2e.test.mjs), so a broken helper's reason has
+    // to travel on the config itself rather than through a callback here.
+    const config = resolveLlmAgentConfig({}, {
+      IMPECCABLE_E2E_LLM_PROVIDER: 'inception',
+      IMPECCABLE_E2E_INCEPTION_KEY_CMD: 'false',
+    });
+    assert.equal(config.apiKey, undefined);
+    assert.match(config.keyHelperError, /false/);
+  });
+
+  it('carries no keyHelperError when the helper command is simply not installed', () => {
+    const config = resolveLlmAgentConfig({}, {
+      IMPECCABLE_E2E_LLM_PROVIDER: 'inception',
+      IMPECCABLE_E2E_INCEPTION_KEY_CMD: '/nonexistent/path/impeccable-does-not-exist',
+    });
+    assert.equal(config.apiKey, undefined);
+    assert.equal(config.keyHelperError, undefined);
+  });
+
+  it('does not shell out for a key when the helper command is disabled', () => {
+    const config = resolveLlmAgentConfig({}, {
+      IMPECCABLE_E2E_LLM_PROVIDER: 'inception',
+      IMPECCABLE_E2E_INCEPTION_KEY_CMD: '',
+    });
+    assert.equal(config.apiKey, undefined);
+  });
+
+  it('never auto-selects Inception from the key helper alone', () => {
+    // A helper on PATH must not hijack a run nobody asked for; only an
+    // explicit provider or INCEPTION_API_KEY in the environment selects it.
+    assert.equal(resolveLlmAgentConfig({}, {}).provider, 'openai');
+    assert.equal(resolveLlmAgentConfig({}, { INCEPTION_API_KEY: 'k' }).provider, 'inception');
+  });
+
   it('rejects unsupported providers', () => {
     assert.throws(
       () => resolveLlmAgentConfig({}, { IMPECCABLE_E2E_LLM_PROVIDER: 'other' }),
       /Unsupported IMPECCABLE_E2E_LLM_PROVIDER: other/,
     );
+  });
+
+  it('routes only Inception through the Chat Completions API', () => {
+    assert.equal(requiresChatCompletionsApi('inception'), true);
+    assert.equal(requiresChatCompletionsApi('openai'), false);
+    assert.equal(requiresChatCompletionsApi('anthropic'), false);
+    assert.equal(requiresChatCompletionsApi('deepseek'), false);
   });
 });
 
@@ -151,6 +242,28 @@ describe('live-e2e LLM agent createLlmAgent', () => {
       },
     });
     assert.equal(agent, null);
+  });
+
+  it('logs a pre-resolved keyHelperError before returning null', async () => {
+    // Mirrors the real runner shape: resolveLlmAgentConfig() ran earlier
+    // without a logger, then createLlmAgent() is called with that config
+    // plus the runner's diagnostic logger.
+    const messages = [];
+    const agent = await createLlmAgent({
+      config: {
+        provider: 'inception',
+        model: 'mercury-2',
+        apiKey: undefined,
+        requiredEnv: 'INCEPTION_API_KEY',
+        keyHelperError: 'inception key helper "false" failed: Command failed: false',
+      },
+      log: (m) => messages.push(m),
+    });
+    assert.equal(agent, null);
+    assert.ok(
+      messages.some((m) => m.includes('helper "false" failed')),
+      `expected the helper failure to be logged, got: ${JSON.stringify(messages)}`,
+    );
   });
 });
 

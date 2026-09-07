@@ -118,3 +118,28 @@ mod tests {
         assert_eq!(form_urldecode("a%20b%zz+c%E2%9C%93"), "a b%zz c\u{2713}");
     }
 }
+
+
+/// Split CSS font families without treating commas inside quoted names as separators.
+pub fn split_font_family_list(stack: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut start = 0;
+    let mut quote = None;
+    let mut escaped = false;
+    for (i, ch) in stack.char_indices() {
+        if escaped {
+            escaped = false;
+        } else if ch == '\\' {
+            escaped = true;
+        } else if let Some(q) = quote {
+            if ch == q { quote = None; }
+        } else if ch == '"' || ch == '\'' {
+            quote = Some(ch);
+        } else if ch == ',' {
+            parts.push(&stack[start..i]);
+            start = i + 1;
+        }
+    }
+    parts.push(&stack[start..]);
+    parts
+}

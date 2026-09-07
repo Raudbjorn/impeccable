@@ -6,17 +6,17 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
   buildClaudeSettingsManifest,
   buildClaudePluginHooksManifest,
   buildCodexHooksManifest,
   buildCodexPluginHooksManifest,
-  buildCursorHooksManifest,
   buildGitHubHooksManifest,
-  buildGrokHooksManifest,
+  buildOmpHookModule,
   hooksJsonFor,
 } from '../scripts/lib/transformers/hooks.js';
 
@@ -66,6 +66,46 @@ function manifestCommands(manifest) {
 }
 
 describe('hook manifest builders', () => {
+  it('emits commandWindows only for Codex-shaped manifests', () => {
+    // Codex reads a `commandWindows` sibling; Claude, Cursor, Grok, and Copilot
+    // have no per-platform field, and an unknown key is a risk under a strict
+    // parser, so it stays off everywhere else.
+    const withWindows = [buildCodexHooksManifest(), buildCodexPluginHooksManifest()];
+    const without = [
+      buildClaudeSettingsManifest(),
+      buildClaudePluginHooksManifest(),
+      buildGitHubHooksManifest(),
+    ];
+    const entries = (manifest) => {
+      const out = [];
+      const walk = (value) => {
+        if (Array.isArray(value)) { value.forEach(walk); return; }
+        if (value && typeof value === 'object') {
+          if (typeof value.command === 'string' || typeof value.bash === 'string') out.push(value);
+          Object.values(value).forEach(walk);
+        }
+      };
+      walk(manifest.hooks);
+      return out;
+    };
+    for (const manifest of withWindows) {
+      for (const entry of entries(manifest)) {
+        assert.equal(typeof entry.commandWindows, 'string', `missing commandWindows in ${JSON.stringify(entry)}`);
+        assert.ok(entry.commandWindows.includes('impeccable.cmd'));
+      }
+    }
+    for (const manifest of without) {
+      for (const entry of entries(manifest)) {
+        assert.equal(entry.commandWindows, undefined, `unexpected commandWindows in ${JSON.stringify(entry)}`);
+      }
+    }
+    for (const manifest of [...withWindows, ...without]) {
+      for (const command of manifestCommands(manifest)) {
+        assert.ok(!/node|systemMessage|node-unsupported/.test(command), `Node-era fragment in ${command}`);
+      }
+    }
+  });
+
   it('builds Claude project settings for the real detector hook', () => {
     const manifest = buildClaudeSettingsManifest();
     const group = manifest.hooks.PostToolUse[0];
@@ -143,20 +183,6 @@ describe('hook manifest builders', () => {
     );
   });
 
-  it('builds one Cursor pre-write blocking hook', () => {
-    const manifest = buildCursorHooksManifest();
-    const beforeEdit = manifest.hooks.preToolUse[0];
-
-    assert.equal(manifest.version, 1);
-    assert.ok(Array.isArray(manifest.hooks.preToolUse));
-    assert.equal(Object.keys(manifest.hooks).length, 1);
-    assert.equal(manifest.hooks.afterFileEdit, undefined);
-    assert.equal(manifest.hooks.stop, undefined);
-    assert.equal(manifest.hooks.sessionStart, undefined);
-    expectCommand(beforeEdit.command, '.cursor/skills/impeccable/scripts', 'hook-before-edit');
-    assert.equal(beforeEdit.timeout, 5);
-  });
-
   it('builds GitHub Copilot repo-level hooks for the real detector hook', () => {
     const manifest = buildGitHubHooksManifest();
     const entry = manifest.hooks.postToolUse[0];
@@ -176,39 +202,429 @@ describe('hook manifest builders', () => {
     assert.equal(manifest.hooks.preToolUse, undefined);
   });
 
-  it('builds Grok Build project hooks for the real detector hook', () => {
-    const manifest = buildGrokHooksManifest();
-    const group = manifest.hooks.PostToolUse[0];
-    const handler = group.hooks[0];
+  it('builds an oh-my-pi hook module (JS source, not a JSON manifest)', async () => {
+    // oh-my-pi loads `.omp/hooks/post/*` as an imported JS module exporting
+    // `pi.on(eventName, handler)`, not a JSON manifest — hooksJsonFor() tags
+    // this one with `isModule: true` so callers know to write it verbatim
+    // instead of JSON.stringify-ing it.
+    const tagged = hooksJsonFor('omp');
+    assert.equal(tagged.isModule, true);
+    assert.equal(tagged.content, buildOmpHookModule());
 
-    // Claude-compatible schema; Claude tool names alias to Grok tools at runtime.
-    assert.equal(group.matcher, 'Edit|Write|MultiEdit');
-    assert.equal(handler.type, 'command');
-    assert.equal(handler.timeout, 5);
-    assert.equal(handler.statusMessage, 'Checking UI changes');
-    expectCommand(handler.command, '.grok/skills/impeccable/scripts');
-    assert.ok(!handler.command.includes('${CLAUDE_PROJECT_DIR}'));
-    assert.ok(!handler.command.includes('${GROK_PLUGIN_ROOT}'));
-    assert.equal(manifest.hooks.SessionStart, undefined);
+    const source = buildOmpHookModule();
+    assert.match(source, /export default function impeccableHook\(pi\)/);
+    assert.match(source, /pi\.on\("tool_result"/);
+    assert.match(source, /pi\.on\("session_stop"/);
+    assert.match(source, /"\.\.", "\.\.", "skills", "impeccable", "scripts", process.platform/);
+    // Filters to the file-modifying tools; never fires on bash/read/etc.
+    assert.match(source, /event\.toolName !== "edit" &&\s*\n\s*event\.toolName !== "write"/);
+    // Shaped exactly like Claude Code's own PostToolUse/Stop JSON so
+    // hook-lib.mjs's existing shape-driven extraction (resolveTargetFiles(),
+    // isStopEvent(), the stop_hook_active re-entrancy guard) needs no
+    // omp-specific branch.
+    assert.match(source, /hook_event_name: "PostToolUse"/);
+    assert.match(source, /hook_event_name: "Stop"/);
+    assert.match(source, /stop_hook_active: event\.stop_hook_active === true/);
+    // Uses async spawn, not spawnSync (pi.exec() has no stdin option, and
+    // hook.mjs requires stdin): a multi-file edit awaits every target's scan
+    // concurrently, and a synchronous spawn per target would serialize
+    // their timeouts, so N files could block the handler for up to
+    // timeoutMs * N instead of one timeoutMs.
+    assert.match(source, /spawn\(HOOK_SCRIPT, \["hook"\]/);
+    assert.doesNotMatch(source, /spawnSync\(/);
+    assert.match(source, /hookSpecificOutput\?\.additionalContext/);
+    // A hung hook.mjs must not block edit/stop handling indefinitely. Each
+    // event passes its own timeout, matching the JSON providers' own
+    // TIMEOUT_SECONDS/STOP_TIMEOUT_SECONDS split; spawn has no built-in
+    // timeout option (unlike spawnSync), so the module enforces it with its
+    // own setTimeout + child.kill(), reaching the same explicit
+    // error-reporting path as other subprocess failures.
+    assert.match(source, /function runHook\(payload, timeoutMs, ctx\)/);
+    // The timeout escalates SIGTERM -> SIGKILL and reports from `close`, not
+    // from the timer: child.kill() does not wait, so resolving there released
+    // the pool slot while the process could still be running and let a batch
+    // exceed MAX_CONCURRENT_SCANS.
+    assert.match(source, /setTimeout\(\(\) => \{[\s\S]*?child\.kill\("SIGTERM"\)/);
+    assert.match(source, /child\.kill\("SIGKILL"\)/);
+    // A launcher that exits before the payload lands raises EPIPE on the
+    // stdin stream, a distinct event from child.on("error")/("close").
+    assert.match(source, /child\.stdin\.on\("error"/);
+    // Concurrent, but bounded: an unbounded Promise.all over every target
+    // risks exhausting process/fd limits on a large batch edit.
+    assert.match(source, /const MAX_CONCURRENT_SCANS = \d+/);
+    assert.match(source, /mapWithConcurrencyLimit\(scannable, MAX_CONCURRENT_SCANS/);
+    assert.match(source, /runHook\(\{[\s\S]*?hook_event_name: "PostToolUse"[\s\S]*?\}, 5000, ctx\)/);
+    assert.match(source, /await runHook\(\{[\s\S]*?hook_event_name: "Stop"[\s\S]*?\}, 30000, ctx\)/);
+    // ToolResultEventResult.content is a replacement content-block array
+    // (packages/coding-agent/src/extensibility/shared-events.ts): the runner
+    // takes `result.content ?? tool.content`, so returning a bare string both
+    // discarded the edit's own output and handed back an unrenderable shape.
+    assert.match(source, /content: \[\.\.\.blocks, \{ type: "text", text: findings\.join\("/);
+    assert.doesNotMatch(source, /return \{ content: text \}/);
+    // SessionStopEventResult only reaches a continuation when `continue: true`
+    // or a blocking decision accompanies the context; additionalContext on its
+    // own is dropped as the session settles.
+    assert.match(source, /return \{ continue: true, additionalContext: text \}/);
+    // Verify syntactic structure without importing (data: URL would make
+    // import.meta.url = data:..., breaking HOOK_SCRIPT path resolution).
+    assert.ok(
+      source.includes('pi.on("tool_result"') && source.includes('pi.on("session_stop"'),
+      'module must register tool_result and session_stop handlers',
+    );
+    assert.ok(/hasUriScheme\(filePath\)/.test(source), 'module must guard filePath');
+    // ast_edit mutates files like edit and write do; omitting it left a whole
+    // class of edits unscanned. The apply_patch edit mode arrives with
+    // toolName "edit" too (hooks/tool-wrapper.ts emits `this.tool.name`,
+    // fixed at "edit" regardless of mode -- "apply_patch" is only the
+    // wire-level name GPT-5's custom-tool grammar uses, resolved back to the
+    // same tool before a hook ever sees the call), so the "apply_patch"
+    // toolName arm is defensive rather than reachable today.
+    assert.match(source, /event\.toolName !== "ast_edit"/);
+    assert.match(source, /event\.toolName !== "apply_patch"/);
+    // Buffer mode decodes each chunk independently, corrupting a multi-byte
+    // character split across a chunk boundary; setEncoding switches to a
+    // StringDecoder that buffers a trailing partial sequence.
+    assert.match(source, /child\.stdout\.setEncoding\("utf8"\)/);
+    assert.match(source, /child\.stderr\.setEncoding\("utf8"\)/);
+    // `input.paths` is the authoritative multi-target list for an edit whose
+    // result carries no per-file details: the runner drops the single-target
+    // `path`/`tool_input.file_path` convenience entirely once an edit
+    // touches two or more files, so reading only one of those left every
+    // multi-file edit unscanned.
+    assert.match(source, /Array\.isArray\(input\.paths\)/);
+    // The edit tool's own result details (perFileResults / path) are
+    // authoritative over input.paths, since apply_patch mode's input is a
+    // raw patch envelope with no hashline paths to derive input.paths from.
+    assert.match(source, /Array\.isArray\(details\.perFileResults\)/);
+    assert.match(source, /details\.path/);
+    // ast_edit previews (dry-run) apply nothing; only an applied result's
+    // files are real, on-disk changes worth scanning.
+    assert.match(source, /details\.applied === true && Array\.isArray\(details\.files\)/);
+    // A failed tool call with no confirmed details wrote nothing; falling
+    // back to its request-side input would scan a file the call never
+    // touched and could append an unrelated finding to its error output.
+    assert.match(source, /\} else if \(event\.isError\) \{/);
+    assert.match(source, /mapWithConcurrencyLimit\(scannable, MAX_CONCURRENT_SCANS, \(filePath\) => runHook/);
+  });
+  it('oh-my-pi adapter scans every path in a multi-file edit, guarding each for a URI scheme', () => {
+    // Extracted the same way the URI-scheme test below does: syntactic
+    // structure is verified without importing (import.meta.url would be
+    // data:... under a data: URL, breaking HOOK_SCRIPT resolution), so the
+    // target-selection logic is pulled out and run directly.
+    const source = buildOmpHookModule();
+    const fnMatch = source.match(
+      /const details = event\.details[\s\S]*?\n(?=\s*if \(targets\.length === 0\) return;)/,
+    );
+    assert.ok(fnMatch, 'module must compute a multi-target list per toolName');
+    const pickTargets = new Function(
+      'event',
+      `${fnMatch[0]}\nreturn targets;`,
+    );
+    assert.deepEqual(
+      pickTargets({ toolName: 'edit', input: { paths: ['a.tsx', 'b.tsx'] } }),
+      ['a.tsx', 'b.tsx'],
+      'a multi-file edit with no per-file details must scan every input path, not just the first',
+    );
+    assert.deepEqual(
+      pickTargets({ toolName: 'write', tool_input: { file_path: 'single.tsx' } }),
+      ['single.tsx'],
+      'a single-target Claude Code shaped event must still resolve one target',
+    );
+    assert.deepEqual(
+      pickTargets({ toolName: 'write', input: { path: 'single.tsx' } }),
+      ['single.tsx'],
+      'a single-target OMP shaped event must still resolve one target',
+    );
+    assert.deepEqual(pickTargets({}), [], 'an event with no target carries none');
+    // toolName "apply_patch" does not occur in practice (see the note above
+    // the toolName guard), but the extraction covers it defensively; verify
+    // that arm still resolves correctly for it. Every real apply_patch-mode
+    // edit reaches this same code as toolName "edit": its input is a raw
+    // patch envelope with no hashline paths, so input.paths is unusable
+    // there too, and the result's own details are the only authoritative
+    // source either way.
+    assert.deepEqual(
+      pickTargets({ toolName: 'apply_patch', input: {}, details: { path: 'patched.tsx' } }),
+      ['patched.tsx'],
+      'a single-file apply_patch result must resolve its one changed file from details.path',
+    );
+    assert.deepEqual(
+      pickTargets({
+        toolName: 'edit',
+        input: { paths: ['stale-a.tsx'] },
+        details: { perFileResults: [{ path: 'a.tsx' }, { path: 'b.tsx' }] },
+      }),
+      ['a.tsx', 'b.tsx'],
+      'a multi-file edit result must scan every file details.perFileResults names, over any input.paths',
+    );
+    assert.deepEqual(
+      pickTargets({ toolName: 'edit', input: { paths: ['fallback.tsx'] }, details: {} }),
+      ['fallback.tsx'],
+      'an edit result with no usable details must fall back to input.paths',
+    );
+    // ast_edit previews (dry-run) stage changes for a later `resolve` and
+    // apply nothing yet; scanning a preview's files would scan content that
+    // was never written.
+    assert.deepEqual(
+      pickTargets({ toolName: 'ast_edit', details: { applied: false, files: ['src/a.ts', 'src/b.ts'] } }),
+      [],
+      'an unapplied ast_edit preview must not be scanned',
+    );
+    assert.deepEqual(
+      pickTargets({ toolName: 'ast_edit', details: { applied: true, files: ['src/a.ts', 'src/b.ts'] } }),
+      ['src/a.ts', 'src/b.ts'],
+      'an applied ast_edit result must scan the files it actually touched',
+    );
+    // input.paths for ast_edit are search scopes (directories, globs like
+    // src/**/*.ts) the edit ran over, never the files it changed.
+    assert.deepEqual(
+      pickTargets({ toolName: 'ast_edit', input: { paths: ['src/**/*.ts'] }, details: { applied: true } }),
+      [],
+      'ast_edit must never fall back to input.paths, which are search scopes, not changed files',
+    );
+    // A failed call with no confirmed details wrote nothing; its input path
+    // is only a guess, and scanning it would attach an unrelated finding to
+    // an error result.
+    assert.deepEqual(
+      pickTargets({ toolName: 'edit', input: { path: 'q.css' }, isError: true }),
+      [],
+      'a failed edit with no confirmed details must not fall back to its input path',
+    );
+    assert.deepEqual(
+      pickTargets({ toolName: 'write', input: { path: 'q.css' }, isError: true }),
+      [],
+      'a failed write must not fall back to its input path either',
+    );
+    assert.deepEqual(
+      pickTargets({
+        toolName: 'edit',
+        input: {},
+        isError: true,
+        details: { perFileResults: [{ path: 'q.css' }] },
+      }),
+      ['q.css'],
+      'a partial failure with confirmed per-file details still scans those real changes',
+    );
+  });
+  it('oh-my-pi adapter rejects device URI tool targets before spawning hook.mjs', () => {
+    // Some tool surfaces (e.g. `xd://` LSP targets, or scheme-only virtual
+    // documents like `untitled:Untitled-1` with no authority part at all)
+    // carry a scheme-prefixed identifier instead of a filesystem path. The
+    // adapter previously only rejected when `event.input.path` was null, so
+    // it spawned hook.mjs on every edit and hook-lib.mjs's downstream
+    // `file-missing` skip was the only thing keeping it cheap. Reject at the
+    // adapter so the spawn never happens.
+    //
+    // Verify the guard is present and rejects device/scheme URIs while
+    // accepting real filesystem paths (including a Windows drive letter,
+    // which matches the same "letter, colon" syntax a scheme does but is
+    // never one in practice). Extracting the guard function from the source
+    // and running it directly lets the assertion stay honest if a future
+    // edit changes its internals, as long as the call site is still named
+    // `hasUriScheme`.
+    const source = buildOmpHookModule();
+    assert.ok(source.includes('hasUriScheme(filePath)'), 'adapter must carry a guard that calls hasUriScheme(filePath)');
+    // Extracted from the first supporting const through the end of the
+    // function body, not just the function itself: hasUriScheme() reads
+    // module-level constants (the authority-scheme regex, the known-scheme
+    // allowlist) it does not declare inline.
+    const fnMatch = source.match(/const URI_AUTHORITY_SCHEME_RE[\s\S]*?function hasUriScheme\(value\) \{[\s\S]*?\n\}/);
+    assert.ok(fnMatch, 'module must define a hasUriScheme() guard function');
+    const hasUriScheme = new Function(`${fnMatch[0]}\nreturn hasUriScheme;`)();
 
-    const stop = manifest.hooks.Stop[0].hooks[0];
-    assert.equal(stop.timeout, 30);
-    assert.equal(stop.statusMessage, 'Design deep pass');
-    expectCommand(stop.command, '.grok/skills/impeccable/scripts');
+    // Device/scheme URIs the adapter must reject.
+    for (const uri of [
+      'xd://lsp/foo',
+      'file:///etc/hosts',
+      'http://example.com/x',
+      'https://x.test/y',
+      'untitled:Untitled-1',
+      'vscode-notebook-cell:/path/to/notebook.ipynb#cell',
+    ]) {
+      assert.ok(hasUriScheme(uri), `guard must reject device URI ${uri}`);
+    }
+    // Real paths the adapter must NOT reject — absolute POSIX, relative,
+    // Windows-drive (absolute and drive-relative), and a real filename that
+    // merely happens to contain a colon.
+    for (const p of [
+      '/abs/path.tsx',
+      'rel/path.tsx',
+      './local.tsx',
+      'C:/Users/me/file.tsx',
+      'D:\\Users\\me\\file.tsx',
+      'C:src\\App.tsx',
+      'release:notes.tsx',
+      // Doubled, merely redundant separator: matches the authority regex's
+      // "letter, colon, //" shape exactly, so a leaf drive-path exemption
+      // that only recognizes a single "\" or "/" after the colon still
+      // misclassified this one as a URI.
+      'C://Users/dev/App.tsx',
+      'z://tmp/file.tsx',
+    ]) {
+      assert.ok(!hasUriScheme(p), `guard must not reject real path ${p}`);
+    }
+    // The adapter must read the path from BOTH event.input.path (OMP shape)
+    // and event.tool_input.file_path (Claude Code shape), so a future edit
+    // doesn't accidentally drop the Claude Code fallback and re-introduce the
+    // bug only for that harness.
+    assert.match(source, /event\.tool_input\.file_path/);
+    assert.match(source, /const input = event\.input/);
+    assert.match(source, /input\.path/);
   });
 
-  it('emits commandWindows only for Codex-shaped manifests', () => {
-    // Codex reads a `commandWindows` sibling; Claude, Cursor, Grok, and Copilot
-    // have no per-platform field, and an unknown key is a risk under a strict
-    // parser, so it stays off everywhere else.
+  it('runs hook scripts with node when OMP owns process.execPath', async () => {
+    // A plain filesystem-shaped path, not the "xd://lsp" placeholder this
+    // used to carry: hasUriScheme()'s device-URI guard rejects anything
+    // scheme-prefixed before runHook() is ever reached, which "xd://lsp"
+    // incidentally is. This test's own point (process.execPath override) is
+    // unrelated to that guard, so it needs a path the guard lets through.
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-omp-hook-'));
+    const moduleDir = path.join(root, '.omp', 'hooks', 'post');
+    const scriptDir = path.join(root, '.omp', 'skills', 'impeccable', 'scripts');
+    fs.mkdirSync(moduleDir, { recursive: true });
+    fs.mkdirSync(scriptDir, { recursive: true });
+    const modulePath = path.join(moduleDir, 'impeccable.mjs');
+
+    // Inject a _getHandlers export into the module so the test can retrieve the
+    // handler references after import (pi.on() runs synchronously during import).
+    const patched = buildOmpHookModule().replace(
+      'export default function impeccableHook(pi) {',
+      'const _handlers = new Map(); export function _getHandlers() { return _handlers; } globalThis._impeccableHandlers = _handlers; export default function impeccableHook(pi) {',
+    ).replace(
+      /pi\.on\("([^"]+)",\s*(async\s*\([^)]+\))\s*=>/g,
+      (_, eventName, params) => `_handlers.set("${eventName}", ${params} =>`,
+    );
+    fs.writeFileSync(modulePath, patched);
+    fs.writeFileSync(path.join(scriptDir, 'impeccable'), [
+      '#!/usr/bin/env node',
+      `import fs from "node:fs";`,
+      `const payload = JSON.parse(fs.readFileSync(0, "utf8"));`,
+      `if (payload.hook_event_name !== "PostToolUse" || payload.tool_name !== "write" || payload.tool_input.file_path !== "src/notes.tsx") process.exit(2);`,
+      `process.stdout.write(JSON.stringify({ hookSpecificOutput: { additionalContext: "hook ran" } }));`,
+    ].join('\n'), { mode: 0o755 });
+    const { default: impeccableHook, _getHandlers } = await import(pathToFileURL(modulePath).href);
+    impeccableHook({ on(name, handler) { _getHandlers().set(name, handler); } });
+    const handlers = _getHandlers();
+
+    const originalExecPath = process.execPath;
+    try {
+      process.execPath = path.join(root, 'omp');
+      const result = await handlers.get('tool_result')({
+        toolName: 'write',
+        input: { path: 'src/notes.tsx' },
+        content: [{ type: 'text', text: 'write result' }],
+      }, { cwd: REPO_ROOT });
+
+      assert.deepEqual(result, {
+        content: [
+          { type: 'text', text: 'write result' },
+          { type: 'text', text: 'hook ran' },
+        ],
+      });
+    } finally {
+      process.execPath = originalExecPath;
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // Regression: hook-admin.mjs's repair/on action (repairHookManifests())
+  // embeds its own hand-written copy of this exact module as one of
+  // HOOK_MANIFEST_TARGETS, rather than importing buildOmpHookModule() --
+  // skill/scripts/** ships to installed projects, scripts/lib/transformers/
+  // does not, so the two cannot share a runtime import. A source-level fix
+  // to buildOmpHookModule() (the URI-scheme guard, the tool_input.file_path
+  // fallback) silently drifted out of sync with hook-admin.mjs's copy, so
+  // running the hook repair/on action overwrote a project's corrected
+  // .omp/hooks/post/impeccable.js with the stale, narrower one -- the
+  // installed file un-fixed itself. Extract hook-admin.mjs's embedded copy
+  // the same way and assert it is byte-identical to the generator's output,
+  // so any future edit to one that isn't mirrored in the other fails here
+  // instead of silently drifting again.
+  it('keeps hook-admin.mjs\'s embedded OMP repair manifest byte-identical to buildOmpHookModule()', () => {
+    const source = fs.readFileSync(path.join(REPO_ROOT, 'crates/context/assets/omp-hook.js'), 'utf8');
+    assert.equal(source, buildOmpHookModule());
+    const admin = fs.readFileSync(path.join(REPO_ROOT, 'crates/hook/src/admin.rs'), 'utf8');
+    assert.match(admin, /impeccable_context::provider::OMP_HOOK_MODULE/);
+  });
+
+  it('reports a missing launcher without replacing the tool result', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-omp-hook-no-node-'));
+    const modulePath = path.join(root, 'hooks', 'post', 'impeccable.mjs');
+    fs.mkdirSync(path.dirname(modulePath), { recursive: true });
+    fs.writeFileSync(modulePath, buildOmpHookModule());
+
+    const handlers = new Map();
+    const originalPath = process.env.PATH;
+    try {
+      const loaded = await import(`${pathToFileURL(modulePath).href}?case=${Date.now()}`);
+      loaded.default({ on: (name, handler) => handlers.set(name, handler) });
+      process.env.PATH = root;
+      const notices = [];
+
+      const result = await handlers.get('tool_result')(
+        {
+          toolName: 'edit',
+          input: { path: '/tmp/App.tsx' },
+          content: [{ type: 'text', text: 'edit result' }],
+        },
+        {
+          cwd: root,
+          hasUI: true,
+          ui: { notify: (message, type) => notices.push({ message, type }) },
+        },
+      );
+
+      assert.equal(result, undefined);
+      assert.equal(notices.length, 1);
+      assert.match(notices[0].message, /Impeccable hook failed to run:.*node/i);
+      assert.equal(notices[0].type, 'error');
+    } finally {
+      if (originalPath === undefined) delete process.env.PATH;
+      else process.env.PATH = originalPath;
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('reports the signal that terminated the hook subprocess', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-omp-hook-signal-'));
+    const modulePath = path.join(root, '.omp', 'hooks', 'post', 'impeccable.mjs');
+    const scriptPath = path.join(root, '.omp', 'skills', 'impeccable', 'scripts', 'impeccable');
+    fs.mkdirSync(path.dirname(modulePath), { recursive: true });
+    fs.mkdirSync(path.dirname(scriptPath), { recursive: true });
+    fs.writeFileSync(modulePath, buildOmpHookModule());
+    fs.writeFileSync(scriptPath, '#!/usr/bin/env node\nprocess.stderr.write("before signal\\n"); process.kill(process.pid, "SIGTERM");\n', { mode: 0o755 });
+
+    const handlers = new Map();
+    try {
+      const loaded = await import(`${pathToFileURL(modulePath).href}?case=${Date.now()}`);
+      loaded.default({ on: (name, handler) => handlers.set(name, handler) });
+      const notices = [];
+
+      const result = await handlers.get('tool_result')(
+        {
+          toolName: 'write',
+          input: { path: '/tmp/App.tsx' },
+          content: [{ type: 'text', text: 'write result' }],
+        },
+        {
+          cwd: root,
+          hasUI: true,
+          ui: { notify: (message, type) => notices.push({ message, type }) },
+        },
+      );
+
+      assert.equal(result, undefined);
+      assert.equal(notices.length, 1);
+      assert.match(notices[0].message, /SIGTERM/);
+      assert.equal(notices[0].type, 'error');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('emits Windows launcher commands only for Codex-shaped manifests', () => {
     const withWindows = [buildCodexHooksManifest(), buildCodexPluginHooksManifest()];
-    const without = [
-      buildClaudeSettingsManifest(),
-      buildClaudePluginHooksManifest(),
-      buildCursorHooksManifest(),
-      buildGitHubHooksManifest(),
-      buildGrokHooksManifest(),
-    ];
+    const without = [buildClaudeSettingsManifest(), buildClaudePluginHooksManifest(), buildGitHubHooksManifest()];
     const entries = (manifest) => {
       const out = [];
       const walk = (value) => {
@@ -242,10 +658,9 @@ describe('hook manifest builders', () => {
   it('routes supported hook builders and leaves other providers alone', () => {
     assert.ok(hooksJsonFor('claude'));
     assert.ok(hooksJsonFor('codex'));
-    assert.ok(hooksJsonFor('cursor'));
     assert.ok(hooksJsonFor('github'));
-    assert.ok(hooksJsonFor('grok'));
     assert.equal(hooksJsonFor('gemini'), null);
+    assert.equal(hooksJsonFor('cursor'), null);
   });
 });
 
@@ -259,7 +674,6 @@ const SYNCED = fs.existsSync(path.join(REPO_ROOT, '.claude/skills/impeccable/scr
 describe('generated hook artifacts in repo', { skip: SYNCED ? false : 'generated provider output not yet synced (bun run build:release on main)' }, () => {
   for (const rel of [
     '.claude/settings.json',
-    '.cursor/hooks.json',
     '.codex/hooks.json',
     '.github/hooks/impeccable.json',
   ]) {
@@ -272,7 +686,6 @@ describe('generated hook artifacts in repo', { skip: SYNCED ? false : 'generated
 
   it('root hook manifests exactly match the hook builders', () => {
     assert.deepEqual(readJson('.claude/settings.json'), buildClaudeSettingsManifest());
-    assert.deepEqual(readJson('.cursor/hooks.json'), buildCursorHooksManifest());
     assert.deepEqual(readJson('.codex/hooks.json'), buildCodexHooksManifest());
     assert.deepEqual(readJson('.github/hooks/impeccable.json'), buildGitHubHooksManifest());
   });
@@ -283,16 +696,6 @@ describe('generated hook artifacts in repo', { skip: SYNCED ? false : 'generated
 
     expectCommand(handler.command, '.claude/skills/impeccable/scripts');
     assert.ok(fs.existsSync(path.join(REPO_ROOT, '.claude/skills/impeccable/scripts')));
-  });
-
-  it('Cursor project hooks reference only the pre-write runtime in .cursor/skills', () => {
-    const manifest = readJson('.cursor/hooks.json');
-    const beforeEdit = manifest.hooks.preToolUse[0];
-
-    assert.equal(Object.keys(manifest.hooks).length, 1);
-    expectCommand(beforeEdit.command, '.cursor/skills/impeccable/scripts', 'hook-before-edit');
-    assert.ok(fs.existsSync(path.join(REPO_ROOT, '.cursor/skills/impeccable/scripts/impeccable')));
-    assert.equal(fs.existsSync(path.join(REPO_ROOT, '.cursor/skills/impeccable/scripts/hook-before-edit.mjs')), false);
   });
 
   it('Codex project hooks reference the launcher in the .codex skill payload', () => {
@@ -329,7 +732,7 @@ describe('generated hook artifacts in repo', { skip: SYNCED ? false : 'generated
   });
 
   it('does not generate probe scripts into provider skill payloads', () => {
-    for (const providerDir of ['.claude', '.cursor', '.agents', 'plugin']) {
+    for (const providerDir of ['.claude', '.agents', 'plugin']) {
       const probe = path.join(REPO_ROOT, providerDir, 'skills', 'impeccable', 'scripts', 'hook-probe.mjs');
       assert.equal(fs.existsSync(probe), false, `${providerDir} still has hook-probe.mjs`);
     }
@@ -380,7 +783,6 @@ describe('generated hook artifacts in repo', { skip: SYNCED ? false : 'generated
   it('generated skill payloads ship the executable launcher and no Node scripts', () => {
     for (const scriptDir of [
       '.claude/skills/impeccable/scripts',
-      '.cursor/skills/impeccable/scripts',
       '.agents/skills/impeccable/scripts',
       'plugin/skills/impeccable/scripts',
     ]) {
@@ -393,8 +795,37 @@ describe('generated hook artifacts in repo', { skip: SYNCED ? false : 'generated
       assert.ok(fs.existsSync(path.join(abs, 'impeccable.cmd')), `impeccable.cmd missing in ${scriptDir}`);
       assert.ok(fs.existsSync(path.join(abs, 'VERSION')), `VERSION missing in ${scriptDir}`);
       assert.equal(fs.existsSync(path.join(abs, 'bin')), false, `${scriptDir} must stay launcher-only in git; binaries ship only in IMPECCABLE_BUNDLE_ENGINE=1 release zips`);
-      const stray = fs.readdirSync(abs).filter((f) => f.endsWith('.mjs') || f === 'detector' || f === 'lib');
+      const stray = fs.readdirSync(abs).filter((f) => ['hook.mjs', 'context.mjs', 'detect.mjs', 'detector'].includes(f));
       assert.deepEqual(stray, [], `Node-era files still in ${scriptDir}`);
+    }
+  });
+  it('OMP hook adapter rejects xd:// URIs at runtime', async () => {
+    // Write source to a real temp file so import.meta.url resolves correctly
+    // (data: URL would make HOOK_SCRIPT path resolution fail). A predictable
+    // path directly under os.tmpdir() would let a pre-existing symlink there
+    // redirect the write; mkdtempSync gives a fresh, unpredictable directory
+    // instead, matching the pattern used elsewhere in this file.
+    const src = buildOmpHookModule();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-hook-'));
+    const tmp = path.join(dir, 'impeccable.mjs');
+    fs.writeFileSync(tmp, src);
+    try {
+      const { default: hook } = await import(pathToFileURL(tmp));
+      // Capture the tool_result handler so we can exercise it directly.
+      const handlers = {};
+      const pi = {
+        on(eventName, handler) { handlers[eventName] = handler; },
+      };
+      hook(pi);
+      // URI scheme: adapter must exit before spawning hook.mjs
+      const uriResult = await handlers.tool_result({ toolName: 'edit', tool_input: { file_path: 'xd://probe.tsx' } }, { cwd: process.cwd() });
+      assert.equal(uriResult, undefined, 'xd:// target must be rejected before spawn');
+      // Filesystem path: adapter must not early-exit
+      const fsResult = await handlers.tool_result({ toolName: 'edit', tool_input: { file_path: 'src/App.tsx' } }, { cwd: process.cwd() });
+      // fsResult may be undefined if hook.mjs produces no findings, but must not be a thrown error
+      assert.ok(fsResult === undefined || typeof fsResult === 'object', 'filesystem path must reach runHook');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 });

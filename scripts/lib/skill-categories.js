@@ -36,6 +36,7 @@ export const SKILL_CATEGORIES = {
   init: 'system',
   document: 'system',
   extract: 'system',
+  'design-context': 'system',
   live: 'system',
 };
 

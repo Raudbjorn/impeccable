@@ -1,7 +1,20 @@
 //! JS: generate-image.mjs -> `impeccable generate-image`
+//!
+//! `--plate <region-id>` is fork-original (not part of the old generate-image.mjs
+//! CLI contract): it produces a shipping raster for one raster region of a
+//! measured comp spec end to end -- crop as reference, the spec's plate
+//! prompt, output size from the region's aspect, embed, and a score against
+//! the crop via [`impeccable_comp_verbs::build_phase::gate_one_plate`], the
+//! same gate `impeccable build-phase advance` runs, so a subagent's reported
+//! score and the parent's gate can never disagree. `--score-only` runs just
+//! that gate against a plate a harness-native image tool already produced,
+//! with no API key.
 
 use crate::jsp;
 use crate::util::{iso_now, json_pretty, node_read_error, utf16_len, Env};
+use impeccable_comp::png_io;
+use impeccable_comp::raster::Image;
+use impeccable_comp_verbs::{build_phase, comp_spec};
 use impeccable_common::Io;
 use serde_json::{Map, Value};
 use std::io::Write;
@@ -231,6 +244,156 @@ fn parse_size(s: &str) -> (usize, usize) {
     (1536, 1024)
 }
 
+/// JS: inkOnGround(region). A region whose crop is dominated by one ground
+/// color with a dark second: ink on ground.
+fn ink_on_ground(region: &Value) -> bool {
+    let pal = region.get("palette").and_then(Value::as_array).cloned().unwrap_or_default();
+    if pal.len() < 2 {
+        return false;
+    }
+    pal[0].get("coverage").and_then(Value::as_f64).map(|c| c >= 0.55).unwrap_or(false)
+}
+
+fn hex_rgb(hex: &str) -> [u8; 3] {
+    let re = regex_hex();
+    match re.captures(hex) {
+        Some(caps) => [
+            u8::from_str_radix(&caps[1], 16).unwrap_or(0),
+            u8::from_str_radix(&caps[2], 16).unwrap_or(255),
+            u8::from_str_radix(&caps[3], 16).unwrap_or(0),
+        ],
+        None => [0, 255, 0],
+    }
+}
+
+fn regex_hex() -> &'static regex::Regex {
+    use once_cell::sync::Lazy;
+    static RE: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"(?i)^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$").unwrap());
+    &RE
+}
+
+/// JS: keyChroma(file, keyHex). Keys a flat color to alpha with a soft edge:
+/// pixels within `hard` of the key go fully transparent, within `soft` fade,
+/// and green spill on edge pixels is pulled toward the ink color. Writes back
+/// in place; keeps existing tEXt chunks (the prompt embedded before keying).
+/// Returns the keyed fraction.
+fn key_chroma(path: &std::path::Path, key_hex: &str) -> Result<f64, String> {
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    let mut decoded = png_io::decode_png(&bytes)?;
+    let [kr, kg, kb] = hex_rgb(key_hex);
+    let w = decoded.image.width;
+    let h = decoded.image.height;
+    // sample the actual key from the corners: generators shift the green
+    let corners = [(2usize, 2usize), (w.saturating_sub(3), 2), (2, h.saturating_sub(3)), (w.saturating_sub(3), h.saturating_sub(3))];
+    let mut sr = 0f64;
+    let mut sg = 0f64;
+    let mut sb = 0f64;
+    for (x, y) in corners {
+        let p = (y * w + x) * 4;
+        sr += decoded.image.data[p] as f64;
+        sg += decoded.image.data[p + 1] as f64;
+        sb += decoded.image.data[p + 2] as f64;
+    }
+    let key = [sr / 4.0, sg / 4.0, sb / 4.0];
+    let is_greenish = key[1] > 120.0 && key[1] > key[0] * 1.4 && key[1] > key[2] * 1.4;
+    let k = if is_greenish { key } else { [kr as f64, kg as f64, kb as f64] };
+    let (hard, soft) = (60f64, 120f64);
+    let mut keyed = 0usize;
+    let total_px = decoded.image.data.len() / 4;
+    let mut i = 0;
+    while i < decoded.image.data.len() {
+        let (r, g, b) = (decoded.image.data[i] as f64, decoded.image.data[i + 1] as f64, decoded.image.data[i + 2] as f64);
+        let d = ((r - k[0]).powi(2) + (g - k[1]).powi(2) + (b - k[2]).powi(2)).sqrt();
+        let green_dom = g > 150.0 && g - r.max(b) > 60.0;
+        if d < hard || green_dom {
+            decoded.image.data[i + 3] = 0;
+            keyed += 1;
+        } else if d < soft {
+            let a = (d - hard) / (soft - hard);
+            decoded.image.data[i + 3] = js_round(decoded.image.data[i + 3] as f64 * a) as u8;
+            let m = (r + b) / 2.0;
+            decoded.image.data[i + 1] = js_round(g * a + m * (1.0 - a)) as u8;
+        }
+        i += 4;
+    }
+    let text: Vec<(String, String)> = decoded.text.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    let bytes = png_io::encode_png(&decoded.image, &text)?;
+    std::fs::write(path, bytes).map_err(|e| e.to_string())?;
+    Ok(keyed as f64 / total_px as f64)
+}
+
+/// The OpenAI images call shared by the plain prompt/out path and `--plate`:
+/// generations with no refs, edits (multipart) with one or more. Returns the
+/// decoded image bytes, or an (exit code, already-newline-terminated stderr
+/// message) pair.
+fn call_openai_image(key: &str, prompt: &str, size: &str, quality: &str, refs: &[String], abs: &dyn Fn(&str) -> String) -> Result<Vec<u8>, (i32, String)> {
+    let agent = crate::http::agent_builder().build();
+    let response = if !refs.is_empty() {
+        let boundary = format!("----impeccable{:x}", crate::util::now_ms() as u64);
+        let mut body: Vec<u8> = Vec::new();
+        let mut field = |name: &str, value: &str| {
+            body.extend_from_slice(format!("--{}\r\nContent-Disposition: form-data; name=\"{}\"\r\n\r\n{}\r\n", boundary, name, value).as_bytes());
+        };
+        field("model", "gpt-image-2");
+        field("prompt", prompt);
+        field("size", size);
+        field("quality", quality);
+        field("n", "1");
+        for r in refs {
+            let bytes = std::fs::read(abs(r)).map_err(|e| (1, format!("Error: {}\n", node_read_error(r, &e))))?;
+            let ty = if r.ends_with(".png") {
+                "image/png"
+            } else if r.ends_with(".webp") {
+                "image/webp"
+            } else {
+                "image/jpeg"
+            };
+            let filename = r.rsplit('/').next().unwrap_or(r);
+            body.extend_from_slice(
+                format!("--{}\r\nContent-Disposition: form-data; name=\"image[]\"; filename=\"{}\"\r\nContent-Type: {}\r\n\r\n", boundary, filename, ty).as_bytes(),
+            );
+            body.extend_from_slice(&bytes);
+            body.extend_from_slice(b"\r\n");
+        }
+        body.extend_from_slice(format!("--{}--\r\n", boundary).as_bytes());
+        agent
+            .post("https://api.openai.com/v1/images/edits")
+            .set("Authorization", &format!("Bearer {}", key))
+            .set("Content-Type", &format!("multipart/form-data; boundary={}", boundary))
+            .send_bytes(&body)
+    } else {
+        let mut m = Map::new();
+        m.insert("model".into(), Value::String("gpt-image-2".into()));
+        m.insert("prompt".into(), Value::String(prompt.to_string()));
+        m.insert("size".into(), Value::String(size.to_string()));
+        m.insert("quality".into(), Value::String(quality.to_string()));
+        m.insert("n".into(), Value::from(1));
+        agent
+            .post("https://api.openai.com/v1/images/generations")
+            .set("Authorization", &format!("Bearer {}", key))
+            .set("content-type", "application/json")
+            .send_string(&serde_json::to_string(&Value::Object(m)).unwrap())
+    };
+    let (status, text) = match response {
+        Ok(r) => {
+            let st = r.status();
+            (st, r.into_string().unwrap_or_default())
+        }
+        Err(ureq::Error::Status(code, r)) => (code, r.into_string().unwrap_or_default()),
+        Err(e) => return Err((1, format!("TypeError: fetch failed: {}\n", e))),
+    };
+    if !(200..300).contains(&status) {
+        let snippet: String = text.chars().take(300).collect();
+        return Err((1, format!("generate-image: API error {}: {}\n", status, snippet)));
+    }
+    let json: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
+    let b64 = json.get("data").and_then(|d| d.get(0)).and_then(|d| d.get("b64_json")).and_then(|b| b.as_str()).filter(|s| !s.is_empty());
+    let Some(b64) = b64 else {
+        return Err((1, "generate-image: no image in response\n".to_string()));
+    };
+    Ok(base64_decode(b64))
+}
+
 pub fn run(args: &[String], io: &mut Io) -> i32 {
     let cwd = io.cwd.to_string_lossy().into_owned();
     let env: Env = io.env.clone();
@@ -244,6 +407,9 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
             }
         }
     };
+    if let Some(plate_id) = arg(args, "plate") {
+        return run_plate(args, io, &cwd, &env, &plate_id);
+    }
     if env.get("IMPECCABLE_IMAGE_GEN_FAKE").map(|v| !v.is_empty()).unwrap_or(false) {
         let prompt = match arg(args, "prompt-file") {
             Some(pf) => match read_prompt_file(io, &pf) {
@@ -294,82 +460,13 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
             }
         }
     }
-    let agent = crate::http::agent_builder().build();
-    let response = if !refs.is_empty() {
-        let boundary = format!("----impeccable{:x}", crate::util::now_ms() as u64);
-        let mut body: Vec<u8> = Vec::new();
-        let mut field = |name: &str, value: &str| {
-            body.extend_from_slice(format!("--{}\r\nContent-Disposition: form-data; name=\"{}\"\r\n\r\n{}\r\n", boundary, name, value).as_bytes());
-        };
-        field("model", "gpt-image-2");
-        field("prompt", &prompt);
-        field("size", &size);
-        field("quality", &quality);
-        field("n", "1");
-        for r in &refs {
-            let bytes = match std::fs::read(abs(r)) {
-                Ok(b) => b,
-                Err(e) => {
-                    io.err(&format!("Error: {}\n", node_read_error(r, &e)));
-                    return 1;
-                }
-            };
-            let ty = if r.ends_with(".png") {
-                "image/png"
-            } else if r.ends_with(".webp") {
-                "image/webp"
-            } else {
-                "image/jpeg"
-            };
-            let filename = r.rsplit('/').next().unwrap_or(r);
-            body.extend_from_slice(
-                format!("--{}\r\nContent-Disposition: form-data; name=\"image[]\"; filename=\"{}\"\r\nContent-Type: {}\r\n\r\n", boundary, filename, ty).as_bytes(),
-            );
-            body.extend_from_slice(&bytes);
-            body.extend_from_slice(b"\r\n");
-        }
-        body.extend_from_slice(format!("--{}--\r\n", boundary).as_bytes());
-        agent
-            .post("https://api.openai.com/v1/images/edits")
-            .set("Authorization", &format!("Bearer {}", key))
-            .set("Content-Type", &format!("multipart/form-data; boundary={}", boundary))
-            .send_bytes(&body)
-    } else {
-        let mut m = Map::new();
-        m.insert("model".into(), Value::String("gpt-image-2".into()));
-        m.insert("prompt".into(), Value::String(prompt.clone()));
-        m.insert("size".into(), Value::String(size.clone()));
-        m.insert("quality".into(), Value::String(quality.clone()));
-        m.insert("n".into(), Value::from(1));
-        agent
-            .post("https://api.openai.com/v1/images/generations")
-            .set("Authorization", &format!("Bearer {}", key))
-            .set("content-type", "application/json")
-            .send_string(&serde_json::to_string(&Value::Object(m)).unwrap())
-    };
-    let (status, text) = match response {
-        Ok(r) => {
-            let st = r.status();
-            (st, r.into_string().unwrap_or_default())
-        }
-        Err(ureq::Error::Status(code, r)) => (code, r.into_string().unwrap_or_default()),
-        Err(e) => {
-            io.err(&format!("TypeError: fetch failed: {}\n", e));
-            return 1;
+    let bytes = match call_openai_image(&key, &prompt, &size, &quality, &refs, &abs) {
+        Ok(b) => b,
+        Err((code, msg)) => {
+            io.err(&msg);
+            return code;
         }
     };
-    if !(200..300).contains(&status) {
-        let snippet: String = text.chars().take(300).collect();
-        io.err(&format!("generate-image: API error {}: {}\n", status, snippet));
-        return 1;
-    }
-    let json: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
-    let b64 = json.get("data").and_then(|d| d.get(0)).and_then(|d| d.get("b64_json")).and_then(|b| b.as_str()).filter(|s| !s.is_empty());
-    let Some(b64) = b64 else {
-        io.err("generate-image: no image in response\n");
-        return 1;
-    };
-    let bytes = base64_decode(b64);
     let _ = std::fs::write(abs(&out), bytes);
     // best-effort embed + sidecar
     // JS-PARITY: generate-image.mjs#676 reports whether the embed actually
@@ -405,6 +502,297 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
     0
 }
 
+/// `impeccable generate-image --plate <region-id>`: one raster region of a
+/// measured comp spec, end to end.
+fn run_plate(args: &[String], io: &mut Io, cwd: &str, env: &Env, plate_id: &str) -> i32 {
+    let abs = |p: &str| jsp::resolve(cwd, &[p]);
+    let spec_path = arg(args, "spec").unwrap_or_else(|| comp_spec::SPEC_PATH.to_string());
+    let Some(spec) = comp_spec::load_spec(std::path::Path::new(&abs(&spec_path))) else {
+        io.err(&format!("generate-image: no spec at {spec_path}; run impeccable comp-spec first\n"));
+        return 1;
+    };
+    let regions = build_phase::spec_regions(&spec);
+    let Some(region) = regions.iter().find(|r| r.get("id").and_then(Value::as_str) == Some(plate_id)).cloned() else {
+        let ids = regions.iter().filter_map(|r| r.get("id").and_then(Value::as_str)).collect::<Vec<_>>().join(", ");
+        io.err(&format!("generate-image: no region {plate_id} in {spec_path}; ids: {ids}\n"));
+        return 1;
+    };
+    // Parse --min before anything with a side effect. `parse().ok()` silently
+    // dropped a typo, so `--min 0.8x` ran with no threshold at all and exited
+    // 0; "NaN" and "inf" parse fine in Rust, and `score < NaN` is false, so
+    // those passed the gate too. A threshold the user asked for and did not
+    // get is the one failure this option must never have.
+    // Read --min's value directly rather than through `arg`, which reports an
+    // empty or flag-shaped value as absent. That is the right default for the
+    // other options here (no --out falls back to the spec's plate path, which
+    // the user sees), but --min's only job is a threshold, and the one failure
+    // it must never have is being asked for and silently not applied. So a
+    // present --min with no usable value is an error, not a default.
+    let min = match args.iter().position(|a| a == "--min") {
+        Some(i) => {
+            let raw = args.get(i + 1).map(String::as_str).unwrap_or("");
+            // `parse().ok()` dropped a typo, so `--min 0.8x` ran with no
+            // threshold and exited 0; "NaN" and "inf" parse fine in Rust, and
+            // `score < NaN` is false, so those cleared the gate as well.
+            match raw.parse::<f64>() {
+                Ok(v) if v.is_finite() => Some(v),
+                _ => {
+                    io.err(&format!("generate-image: --min {raw} is not a finite number\n"));
+                    return 1;
+                }
+            }
+        }
+        None => None,
+    };
+    let medium = region.get("medium").and_then(Value::as_str).unwrap_or("");
+    if medium != "raster" {
+        io.err(&format!("generate-image: region {plate_id} is {medium}, not a plate; set its kind to plate|image|texture in the regions file\n"));
+        return 1;
+    }
+    let comp_path = spec.get("comp").and_then(Value::as_str).unwrap_or("").to_string();
+    let comp = match build_phase::load_raster(io, &comp_path) {
+        Ok(c) => c,
+        Err(e) => {
+            io.err(&format!("generate-image: cannot read comp {comp_path}: {e}\n"));
+            return 1;
+        }
+    };
+    let refimg = comp_spec::plate_reference(&comp, &spec, &region);
+    let spec_dir = std::path::Path::new(&spec_path).parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+    let ref_path = jsp::join(&[&spec_dir, "crops", &format!("{plate_id}.png")]);
+    if let Some(parent) = std::path::Path::new(&abs(&ref_path)).parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let crop_text = vec![("impeccable:crop-of".to_string(), format!("{comp_path}#{plate_id}"))];
+    match png_io::encode_png(&refimg, &crop_text) {
+        Ok(bytes) => {
+            let _ = std::fs::write(abs(&ref_path), bytes);
+        }
+        Err(e) => {
+            io.err(&format!("generate-image: {e}\n"));
+            return 1;
+        }
+    }
+    let out = match arg(args, "out")
+        .or_else(|| region.get("plate").and_then(Value::as_str).map(String::from))
+        .filter(|p| !p.is_empty())
+    {
+        Some(p) => p,
+        None => {
+            io.err(&format!(
+                "generate-image: region {plate_id} has no \"plate\" path in {spec_path}; re-run comp-spec --regions or pass --out <path>\n"
+            ));
+            return 1;
+        }
+    };
+    if let Some(parent) = std::path::Path::new(&abs(&out)).parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+
+    // Closest supported size to the region's aspect; the page crops the rest
+    // with object-fit. The plates gate demands >= 1.5x the region's width
+    // (capped at 1536), so a square region wider than 682px cannot ship from
+    // 1024x1024: take the 1536-wide landscape frame instead and let cover crop.
+    let px_w = region.pointer("/px/w").and_then(Value::as_f64).unwrap_or(0.0);
+    let px_h = region.pointer("/px/h").and_then(Value::as_f64).unwrap_or(1.0);
+    let aspect = px_w / px_h;
+    let need_w = 1536f64.min((px_w * 1.5).ceil());
+    let size = arg(args, "size").unwrap_or_else(|| {
+        if aspect > 1.2 {
+            "1536x1024".to_string()
+        } else if aspect < 0.83 {
+            if need_w > 1024.0 { "1536x1024".to_string() } else { "1024x1536".to_string() }
+        } else if need_w > 1024.0 {
+            "1536x1024".to_string()
+        } else {
+            "1024x1024".to_string()
+        }
+    });
+
+    let extra = match arg(args, "prompt") {
+        Some(p) => p,
+        None => match arg(args, "prompt-file") {
+            Some(pf) => match std::fs::read(abs(&pf)) {
+                Ok(b) => String::from_utf8_lossy(&b).into_owned(),
+                Err(e) => {
+                    io.err(&format!("Error: {}\n", node_read_error(&pf, &e)));
+                    return 1;
+                }
+            },
+            None => String::new(),
+        },
+    };
+    // Chroma: an ink-on-ground plate (a line drawing, a figure on flat
+    // ground) is generated on a flat key color and keyed to alpha, so the
+    // page's own ground shows through instead of a second, mismatched paper.
+    // Default on for kind plate when the comp region reads as ink over one
+    // flat ground; --chroma / --no-chroma force it.
+    let wants_chroma = if args.iter().any(|a| a == "--chroma") {
+        true
+    } else if args.iter().any(|a| a == "--no-chroma") {
+        false
+    } else {
+        region.get("kind").and_then(Value::as_str) == Some("plate") && ink_on_ground(&region)
+    };
+    let chroma_color = "#00ff00";
+    let chroma_line = if wants_chroma {
+        format!(
+            " Render the artwork on a perfectly flat, uniform bright green background ({chroma_color}) that fills every pixel not covered by the artwork; no paper texture, no vignette, no shadow on the green; the green will be removed and the artwork composited onto the page's own surface."
+        )
+    } else {
+        String::new()
+    };
+    let prompt = [comp_spec::plate_prompt(&spec, &region), extra, chroma_line]
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    // Score a plate that already exists, without generating one. The
+    // harness's own image tool produces the plate on the native branch, and
+    // this needs the same verdict `impeccable build-phase advance` will
+    // reach. Placed above the API-key check on purpose: the native branch is
+    // exactly the case with no key.
+    if args.iter().any(|a| a == "--score-only") {
+        if !std::path::Path::new(&abs(&out)).exists() {
+            io.err(&format!("generate-image: no plate at {out} to score; produce it first, then run --score-only\n"));
+            return 1;
+        }
+        return report_plate_score(io, &spec, &comp, &region, &out, &ref_path, min);
+    }
+
+    if env.get("IMPECCABLE_IMAGE_GEN_FAKE").map(|v| !v.is_empty()).unwrap_or(false) {
+        let up = impeccable_comp::raster::resize(&refimg, refimg.width as f64 * 2.0, refimg.height as f64 * 2.0);
+        let text = vec![("impeccable:prompt".to_string(), prompt.clone()), ("impeccable:fake".to_string(), "1".to_string())];
+        match png_io::encode_png(&up, &text) {
+            Ok(bytes) => {
+                // Same handling as the real path's write below: a discarded
+                // error here let fake mode print PLATE: and exit 0 with no
+                // plate on disk (--out naming a directory, an unwritable
+                // path), so fake-mode validation reported a false success.
+                if let Err(e) = std::fs::write(abs(&out), bytes) {
+                    io.err(&format!("Error: {}\n", node_read_error(&out, &e)));
+                    return 1;
+                }
+            }
+            Err(e) => {
+                io.err(&format!("generate-image: {e}\n"));
+                return 1;
+            }
+        }
+        let mut m = Map::new();
+        m.insert("prompt".into(), Value::String(prompt.clone()));
+        m.insert("createdAt".into(), Value::String(iso_now()));
+        m.insert("tool".into(), Value::String("impeccable generate-image".into()));
+        m.insert("model".into(), Value::String("fake".into()));
+        m.insert("plate".into(), Value::String(plate_id.to_string()));
+        m.insert("refs".into(), Value::Array(vec![Value::String(ref_path.clone())]));
+        let _ = std::fs::write(abs(&format!("{out}.json")), json_pretty(&Value::Object(m)));
+        io.out(&format!("PLATE: {out} ({}x{}, fake 2x crop of region {plate_id}, $0.00, no API call)\n", up.width, up.height));
+        // Fall through to the shared gate, as the real path does and as the
+        // CLI contract already specified. Returning here emitted no
+        // PLATE-SCORE and ignored --min, so fake mode could not stand in for
+        // a real one in validation.
+        return report_plate_score(io, &spec, &comp, &region, &out, &ref_path, min);
+    }
+
+    let Some(key) = env.get("OPENAI_API_KEY").filter(|k| !k.is_empty()).cloned() else {
+        io.err("generate-image: OPENAI_API_KEY is not set; use the harness-native image tool instead.\n");
+        return 1;
+    };
+    let quality = arg(args, "quality").unwrap_or_else(|| "high".to_string());
+    let mut refs: Vec<String> = vec![ref_path.clone()];
+    for i in 0..args.len() {
+        if args[i] == "--ref" {
+            if let Some(n) = args.get(i + 1) {
+                if !n.is_empty() && !n.starts_with("--") {
+                    refs.push(n.clone());
+                }
+            }
+        }
+    }
+    let bytes = match call_openai_image(&key, &prompt, &size, &quality, &refs, &abs) {
+        Ok(b) => b,
+        Err((code, msg)) => {
+            io.err(&msg);
+            return code;
+        }
+    };
+    if let Err(e) = std::fs::write(abs(&out), &bytes) {
+        io.err(&format!("Error: {}\n", node_read_error(&out, &e)));
+        return 1;
+    }
+    let embedded;
+    {
+        let mut sub_io = Io::captured("", io.cwd.clone(), io.env.clone()).0;
+        let ret = crate::embed_prompt::run(&[out.clone(), "--prompt".to_string(), prompt.clone()], &mut sub_io);
+        embedded = ret == 0;
+        if !embedded {
+            io.err("generate-image: failed to embed prompt in the image\n");
+        }
+        let mut m = Map::new();
+        m.insert("prompt".into(), Value::String(prompt.clone()));
+        m.insert("createdAt".into(), Value::String(iso_now()));
+        m.insert("tool".into(), Value::String("impeccable generate-image".into()));
+        m.insert("model".into(), Value::String("gpt-image-2".into()));
+        m.insert("refs".into(), Value::Array(refs.iter().cloned().map(Value::String).collect()));
+        let _ = std::fs::write(abs(&format!("{out}.json")), json_pretty(&Value::Object(m)));
+    }
+    io.out(&format!(
+        "IMAGE: {out} ({size}, {quality}, gpt-image-2, billed to your OpenAI key); {} at {out}.json\n",
+        if embedded { "prompt embedded + sidecar" } else { "sidecar" }
+    ));
+
+    if wants_chroma {
+        match key_chroma(std::path::Path::new(&abs(&out)), chroma_color) {
+            Ok(frac) => io.out(&format!(
+                "PLATE-CHROMA keyed {:.0}% of pixels to alpha ({chroma_color}); place with a plain <img> over the page's own ground, no background on the plate. If the keyed fraction is under 20% the generator ignored the key: regenerate with --no-chroma and use mix-blend-mode: multiply instead.\n",
+                frac * 100.0
+            )),
+            Err(e) => io.err(&format!("generate-image: chroma key failed: {e}\n")),
+        }
+    }
+
+    report_plate_score(io, &spec, &comp, &region, &out, &ref_path, min)
+}
+
+/// Prints the same `PLATE-SCORE` / `PLATE-WARN` / `PLATE-REJECTED` lines for
+/// a plate scored via [`build_phase::gate_one_plate`], whether the plate was
+/// just generated here or already sat on disk from `--score-only`. Exit
+/// codes: 0 clean, 1 no usable score, 2 fails the plates gate, 3 below
+/// `--min`.
+fn report_plate_score(io: &mut Io, spec: &Value, comp: &Image, region: &Value, out: &str, ref_path: &str, min: Option<f64>) -> i32 {
+    let region_id = region.get("id").and_then(Value::as_str).unwrap_or("");
+    let gate = build_phase::gate_one_plate(io, spec, Some(comp), region, Some(out));
+    if let Some(score) = &gate.score {
+        io.out(&format!(
+            "PLATE-SCORE {region_id} {:.0}% against the comp region (structure {:.0}%, color {:.0}%, detail {:.0}%)\n",
+            score.overall * 100.0,
+            score.structure * 100.0,
+            score.color * 100.0,
+            score.detail * 100.0
+        ));
+    }
+    for reason in &gate.reasons {
+        io.out(&format!("PLATE-WARN {reason}\n"));
+    }
+    let Some(score) = &gate.score else {
+        io.err(&format!("generate-image: no score for {out}; the plates gate refuses it as it stands.\n"));
+        return 1;
+    };
+    if let Some(min_val) = min {
+        if score.overall < min_val {
+            io.out(&format!("PLATE-REJECTED below --min {:.0}%\n", min_val * 100.0));
+            return 3;
+        }
+    }
+    if !gate.reasons.is_empty() {
+        io.err(&format!("generate-image: {out} does not pass the plates gate; open it beside {ref_path} and regenerate before building on it.\n"));
+        return 2;
+    }
+    0
+}
+
 fn base64_decode(s: &str) -> Vec<u8> {
     let table = |c: u8| -> Option<u32> {
         match c {
@@ -429,4 +817,176 @@ fn base64_decode(s: &str) -> Vec<u8> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod plate_tests {
+    use super::*;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+
+    static TMP_SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+    fn tmp() -> String {
+        let base = std::env::temp_dir().join(format!(
+            "impeccable-generate-image-plate-{}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos(),
+            TMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&base).unwrap();
+        let real = std::fs::canonicalize(&base).unwrap().to_string_lossy().into_owned();
+        real.strip_prefix(r"\\?\").map(str::to_string).unwrap_or(real)
+    }
+
+    fn fake_env() -> HashMap<String, String> {
+        let mut env = HashMap::new();
+        env.insert("IMPECCABLE_IMAGE_GEN_FAKE".to_string(), "1".to_string());
+        env
+    }
+
+    fn run_capture(cwd: &str, env: HashMap<String, String>, args: &[&str]) -> (i32, String, String) {
+        let (mut io, cap) = Io::captured("", PathBuf::from(cwd), env);
+        let owned: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+        let code = run(&owned, &mut io);
+        let out = String::from_utf8_lossy(&cap.stdout.borrow()).into_owned();
+        let err = String::from_utf8_lossy(&cap.stderr.borrow()).into_owned();
+        (code, out, err)
+    }
+
+    /// Sets up a comp + measured spec with one raster ("plate") region and
+    /// one text region, in fake mode (no network, no key). Returns the cwd.
+    fn setup_spec_with_regions() -> String {
+        let cwd = tmp();
+        let (code, _, err) = run_capture(&cwd, fake_env(), &["--prompt", "a test comp", "--out", "comp.png", "--size", "600x400"]);
+        assert_eq!(code, 0, "comp generation failed: {err}");
+        let regions = r#"{ "regions": [
+            { "id": "hero-art", "kind": "plate", "grid": "A0:E4", "note": "a decorative illustration" },
+            { "id": "headline", "kind": "text", "grid": "F0:J1", "note": "the page headline" }
+        ] }"#;
+        std::fs::write(std::path::Path::new(&cwd).join("regions.json"), regions).unwrap();
+        let (mut io, _) = Io::captured("", PathBuf::from(&cwd), HashMap::new());
+        let code = comp_spec::run(
+            &["--comp", "comp.png", "--regions", "regions.json", "--spec", comp_spec::SPEC_PATH]
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(),
+            &mut io,
+        );
+        assert_eq!(code, 0, "comp-spec measure failed");
+        cwd
+    }
+
+    #[test]
+    fn plate_mode_produces_a_scored_plate_in_fake_mode() {
+        let cwd = setup_spec_with_regions();
+        let (code, out, err) = run_capture(&cwd, fake_env(), &["--plate", "hero-art"]);
+        assert_eq!(code, 0, "stderr: {err}");
+        assert!(out.starts_with("PLATE: "), "unexpected stdout: {out}");
+        // The name of this test is the contract: fake mode runs the same
+        // plate gate the real path does, so it scores and honors --min
+        // rather than reporting a bare PLATE: and exiting.
+        assert!(out.contains("PLATE-SCORE hero-art"), "unexpected stdout: {out}");
+        assert!(std::path::Path::new(&cwd).join("assets/plates/hero-art.png").exists());
+        assert!(std::path::Path::new(&cwd).join(".impeccable/build/crops/hero-art.png").exists());
+    }
+
+    #[test]
+    fn score_only_reports_a_score_with_no_api_key() {
+        let cwd = setup_spec_with_regions();
+        let (code, _, err) = run_capture(&cwd, fake_env(), &["--plate", "hero-art"]);
+        assert_eq!(code, 0, "stderr: {err}");
+        // No OPENAI_API_KEY and no IMPECCABLE_IMAGE_GEN_FAKE in the env below:
+        // --score-only must not need either.
+        let (code, out, _) = run_capture(&cwd, HashMap::new(), &["--plate", "hero-art", "--score-only"]);
+        assert_eq!(code, 0);
+        assert!(out.contains("PLATE-SCORE hero-art"), "stdout: {out}");
+    }
+
+    #[test]
+    fn invalid_min_is_refused_rather_than_ignored() {
+        let cwd = setup_spec_with_regions();
+        for bad in ["0.8x", "NaN", "inf", ""] {
+            let (code, out, err) =
+                run_capture(&cwd, fake_env(), &["--plate", "hero-art", "--min", bad]);
+            assert_eq!(code, 1, "--min {bad} should be refused; stdout: {out}");
+            assert!(err.contains("is not a finite number"), "--min {bad} stderr: {err}");
+        }
+        // A threshold above 1 is a legitimate comparison, not a percentage
+        // bound, and stays accepted.
+        let (code, out, _) =
+            run_capture(&cwd, fake_env(), &["--plate", "hero-art", "--min", "1.1"]);
+        assert_eq!(code, 3, "stdout: {out}");
+    }
+
+    #[test]
+    fn score_only_rejects_below_min() {
+        let cwd = setup_spec_with_regions();
+        let (code, _, err) = run_capture(&cwd, fake_env(), &["--plate", "hero-art"]);
+        assert_eq!(code, 0, "stderr: {err}");
+        let (code, out, _) = run_capture(&cwd, HashMap::new(), &["--plate", "hero-art", "--score-only", "--min", "1.1"]);
+        assert_eq!(code, 3);
+        assert!(out.contains("PLATE-REJECTED"), "stdout: {out}");
+    }
+
+    #[test]
+    fn score_only_without_a_plate_on_disk_fails_loudly() {
+        let cwd = setup_spec_with_regions();
+        let (code, _, err) = run_capture(&cwd, HashMap::new(), &["--plate", "hero-art", "--score-only"]);
+        assert_eq!(code, 1);
+        assert!(err.contains("no plate at"), "stderr: {err}");
+    }
+
+    #[test]
+    fn unknown_region_is_refused() {
+        let cwd = setup_spec_with_regions();
+        let (code, _, err) = run_capture(&cwd, HashMap::new(), &["--plate", "nope"]);
+        assert_eq!(code, 1);
+        assert!(err.contains("no region nope"), "stderr: {err}");
+    }
+
+    #[test]
+    fn non_raster_region_is_refused() {
+        let cwd = setup_spec_with_regions();
+        let (code, _, err) = run_capture(&cwd, HashMap::new(), &["--plate", "headline"]);
+        assert_eq!(code, 1);
+        assert!(err.contains("not a plate"), "stderr: {err}");
+    }
+
+    #[test]
+    fn empty_explicit_plate_path_is_refused_before_generation() {
+        // comp-spec defaults an *omitted* plate field, but passes an
+        // *explicit* empty string through unchanged. Generation must not
+        // then resolve `out` to the project directory and attempt to write
+        // a directory as the plate file.
+        let cwd = tmp();
+        let (code, _, err) = run_capture(&cwd, fake_env(), &["--prompt", "a test comp", "--out", "comp.png", "--size", "600x400"]);
+        assert_eq!(code, 0, "comp generation failed: {err}");
+        let regions = r#"{ "regions": [
+            { "id": "hero-art", "kind": "plate", "grid": "A0:E4", "note": "a decorative illustration", "plate": "" }
+        ] }"#;
+        std::fs::write(std::path::Path::new(&cwd).join("regions.json"), regions).unwrap();
+        let (mut io, _) = Io::captured("", PathBuf::from(&cwd), HashMap::new());
+        let code = comp_spec::run(
+            &["--comp", "comp.png", "--regions", "regions.json", "--spec", comp_spec::SPEC_PATH]
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(),
+            &mut io,
+        );
+        assert_eq!(code, 0, "comp-spec measure failed");
+
+        let (code, _, err) = run_capture(&cwd, fake_env(), &["--plate", "hero-art"]);
+        assert_eq!(code, 1);
+        assert!(err.contains("no \"plate\" path"), "stderr: {err}");
+    }
+
+    #[test]
+    fn ink_on_ground_reads_dominant_coverage() {
+        let region = serde_json::json!({ "palette": [{ "hex": "#fff", "coverage": 0.6 }, { "hex": "#000", "coverage": 0.4 }] });
+        assert!(ink_on_ground(&region));
+        let region = serde_json::json!({ "palette": [{ "hex": "#fff", "coverage": 0.5 }, { "hex": "#000", "coverage": 0.5 }] });
+        assert!(!ink_on_ground(&region));
+        assert!(!ink_on_ground(&serde_json::json!({})));
+    }
 }

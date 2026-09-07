@@ -34,7 +34,7 @@ All live mode code lives in `skill/scripts/`:
 - `live-wrap.mjs` — CLI helper that finds elements in source and creates variant wrappers
 - `live-browser.js` — Browser script (element picker, action panel, variant cycler, global bar)
 
-When a user installs the skill via `npx skills add pbakaus/impeccable`, they get the live mode without any additional setup. The agent runs the scripts via `node {{scripts_path}}/live-server.mjs`.
+When a user installs the skill via `npx skills add Raudbjorn/impeccable`, they get the live mode without any additional setup. The agent runs the scripts via `node {{scripts_path}}/live-server.mjs`.
 
 **4. HTTP long-poll for the agent, not WebSocket or stdin.**
 The agent communicates with the server via HTTP long-poll (`GET /poll` blocks until a browser event arrives). This works across all AI harnesses because every harness can run a shell command and read its stdout. No harness-specific integration needed.

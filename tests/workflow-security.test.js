@@ -26,10 +26,10 @@ describe('workflow execution boundaries', () => {
     }
   });
 
-  test('generated-output sync and sheriff retain their required write access', () => {
+  test('generated-output sync and issue gate retain their required write access', () => {
     expect(workflows['sync-generated-output.yml'].permissions).toEqual({ contents: 'write' });
-    expect(workflows['sheriff.yml'].permissions).toEqual({
-      actions: 'read', checks: 'read', contents: 'read', issues: 'write', 'pull-requests': 'write',
+    expect(workflows['issue-gate.yml'].permissions).toEqual({
+      contents: 'read', issues: 'write',
     });
   });
 });
