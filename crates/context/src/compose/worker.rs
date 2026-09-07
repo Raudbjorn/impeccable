@@ -15,7 +15,12 @@ const EXTRACT: &str = include_str!("../../../../skill/scripts/compose-extract.py
 const EXTRACT_LOCK: &str = include_str!("../../../../skill/scripts/compose-extract.py.lock");
 const EXPORT: &str = include_str!("../../../../skill/scripts/compose-export.mjs");
 pub fn extract_revision() -> String {
-    state::digest(&json!([EXTRACT, EXTRACT_LOCK]))
+    state::digest(&json!([
+        EXTRACT,
+        EXTRACT_LOCK,
+        include_str!("source_http.rs"),
+        include_str!("extract.rs")
+    ]))
 }
 fn tools(cwd: &Path) -> Result<std::path::PathBuf> {
     let path = state::root(cwd).join("tools");
@@ -126,6 +131,9 @@ fn process(cwd: &Path, argv: &[String], input: &[u8], timeout: Duration) -> Resu
     Ok(stdout)
 }
 pub fn extract(cwd: &Path, input: &Value) -> Result<Value> {
+    if matches!(input["source"]["kind"].as_str(), Some("url" | "structured")) {
+        return super::extract::text_source(&input["source"]);
+    }
     let dir = tools(cwd)?;
     let result = process(
         cwd,

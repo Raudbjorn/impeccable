@@ -39,11 +39,10 @@ pub fn run(cwd: &Path, project: &Value, input: &Value) -> Result<Value> {
         .as_array()
         .ok_or("assets must be an array of paths")?
     {
-        let path = cwd
-            .join(asset.as_str().ok_or("asset must be a path string")?)
-            .canonicalize()
-            .map_err(|e| e.to_string())?;
-        asset_hashes.push(json!({"path":path,"hash":state::file_hash(&path)?}));
+        asset_hashes.push(snapshot_asset(
+            cwd,
+            asset.as_str().ok_or("asset must be a path string")?,
+        )?);
     }
     let revision = state::digest(project);
     let (document, diagnostics) = match format {
@@ -417,4 +416,57 @@ pub fn verify_bundle(path: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Open relative to a directory capability: symlinks cannot escape the project.
+fn snapshot_asset(cwd: &Path, name: &str) -> Result<Value> {
+    use std::io::Read;
+    let root = cwd.canonicalize().map_err(|e| e.to_string())?;
+    let path = Path::new(name);
+    let relative = if path.is_absolute() {
+        path.strip_prefix(&root)
+            .map_err(|_| "Asset must be inside the project")?
+    } else {
+        path
+    };
+    let dir = cap_std::fs::Dir::open_ambient_dir(&root, cap_std::ambient_authority())
+        .map_err(|e| e.to_string())?;
+    let file = dir
+        .open(relative)
+        .map_err(|e| format!("Asset must be inside the project: {e}"))?;
+    let metadata = file.metadata().map_err(|e| e.to_string())?;
+    if !metadata.is_file() || metadata.len() > state::MAX_BYTES {
+        return Err("Asset must be a regular image under 16 MiB".into());
+    }
+    let mut bytes = Vec::new();
+    file.take(state::MAX_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| e.to_string())?;
+    if bytes.len() as u64 > state::MAX_BYTES {
+        return Err("Asset exceeds 16 MiB".into());
+    }
+    let mut reader = image::ImageReader::new(std::io::Cursor::new(&bytes))
+        .with_guessed_format()
+        .map_err(|e| e.to_string())?;
+    let format = reader.format().ok_or("Asset must be a supported image")?;
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(4096);
+    limits.max_image_height = Some(4096);
+    limits.max_alloc = Some(64 * 1024 * 1024);
+    reader.limits(limits);
+    reader
+        .decode()
+        .map_err(|e| format!("Invalid asset image: {e}"))?;
+    let hash = state::hash(&bytes);
+    let snapshot = state::root(cwd)
+        .join("assets")
+        .join(format!("{hash}.{}", format.extensions_str()[0]));
+    if snapshot.exists() {
+        if state::file_hash(&snapshot)? != hash {
+            return Err("Corrupt asset snapshot".into());
+        }
+    } else {
+        state::atomic(&snapshot, &bytes)?;
+    }
+    Ok(json!({"path":snapshot,"hash":hash}))
 }

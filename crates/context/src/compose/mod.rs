@@ -2,7 +2,9 @@
 pub mod assessment;
 pub mod catalog;
 mod export;
+mod extract;
 pub mod selection;
+pub mod source_http;
 pub mod state;
 mod worker;
 use serde_json::{json, Value};
@@ -69,6 +71,9 @@ pub fn execute(cwd: &Path, command: &str, input: &Value) -> Result<Value> {
             let source = project["sources"]
                 .get(source_id)
                 .ok_or("Unknown sourceId")?;
+            if source["kind"] == "url" {
+                source_http::validate_url(required(source, "url")?)?;
+            }
             if source["kind"] != "url" {
                 let fresh = source_fingerprint(Path::new(required(source, "path")?))?;
                 if fresh != source["contentHash"] {
@@ -286,9 +291,7 @@ fn source(cwd: &Path, project: &mut Value, input: &Value) -> Result<Value> {
         return Err("kind must be pdf, url, images, or structured".into());
     }
     let record = if kind == "url" {
-        if !(target.starts_with("https://") || target.starts_with("http://")) {
-            return Err("Source URL must use HTTP(S)".into());
-        }
+        source_http::validate_url(target)?;
         // Capture is explicit. The URI hash is an identity, never a claim about remote content.
         json!({"kind":kind,"url":target,"contentHash":null,"identityHash":state::hash(target.as_bytes()),"state":"not-captured"})
     } else {

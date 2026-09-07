@@ -14,7 +14,6 @@ import re
 import subprocess
 import sys
 import tempfile
-import urllib.request
 from collections import Counter
 from html.parser import HTMLParser
 from pathlib import Path
@@ -165,13 +164,10 @@ def extract(request):
                           "spans": page.get("spans", []), "geometry": page.get("geometry"),
                           "observation": "supplied-structured-input"})
     elif kind == "url":
-        with urllib.request.urlopen(source["url"], timeout=30) as response:
-            raw = response.read(16 * 1024 * 1024 + 1)
-        if len(raw) > 16 * 1024 * 1024:
-            raise ValueError("URL response exceeds 16 MiB")
-        source_hash = hashlib.sha256(raw).hexdigest()
+        # Network access belongs to the Rust transport, which validates and pins every hop.
+        source_hash = request["capturedHash"]
         parser = TextHTML()
-        parser.feed(raw.decode("utf-8", errors="replace"))
+        parser.feed(request["capturedHtml"])
         pages.append({"page": 1, "text": "\n".join(parser.parts), "spans": [],
                       "geometry": None, "observation": "source-html; no computed styles or interaction claims"})
     elif kind == "images":

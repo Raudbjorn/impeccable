@@ -319,3 +319,85 @@ fn rendered_comparison_uses_actual_pixels_and_retains_input_hashes() {
         drifted["report"]["artifacts"]["build"]["hash"]
     );
 }
+
+#[test]
+fn url_sources_reject_nonpublic_destinations_without_fetching() {
+    use impeccable_context::compose::source_http::validate_url;
+    for url in [
+        "http://169.254.169.254/latest/meta-data",
+        "http://localhost/",
+        "http://127.1/",
+        "http://2130706433/",
+        "http://0x7f000001/",
+        "http://[::1]/",
+        "http://[::ffff:127.0.0.1]/",
+        "http://192.168.1.1/",
+        "http://user:pass@example.com/",
+        "file:///etc/passwd",
+    ] {
+        assert!(validate_url(url).is_err(), "accepted {url}");
+    }
+    assert!(validate_url("https://example.com/source").is_ok());
+}
+
+#[test]
+fn export_assets_cannot_escape_the_project() {
+    let ws = Workspace::new();
+    let outside = Workspace::new();
+    let image = impeccable_comp::raster::create_image(8, 8, [255, 255, 255, 255]);
+    let bytes = impeccable_comp::png_io::encode_png(&image, &[]).unwrap();
+    fs::write(outside.0.join("private.png"), &bytes).unwrap();
+    fs::write(ws.0.join("image.png"), &bytes).unwrap();
+    let valid = ws.run("validate", json!({"draft":draft()}));
+    ws.run("review",json!({"draftId":valid["draftId"],"actor":"tester","authority":"human","verdict":"approved","reason":"Reviewed"}));
+    assert!(execute(
+        &ws.0,
+        "export",
+        &json!({"draftId":valid["draftId"],"format":"bcp","assets":[outside.0.join("private.png")]})
+    )
+    .is_err());
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(outside.0.join("private.png"), ws.0.join("escape.png")).unwrap();
+        assert!(execute(
+            &ws.0,
+            "export",
+            &json!({"draftId":valid["draftId"],"format":"bcp","assets":["escape.png"]})
+        )
+        .is_err());
+    }
+    let exported = ws.run(
+        "export",
+        json!({"draftId":valid["draftId"],"format":"bcp","assets":["image.png"]}),
+    );
+    let semantic =
+        state::read(&PathBuf::from(exported["bundle"].as_str().unwrap()).join("semantic.json"))
+            .unwrap();
+    let snapshot = semantic["assets"][0]["path"].as_str().unwrap();
+    fs::write(ws.0.join("image.png"), "changed").unwrap();
+    assert_eq!(fs::read(snapshot).unwrap(), bytes);
+}
+
+#[test]
+fn structured_processing_is_native_and_rejects_invalid_geometry() {
+    let ws = Workspace::new();
+    let path = ws.0.join("pages.json");
+    fs::write(&path, r#"{"pages":[{"text":"Visual Identity: clear space","spans":[{"id":"p1","text":"clear space","bbox":[0,0,1,1]}]}]}"#).unwrap();
+    let registered = ws.run(
+        "source",
+        json!({"action":"register","kind":"structured","target":path}),
+    );
+    let source_id = registered["sourceId"].clone();
+    let output = ws.run("derive", json!({"sourceId":source_id}));
+    assert!(output.is_object());
+    fs::write(
+        &path,
+        r#"{"pages":[{"spans":[{"id":"p1","text":"bad","bbox":[1,0,0,1]}]}]}"#,
+    )
+    .unwrap();
+    let registered = ws.run(
+        "source",
+        json!({"action":"register","kind":"structured","target":path}),
+    );
+    assert!(execute(&ws.0, "derive", &json!({"sourceId":registered["sourceId"]})).is_err());
+}

@@ -2,7 +2,7 @@
 
 The operational contract and input examples live in [the Compose reference](../skill/reference/compose.md).
 
-Rust in `crates/context/src/compose/` owns commands, validation, approvals, immutable project revisions, selection sessions, export publication, and assessment. The CLI dispatches `impeccable compose`; the existing retrieval seam connects project selection to `concept-seed`. Optional extraction and export workers are embedded from `skill/scripts/compose-*` and materialized only in project-local state. Python dependencies are pinned and locked; no new database, model service, or corpus is bundled.
+Rust in `crates/context/src/compose/` owns commands, validation, approvals, immutable project revisions, selection sessions, export publication, and assessment. The CLI dispatches `impeccable compose`; the existing retrieval seam connects project selection to `concept-seed`. URL and structured-source extraction run in Rust. URL capture accepts public HTTP(S) destinations only, validates and pins every DNS answer and redirect, disables environment proxies, and limits capture to five redirects, 30 seconds, and 16 MiB. The size limit also applies after gzip or deflate decompression. Export assets must be bounded, decodable images opened within the project directory; exports use retained content-addressed snapshots of the validated bytes. Optional PDF/image extraction and export workers are embedded from `skill/scripts/compose-*` and materialized only in project-local state. Python dependencies are pinned and locked; no new database, model service, or corpus is bundled.
 
 The existing seven boundaries remain distinct:
 
