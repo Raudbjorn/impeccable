@@ -111,6 +111,11 @@ const cases = [
     ],
   },
   { id: 'genimg-plate-score-only-missing-plate', verb: 'generate-image', workspace: WS, args: ['--plate', 'art', '--spec', 'spec.json', '--score-only'], env: env() },
+  // A --min the user cannot have meant refuses the run instead of quietly
+  // dropping the threshold; "0.8x" parses to nothing and "NaN" parses to a
+  // value every comparison is false against, so both used to exit 0.
+  { id: 'genimg-plate-min-not-a-number', verb: 'generate-image', workspace: WS, args: ['--plate', 'art', '--spec', 'spec.json', '--min', '0.8x'], env: env() },
+  { id: 'genimg-plate-min-nan', verb: 'generate-image', workspace: WS, args: ['--plate', 'art', '--spec', 'spec.json', '--min', 'NaN'], env: env() },
   { id: 'genimg-plate-unknown-region', verb: 'generate-image', workspace: WS, args: ['--plate', 'nope', '--spec', 'spec.json'], env: env() },
   { id: 'genimg-plate-non-raster-region', verb: 'generate-image', workspace: WS, args: ['--plate', 'top', '--spec', 'spec.json'], env: env() },
   { id: 'genimg-plate-missing-spec', verb: 'generate-image', workspace: WS, args: ['--plate', 'art', '--spec', 'nope.json'], env: env() },

@@ -517,6 +517,33 @@ fn run_plate(args: &[String], io: &mut Io, cwd: &str, env: &Env, plate_id: &str)
         io.err(&format!("generate-image: no region {plate_id} in {spec_path}; ids: {ids}\n"));
         return 1;
     };
+    // Parse --min before anything with a side effect. `parse().ok()` silently
+    // dropped a typo, so `--min 0.8x` ran with no threshold at all and exited
+    // 0; "NaN" and "inf" parse fine in Rust, and `score < NaN` is false, so
+    // those passed the gate too. A threshold the user asked for and did not
+    // get is the one failure this option must never have.
+    // Read --min's value directly rather than through `arg`, which reports an
+    // empty or flag-shaped value as absent. That is the right default for the
+    // other options here (no --out falls back to the spec's plate path, which
+    // the user sees), but --min's only job is a threshold, and the one failure
+    // it must never have is being asked for and silently not applied. So a
+    // present --min with no usable value is an error, not a default.
+    let min = match args.iter().position(|a| a == "--min") {
+        Some(i) => {
+            let raw = args.get(i + 1).map(String::as_str).unwrap_or("");
+            // `parse().ok()` dropped a typo, so `--min 0.8x` ran with no
+            // threshold and exited 0; "NaN" and "inf" parse fine in Rust, and
+            // `score < NaN` is false, so those cleared the gate as well.
+            match raw.parse::<f64>() {
+                Ok(v) if v.is_finite() => Some(v),
+                _ => {
+                    io.err(&format!("generate-image: --min {raw} is not a finite number\n"));
+                    return 1;
+                }
+            }
+        }
+        None => None,
+    };
     let medium = region.get("medium").and_then(Value::as_str).unwrap_or("");
     if medium != "raster" {
         io.err(&format!("generate-image: region {plate_id} is {medium}, not a plate; set its kind to plate|image|texture in the regions file\n"));
@@ -631,7 +658,7 @@ fn run_plate(args: &[String], io: &mut Io, cwd: &str, env: &Env, plate_id: &str)
             io.err(&format!("generate-image: no plate at {out} to score; produce it first, then run --score-only\n"));
             return 1;
         }
-        return report_plate_score(io, &spec, &comp, &region, &out, &ref_path, arg(args, "min"));
+        return report_plate_score(io, &spec, &comp, &region, &out, &ref_path, min);
     }
 
     if env.get("IMPECCABLE_IMAGE_GEN_FAKE").map(|v| !v.is_empty()).unwrap_or(false) {
@@ -666,7 +693,7 @@ fn run_plate(args: &[String], io: &mut Io, cwd: &str, env: &Env, plate_id: &str)
         // CLI contract already specified. Returning here emitted no
         // PLATE-SCORE and ignored --min, so fake mode could not stand in for
         // a real one in validation.
-        return report_plate_score(io, &spec, &comp, &region, &out, &ref_path, arg(args, "min"));
+        return report_plate_score(io, &spec, &comp, &region, &out, &ref_path, min);
     }
 
     let Some(key) = env.get("OPENAI_API_KEY").filter(|k| !k.is_empty()).cloned() else {
@@ -726,7 +753,7 @@ fn run_plate(args: &[String], io: &mut Io, cwd: &str, env: &Env, plate_id: &str)
         }
     }
 
-    report_plate_score(io, &spec, &comp, &region, &out, &ref_path, arg(args, "min"))
+    report_plate_score(io, &spec, &comp, &region, &out, &ref_path, min)
 }
 
 /// Prints the same `PLATE-SCORE` / `PLATE-WARN` / `PLATE-REJECTED` lines for
@@ -734,7 +761,7 @@ fn run_plate(args: &[String], io: &mut Io, cwd: &str, env: &Env, plate_id: &str)
 /// just generated here or already sat on disk from `--score-only`. Exit
 /// codes: 0 clean, 1 no usable score, 2 fails the plates gate, 3 below
 /// `--min`.
-fn report_plate_score(io: &mut Io, spec: &Value, comp: &Image, region: &Value, out: &str, ref_path: &str, min: Option<String>) -> i32 {
+fn report_plate_score(io: &mut Io, spec: &Value, comp: &Image, region: &Value, out: &str, ref_path: &str, min: Option<f64>) -> i32 {
     let region_id = region.get("id").and_then(Value::as_str).unwrap_or("");
     let gate = build_phase::gate_one_plate(io, spec, Some(comp), region, Some(out));
     if let Some(score) = &gate.score {
@@ -753,7 +780,7 @@ fn report_plate_score(io: &mut Io, spec: &Value, comp: &Image, region: &Value, o
         io.err(&format!("generate-image: no score for {out}; the plates gate refuses it as it stands.\n"));
         return 1;
     };
-    if let Some(min_val) = min.as_deref().and_then(|m| m.parse::<f64>().ok()) {
+    if let Some(min_val) = min {
         if score.overall < min_val {
             io.out(&format!("PLATE-REJECTED below --min {:.0}%\n", min_val * 100.0));
             return 3;
@@ -874,6 +901,22 @@ mod plate_tests {
         let (code, out, _) = run_capture(&cwd, HashMap::new(), &["--plate", "hero-art", "--score-only"]);
         assert_eq!(code, 0);
         assert!(out.contains("PLATE-SCORE hero-art"), "stdout: {out}");
+    }
+
+    #[test]
+    fn invalid_min_is_refused_rather_than_ignored() {
+        let cwd = setup_spec_with_regions();
+        for bad in ["0.8x", "NaN", "inf", ""] {
+            let (code, out, err) =
+                run_capture(&cwd, fake_env(), &["--plate", "hero-art", "--min", bad]);
+            assert_eq!(code, 1, "--min {bad} should be refused; stdout: {out}");
+            assert!(err.contains("is not a finite number"), "--min {bad} stderr: {err}");
+        }
+        // A threshold above 1 is a legitimate comparison, not a percentage
+        // bound, and stays accepted.
+        let (code, out, _) =
+            run_capture(&cwd, fake_env(), &["--plate", "hero-art", "--min", "1.1"]);
+        assert_eq!(code, 3, "stdout: {out}");
     }
 
     #[test]

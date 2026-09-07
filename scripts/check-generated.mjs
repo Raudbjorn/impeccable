@@ -66,7 +66,14 @@ const GENERATED_FILES = [
   ...Object.values(PROVIDERS)
     .filter((p) => p.emitHooks)
     .map((p) => `${p.configDir}/${p.hooksManifestRel || 'hooks/hooks.json'}`),
-  ...SYNCED_PROVIDERS.map((p) => `${p.configDir}/commands/${GENERATED_SKILL}.md`),
+  // Only OpenCode gets a command bridge (factory.js gates it on
+  // `provider === 'opencode'`), so listing this path for every provider
+  // reintroduced the bug above one directory down: a user-owned
+  // `.github/commands/impeccable.md` would block a gate the build never
+  // writes to.
+  ...Object.values(PROVIDERS)
+    .filter((p) => p.provider === 'opencode')
+    .map((p) => `${p.configDir}/commands/${GENERATED_SKILL}.md`),
 ];
 
 function isGeneratedPath(file) {
