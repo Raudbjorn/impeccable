@@ -176,8 +176,8 @@ describe('hook manifest builders', () => {
     assert.match(source, /pi\.on\("tool_result"/);
     assert.match(source, /pi\.on\("session_stop"/);
     assert.match(source, /"\.\.", "\.\.", "skills", "impeccable", "scripts", process.platform/);
-    // Filters to the two file-modifying tools; never fires on bash/read/etc.
-    assert.match(source, /event\.toolName !== "edit" && event\.toolName !== "write"/);
+    // Filters to the file-modifying tools; never fires on bash/read/etc.
+    assert.match(source, /event\.toolName !== "edit" &&\s*\n\s*event\.toolName !== "write"/);
     // Shaped exactly like Claude Code's own PostToolUse/Stop JSON so
     // hook-lib.mjs's existing shape-driven extraction (resolveTargetFiles(),
     // isStopEvent(), the stop_hook_active re-entrancy guard) needs no
@@ -185,24 +185,41 @@ describe('hook manifest builders', () => {
     assert.match(source, /hook_event_name: "PostToolUse"/);
     assert.match(source, /hook_event_name: "Stop"/);
     assert.match(source, /stop_hook_active: event\.stop_hook_active === true/);
-    // Uses raw spawnSync (pi.exec() has no stdin option, and hook.mjs
-    // requires stdin), and parses Claude's default payload() JSON envelope
-    // back out on its own side.
-    assert.match(source, /spawnSync\(HOOK_SCRIPT, \["hook"\]/);
+    // Uses async spawn, not spawnSync (pi.exec() has no stdin option, and
+    // hook.mjs requires stdin): a multi-file edit awaits every target's scan
+    // concurrently, and a synchronous spawn per target would serialize
+    // their timeouts, so N files could block the handler for up to
+    // timeoutMs * N instead of one timeoutMs.
+    assert.match(source, /spawn\(HOOK_SCRIPT, \["hook"\]/);
+    assert.doesNotMatch(source, /spawnSync\(/);
     assert.match(source, /hookSpecificOutput\?\.additionalContext/);
     // A hung hook.mjs must not block edit/stop handling indefinitely. Each
     // event passes its own timeout, matching the JSON providers' own
-    // TIMEOUT_SECONDS/STOP_TIMEOUT_SECONDS split; spawnSync's timeout reaches
-    // the same explicit error-reporting path as other subprocess failures.
+    // TIMEOUT_SECONDS/STOP_TIMEOUT_SECONDS split; spawn has no built-in
+    // timeout option (unlike spawnSync), so the module enforces it with its
+    // own setTimeout + child.kill(), reaching the same explicit
+    // error-reporting path as other subprocess failures.
     assert.match(source, /function runHook\(payload, timeoutMs, ctx\)/);
-    assert.match(source, /timeout: timeoutMs/);
+    // The timeout escalates SIGTERM -> SIGKILL and reports from `close`, not
+    // from the timer: child.kill() does not wait, so resolving there released
+    // the pool slot while the process could still be running and let a batch
+    // exceed MAX_CONCURRENT_SCANS.
+    assert.match(source, /setTimeout\(\(\) => \{[\s\S]*?child\.kill\("SIGTERM"\)/);
+    assert.match(source, /child\.kill\("SIGKILL"\)/);
+    // A launcher that exits before the payload lands raises EPIPE on the
+    // stdin stream, a distinct event from child.on("error")/("close").
+    assert.match(source, /child\.stdin\.on\("error"/);
+    // Concurrent, but bounded: an unbounded Promise.all over every target
+    // risks exhausting process/fd limits on a large batch edit.
+    assert.match(source, /const MAX_CONCURRENT_SCANS = \d+/);
+    assert.match(source, /mapWithConcurrencyLimit\(scannable, MAX_CONCURRENT_SCANS/);
     assert.match(source, /runHook\(\{[\s\S]*?hook_event_name: "PostToolUse"[\s\S]*?\}, 5000, ctx\)/);
-    assert.match(source, /runHook\(\{[\s\S]*?hook_event_name: "Stop"[\s\S]*?\}, 30000, ctx\)/);
+    assert.match(source, /await runHook\(\{[\s\S]*?hook_event_name: "Stop"[\s\S]*?\}, 30000, ctx\)/);
     // ToolResultEventResult.content is a replacement content-block array
     // (packages/coding-agent/src/extensibility/shared-events.ts): the runner
     // takes `result.content ?? tool.content`, so returning a bare string both
     // discarded the edit's own output and handed back an unrenderable shape.
-    assert.match(source, /content: \[\.\.\.blocks, \{ type: "text", text \}\]/);
+    assert.match(source, /content: \[\.\.\.blocks, \{ type: "text", text: findings\.join\("/);
     assert.doesNotMatch(source, /return \{ content: text \}/);
     // SessionStopEventResult only reaches a continuation when `continue: true`
     // or a blocking decision accompanies the context; additionalContext on its
@@ -215,6 +232,139 @@ describe('hook manifest builders', () => {
       'module must register tool_result and session_stop handlers',
     );
     assert.ok(/hasUriScheme\(filePath\)/.test(source), 'module must guard filePath');
+    // ast_edit mutates files like edit and write do; omitting it left a whole
+    // class of edits unscanned. The apply_patch edit mode arrives with
+    // toolName "edit" too (hooks/tool-wrapper.ts emits `this.tool.name`,
+    // fixed at "edit" regardless of mode -- "apply_patch" is only the
+    // wire-level name GPT-5's custom-tool grammar uses, resolved back to the
+    // same tool before a hook ever sees the call), so the "apply_patch"
+    // toolName arm is defensive rather than reachable today.
+    assert.match(source, /event\.toolName !== "ast_edit"/);
+    assert.match(source, /event\.toolName !== "apply_patch"/);
+    // Buffer mode decodes each chunk independently, corrupting a multi-byte
+    // character split across a chunk boundary; setEncoding switches to a
+    // StringDecoder that buffers a trailing partial sequence.
+    assert.match(source, /child\.stdout\.setEncoding\("utf8"\)/);
+    assert.match(source, /child\.stderr\.setEncoding\("utf8"\)/);
+    // `input.paths` is the authoritative multi-target list for an edit whose
+    // result carries no per-file details: the runner drops the single-target
+    // `path`/`tool_input.file_path` convenience entirely once an edit
+    // touches two or more files, so reading only one of those left every
+    // multi-file edit unscanned.
+    assert.match(source, /Array\.isArray\(input\.paths\)/);
+    // The edit tool's own result details (perFileResults / path) are
+    // authoritative over input.paths, since apply_patch mode's input is a
+    // raw patch envelope with no hashline paths to derive input.paths from.
+    assert.match(source, /Array\.isArray\(details\.perFileResults\)/);
+    assert.match(source, /details\.path/);
+    // ast_edit previews (dry-run) apply nothing; only an applied result's
+    // files are real, on-disk changes worth scanning.
+    assert.match(source, /details\.applied === true && Array\.isArray\(details\.files\)/);
+    // A failed tool call with no confirmed details wrote nothing; falling
+    // back to its request-side input would scan a file the call never
+    // touched and could append an unrelated finding to its error output.
+    assert.match(source, /\} else if \(event\.isError\) \{/);
+    assert.match(source, /mapWithConcurrencyLimit\(scannable, MAX_CONCURRENT_SCANS, \(filePath\) => runHook/);
+  });
+  it('oh-my-pi adapter scans every path in a multi-file edit, guarding each for a URI scheme', () => {
+    // Extracted the same way the URI-scheme test below does: syntactic
+    // structure is verified without importing (import.meta.url would be
+    // data:... under a data: URL, breaking HOOK_SCRIPT resolution), so the
+    // target-selection logic is pulled out and run directly.
+    const source = buildOmpHookModule();
+    const fnMatch = source.match(
+      /const details = event\.details[\s\S]*?\n(?=\s*if \(targets\.length === 0\) return;)/,
+    );
+    assert.ok(fnMatch, 'module must compute a multi-target list per toolName');
+    const pickTargets = new Function(
+      'event',
+      `${fnMatch[0]}\nreturn targets;`,
+    );
+    assert.deepEqual(
+      pickTargets({ toolName: 'edit', input: { paths: ['a.tsx', 'b.tsx'] } }),
+      ['a.tsx', 'b.tsx'],
+      'a multi-file edit with no per-file details must scan every input path, not just the first',
+    );
+    assert.deepEqual(
+      pickTargets({ toolName: 'write', tool_input: { file_path: 'single.tsx' } }),
+      ['single.tsx'],
+      'a single-target Claude Code shaped event must still resolve one target',
+    );
+    assert.deepEqual(
+      pickTargets({ toolName: 'write', input: { path: 'single.tsx' } }),
+      ['single.tsx'],
+      'a single-target OMP shaped event must still resolve one target',
+    );
+    assert.deepEqual(pickTargets({}), [], 'an event with no target carries none');
+    // toolName "apply_patch" does not occur in practice (see the note above
+    // the toolName guard), but the extraction covers it defensively; verify
+    // that arm still resolves correctly for it. Every real apply_patch-mode
+    // edit reaches this same code as toolName "edit": its input is a raw
+    // patch envelope with no hashline paths, so input.paths is unusable
+    // there too, and the result's own details are the only authoritative
+    // source either way.
+    assert.deepEqual(
+      pickTargets({ toolName: 'apply_patch', input: {}, details: { path: 'patched.tsx' } }),
+      ['patched.tsx'],
+      'a single-file apply_patch result must resolve its one changed file from details.path',
+    );
+    assert.deepEqual(
+      pickTargets({
+        toolName: 'edit',
+        input: { paths: ['stale-a.tsx'] },
+        details: { perFileResults: [{ path: 'a.tsx' }, { path: 'b.tsx' }] },
+      }),
+      ['a.tsx', 'b.tsx'],
+      'a multi-file edit result must scan every file details.perFileResults names, over any input.paths',
+    );
+    assert.deepEqual(
+      pickTargets({ toolName: 'edit', input: { paths: ['fallback.tsx'] }, details: {} }),
+      ['fallback.tsx'],
+      'an edit result with no usable details must fall back to input.paths',
+    );
+    // ast_edit previews (dry-run) stage changes for a later `resolve` and
+    // apply nothing yet; scanning a preview's files would scan content that
+    // was never written.
+    assert.deepEqual(
+      pickTargets({ toolName: 'ast_edit', details: { applied: false, files: ['src/a.ts', 'src/b.ts'] } }),
+      [],
+      'an unapplied ast_edit preview must not be scanned',
+    );
+    assert.deepEqual(
+      pickTargets({ toolName: 'ast_edit', details: { applied: true, files: ['src/a.ts', 'src/b.ts'] } }),
+      ['src/a.ts', 'src/b.ts'],
+      'an applied ast_edit result must scan the files it actually touched',
+    );
+    // input.paths for ast_edit are search scopes (directories, globs like
+    // src/**/*.ts) the edit ran over, never the files it changed.
+    assert.deepEqual(
+      pickTargets({ toolName: 'ast_edit', input: { paths: ['src/**/*.ts'] }, details: { applied: true } }),
+      [],
+      'ast_edit must never fall back to input.paths, which are search scopes, not changed files',
+    );
+    // A failed call with no confirmed details wrote nothing; its input path
+    // is only a guess, and scanning it would attach an unrelated finding to
+    // an error result.
+    assert.deepEqual(
+      pickTargets({ toolName: 'edit', input: { path: 'q.css' }, isError: true }),
+      [],
+      'a failed edit with no confirmed details must not fall back to its input path',
+    );
+    assert.deepEqual(
+      pickTargets({ toolName: 'write', input: { path: 'q.css' }, isError: true }),
+      [],
+      'a failed write must not fall back to its input path either',
+    );
+    assert.deepEqual(
+      pickTargets({
+        toolName: 'edit',
+        input: {},
+        isError: true,
+        details: { perFileResults: [{ path: 'q.css' }] },
+      }),
+      ['q.css'],
+      'a partial failure with confirmed per-file details still scans those real changes',
+    );
   });
   it('oh-my-pi adapter rejects device URI tool targets before spawning hook.mjs', () => {
     // Some tool surfaces (e.g. `xd://` LSP targets, or scheme-only virtual
@@ -278,7 +428,8 @@ describe('hook manifest builders', () => {
     // doesn't accidentally drop the Claude Code fallback and re-introduce the
     // bug only for that harness.
     assert.match(source, /event\.tool_input\.file_path/);
-    assert.match(source, /event\.input\.path/);
+    assert.match(source, /const input = event\.input/);
+    assert.match(source, /input\.path/);
   });
 
   it('runs hook scripts with node when OMP owns process.execPath', async () => {

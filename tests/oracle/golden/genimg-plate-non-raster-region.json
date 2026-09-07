@@ -1,0 +1,7 @@
+{
+  "stdout": "",
+  "stderr": "generate-image: region top is semantic, not a plate; set its kind to plate|image|texture in the regions file\n",
+  "exit": 1,
+  "signal": null,
+  "files": {}
+}

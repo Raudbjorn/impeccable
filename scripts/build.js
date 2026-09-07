@@ -22,6 +22,7 @@ import { readSourceFiles, readPatterns, stashPerProjectArtifacts, restorePerProj
 import { syncRootCommands } from './lib/root-commands-sync.mjs';
 import { createTransformer, PROVIDERS } from './lib/transformers/index.js';
 import { hooksJsonFor, buildClaudePluginHooksManifest } from './lib/transformers/hooks.js';
+import { DEPRECATED_LOCAL_SKILLS } from './lib/generated-paths.mjs';
 import { createAllZips, createProviderZip } from './lib/zip.js';
 import { collectPluginVersions } from './lib/validate-plugin-versions.js';
 import { collectPluginManifestFindings } from './lib/validate-plugin-manifest.js';
@@ -759,16 +760,12 @@ async function build() {
     // Remove deprecated skill stubs from local harness dirs. They exist
     // in dist/ so the cleanup script can redirect users, but they should
     // not clutter the repo's own skill directories.
-    const deprecatedLocalSkills = [
-      'frontend-design', 'teach-impeccable',
-      'arrange', 'normalize', 'onboard', 'extract',
-      // v3.0 consolidation: standalone skills -> /impeccable sub-commands
-      'adapt', 'animate', 'audit', 'bolder', 'clarify', 'colorize',
-      'critique', 'delight', 'distill', 'harden', 'layout', 'optimize',
-      'overdrive', 'polish', 'quieter', 'shape', 'typeset',
-    ];
+    // The list lives in lib/generated-paths.mjs, shared with the
+    // check:generated gate: a path this loop deletes has to be one that gate
+    // classifies as build-owned, or the deletion is filtered out of its
+    // staleness diff and a dirty tree reports as in sync.
     for (const { configDir } of syncConfigs) {
-      for (const name of deprecatedLocalSkills) {
+      for (const name of DEPRECATED_LOCAL_SKILLS) {
         const p = path.join(ROOT_DIR, configDir, 'skills', name);
         if (fs.existsSync(p)) fs.rmSync(p, { recursive: true, force: true });
       }
@@ -851,6 +848,19 @@ async function build() {
       path.join(pluginHooksDir, 'hooks.json'),
       JSON.stringify(buildClaudePluginHooksManifest(), null, 2) + '\n',
     );
+
+    // oh-my-pi reads this same subtree via its .claude-plugin/plugin.json
+    // fallback (docs/HARNESSES.md), but it discovers hooks as files under
+    // hooks/pre|post rather than a hooks.json manifest. Without this, a
+    // marketplace-installed omp plugin loads the skill but never runs the
+    // detector hook.
+    const ompHooks = hooksJsonFor('omp', { configDir: PROVIDERS.omp.configDir });
+    if (ompHooks?.isModule) {
+      const ompHookRel = PROVIDERS.omp.hooksManifestRel || path.join('hooks', 'post', 'impeccable.js');
+      const ompHookDest = path.join(pluginHooksDir, ompHookRel.replace(/^hooks[\\/]/, ''));
+      fs.mkdirSync(path.dirname(ompHookDest), { recursive: true });
+      fs.writeFileSync(ompHookDest, ompHooks.content);
+    }
 
     console.log('📦 Built Claude Code plugin subtree at ./plugin/');
   } else {

@@ -39,6 +39,7 @@
     "build:skills:release": "bun run scripts/build.js",
     "build": "bun run build:skills && mkdir -p build/_data && rm -rf build/_data/dist && cp -R dist build/_data/dist",
     "build:release": "bun run build:skills:release && mkdir -p build/_data && rm -rf build/_data/dist && cp -R dist build/_data/dist",
+    "check:generated": "node scripts/check-generated.mjs",
     "build:extension": "node scripts/build-extension.js",
     "fetch:engine": "node scripts/fetch-engine.mjs",
     "clean": "rm -rf dist build",
