@@ -13,8 +13,8 @@
 // Issues with no template structure at all are closed immediately; partial
 // failures are labeled and warned once. Every check re-runs on edit, and an
 // issue the gate closed is reopened automatically once it passes.
-import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, readdirSync, realpathSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
@@ -618,7 +618,7 @@ Options:
 `);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(resolve(process.argv[1]))).href) {
   main().catch((err) => {
     console.error(err.message);
     process.exit(1);

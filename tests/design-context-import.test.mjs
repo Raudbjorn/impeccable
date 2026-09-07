@@ -1,0 +1,483 @@
+import { describe, it, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const SCRIPT = path.join(ROOT, 'skill', 'scripts', 'design-context-import.mjs');
+
+// Every project makeCwd() creates, plus every sibling "outside-*" directory
+// this suite plants next to it, used to land directly under the shared OS
+// temp directory with nothing ever removing them. Nesting everything one
+// level under a single sandbox root means a project's siblings land inside
+// that root too (dirname(cwd) is the root, not the shared OS temp dir), so
+// one recursive removal after the whole suite catches all of it.
+const sandboxRoot = mkdtempSync(path.join(tmpdir(), 'design-context-import-sandbox-'));
+after(() => rmSync(sandboxRoot, { recursive: true, force: true }));
+
+function makeCwd() {
+  return mkdtempSync(path.join(sandboxRoot, 'project-'));
+}
+
+function bundleFile(cwd, answers = { 'palette-primary': '#B8422E' }) {
+  const file = path.join(cwd, 'bundle.json');
+  writeFileSync(file, JSON.stringify({
+    kind: 'impeccable-design-context',
+    schemaVersion: 1,
+    answers,
+  }));
+  return 'bundle.json';
+}
+
+function runImport(cwd, args, opts = {}) {
+  return spawnSync(process.execPath, [SCRIPT, ...args], { cwd, encoding: 'utf8', ...opts });
+}
+
+describe('design-context-import.mjs already-has-a-context guard', () => {
+  it('refuses a plain import into a pickerless seed that staged assets but never wrote answers.json', () => {
+    const cwd = makeCwd();
+    const assetsDir = path.join(cwd, '.impeccable', 'design-context', 'assets');
+    mkdirSync(assetsDir, { recursive: true });
+    writeFileSync(path.join(assetsDir, 'logo.svg'), '<svg></svg>');
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.notEqual(res.status, 0, 'a store with staged assets but no answers.json must not read as empty');
+    assert.match(res.stderr, /already has a design context/);
+  });
+
+  it('refuses a plain import into a project carrying only a cue manifest (cues.json)', () => {
+    const cwd = makeCwd();
+    const workspaceDir = path.join(cwd, '.impeccable', 'visual-cues');
+    mkdirSync(workspaceDir, { recursive: true });
+    writeFileSync(path.join(workspaceDir, 'cues.json'), JSON.stringify({ cues: [], palette: {} }));
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.notEqual(res.status, 0, 'a store with a cue manifest but no answers.json must not read as empty');
+    assert.match(res.stderr, /already has a design context/);
+  });
+
+  it('refuses a plain import into a project carrying only a font manifest (fonts.json)', () => {
+    const cwd = makeCwd();
+    const workspaceDir = path.join(cwd, '.impeccable', 'visual-cues');
+    mkdirSync(workspaceDir, { recursive: true });
+    writeFileSync(path.join(workspaceDir, 'fonts.json'), JSON.stringify([]));
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.notEqual(res.status, 0, 'a store with a font manifest but no answers.json must not read as empty');
+    assert.match(res.stderr, /already has a design context/);
+  });
+
+  it('still allows a plain import into a genuinely empty project', () => {
+    const cwd = makeCwd();
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.equal(res.status, 0, res.stderr);
+    assert.match(res.stdout, /IMPORTED \d+ files/);
+  });
+
+  it('--force still overrides the refusal with staged-only assets', () => {
+    const cwd = makeCwd();
+    const assetsDir = path.join(cwd, '.impeccable', 'design-context', 'assets');
+    mkdirSync(assetsDir, { recursive: true });
+    writeFileSync(path.join(assetsDir, 'logo.svg'), '<svg></svg>');
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle, '--force']);
+
+    assert.equal(res.status, 0, res.stderr);
+  });
+
+  // Regression: a pickerless seed can consist of DESIGN.md alone, at the
+  // project root, with nothing under .impeccable/ at all -- design-context.md's
+  // own no-argument status routing already treats that as a real record. A
+  // plain import used to overlay another bundle's answers/context onto that
+  // world without requiring --force, and left the existing DESIGN.md in
+  // place (--design defaults to "skip"), leaving a mixed context.
+  it('refuses a plain import into a project carrying only a root seed DESIGN.md', () => {
+    const cwd = makeCwd();
+    writeFileSync(
+      path.join(cwd, 'DESIGN.md'),
+      '# Seed\n\nSome direction.\n\n<!-- SEED: established with the user before implementation; re-run /impeccable document once there\'s code to capture the actual tokens and components. -->\n',
+    );
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.notEqual(res.status, 0, 'a project with only a seed DESIGN.md must not read as empty');
+    assert.match(res.stderr, /already has a design context/);
+  });
+
+  // Regression: hasManagedState() used to treat any root DESIGN.md as
+  // managed design-context state, checking existence alone. The ordinary
+  // `document` scan flow also writes a DESIGN.md, from a project's actual
+  // built code, with no design context (answers/context/staged assets)
+  // behind it at all -- that DESIGN.md carries no `<!-- SEED` marker.
+  // Requiring --force for a routine first import into such a project made
+  // a destructive flag the price of normal use.
+  it('does not require --force for a plain import into a project whose DESIGN.md came from a normal scan, not a seed', () => {
+    const cwd = makeCwd();
+    writeFileSync(path.join(cwd, 'DESIGN.md'), '# DESIGN.md\n\n## Colors\n\nSome real, scanned tokens.\n');
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.equal(res.status, 0, res.stderr);
+    assert.match(res.stdout, /IMPORTED \d+ files/);
+  });
+
+  // Regression: a loose `<!--\s*SEED\b` shape also matched an unrelated
+  // ordinary comment that merely starts with the word SEED, like a scanned
+  // theme file's own note about where its colors came from -- misclassifying
+  // a normal scan-generated DESIGN.md as a pickerless seed and forcing
+  // --force, a destructive flag, for what should be a routine first import.
+  it('does not require --force for a DESIGN.md whose comment merely starts with the word SEED', () => {
+    const cwd = makeCwd();
+    writeFileSync(
+      path.join(cwd, 'DESIGN.md'),
+      '# DESIGN.md\n\n<!-- SEED colors from legacy theme -->\n\n## Colors\n\nSome real, scanned tokens.\n',
+    );
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.equal(res.status, 0, res.stderr);
+    assert.match(res.stdout, /IMPORTED \d+ files/);
+  });
+});
+
+// Regression: isSeedDesignMd() read the whole file with readFileSync() and
+// never checked what kind of thing was actually at DESIGN.md. A FIFO or
+// character device there could block the read indefinitely (readFileSync
+// has no cap of its own and would simply wait), and an oversized real file
+// was loaded whole into memory just to find a marker that, by construction,
+// always sits within its first few hundred bytes.
+describe('design-context-import.mjs DESIGN.md seed-marker probe hardening', () => {
+  it('does not block indefinitely when DESIGN.md is a FIFO', () => {
+    if (process.platform === 'win32') return; // mkfifo is POSIX-only
+    const cwd = makeCwd();
+    const mkfifo = spawnSync('mkfifo', [path.join(cwd, 'DESIGN.md')]);
+    if (mkfifo.error || mkfifo.status !== 0) return; // mkfifo unavailable in this environment
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle], { timeout: 5000 });
+
+    // A FIFO with nothing on the other end to write to it must not be
+    // treated as a seed DESIGN.md (isSeedDesignMd() must not hang trying to
+    // read it), so the import proceeds as if no DESIGN.md were there at all.
+    assert.equal(res.status, 0, res.stderr);
+    assert.match(res.stdout, /IMPORTED \d+ files/);
+  });
+
+  it('finds the seed marker in a DESIGN.md far larger than the probe window without reading it whole', () => {
+    const cwd = makeCwd();
+    // The marker sits at the very start (right after frontmatter), same as
+    // document.md's seed mode actually writes it; the rest of the file is
+    // padding well past SEED_MARKER_PROBE_BYTES, standing in for a large
+    // real document.
+    const marker = '<!-- SEED: established with the user before implementation; re-run /impeccable document once there\'s code to capture the actual tokens and components. -->\n';
+    writeFileSync(path.join(cwd, 'DESIGN.md'), marker + '#'.repeat(9 * 1024 * 1024));
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.notEqual(res.status, 0, 'a large seed DESIGN.md must still be recognized as managed state');
+    assert.match(res.stderr, /already has a design context/);
+  });
+});
+
+// Regression: the bundle size check above stat()s the path and compares
+// only its `size`, which is meaningful for a regular file but not for a
+// FIFO or character device (commonly 0 regardless of what actually flows
+// through it, or unbounded). A bundle path pointing at one of those would
+// pass the size check and then reach readFile(), which has no cap of its
+// own and can block or read unbounded data.
+describe('design-context-import.mjs bundle non-regular-file guard', () => {
+  it('refuses a bundle path that is a FIFO instead of reading it', async () => {
+    if (process.platform === 'win32') return; // mkfifo is POSIX-only
+    const cwd = makeCwd();
+    const fifoPath = path.join(cwd, 'bundle.json');
+    const mkfifo = spawnSync('mkfifo', [fifoPath]);
+    if (mkfifo.error || mkfifo.status !== 0) return; // mkfifo unavailable in this environment
+
+    const res = runImport(cwd, ['bundle.json'], { timeout: 5000 });
+
+    assert.notEqual(res.status, 0, 'a FIFO must be refused, not read');
+    assert.match(res.stderr, /not a regular file/);
+  });
+
+  // Regression: the bundle path used to be opened with O_RDONLY | O_NONBLOCK
+  // only, so a bundle argument replaced with a symlink between the caller
+  // resolving it and this process's open() call was followed like any other
+  // regular file, defeating the stat-through-the-same-fd guard entirely.
+  // O_NOFOLLOW makes the open() itself fail on a symlink.
+  it('refuses a bundle path that is a symlink instead of reading through it', () => {
+    const cwd = makeCwd();
+    const outsideDir = mkdtempSync(path.join(sandboxRoot, 'outside-'));
+    const realBundle = path.join(outsideDir, 'real-bundle.json');
+    writeFileSync(realBundle, JSON.stringify({
+      kind: 'impeccable-design-context',
+      schemaVersion: 1,
+      answers: { 'palette-primary': '#B8422E' },
+    }));
+    const linkPath = path.join(cwd, 'bundle.json');
+    symlinkSync(realBundle, linkPath);
+
+    const res = runImport(cwd, ['bundle.json']);
+
+    assert.notEqual(res.status, 0, 'a symlinked bundle path must be refused, not followed');
+    assert.match(res.stderr, /not a regular file|ELOOP|symlink/i);
+  });
+});
+
+// Regression: portability.mjs's per-entry decoded-byte checks only bound
+// file payloads at allowed paths inside the loop importDesignContext runs;
+// they say nothing about the serialized bundle as a whole, which this CLI
+// read into memory whole and JSON.parse()d before that loop ever started.
+// An untrusted bundle with a huge designMd/answers field, or huge payloads
+// on paths the loop would skip anyway, bypassed every internal cap.
+describe('design-context-import.mjs bundle file-size cap', () => {
+  it('refuses a bundle file larger than the documented cap, before reading or parsing it', () => {
+    const cwd = makeCwd();
+    const file = path.join(cwd, 'huge-bundle.json');
+    // Content need not be valid JSON: the size check runs via stat(),
+    // before readFile()/JSON.parse() ever touch the file.
+    writeFileSync(file, Buffer.alloc(33 * 1024 * 1024, 'x'));
+
+    const res = runImport(cwd, ['huge-bundle.json']);
+
+    assert.notEqual(res.status, 0);
+    assert.match(res.stderr, /this release reads bundles up to/);
+  });
+
+  it('still allows a bundle file well under the cap', () => {
+    const cwd = makeCwd();
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.equal(res.status, 0, res.stderr);
+  });
+});
+
+// Regression: migrate() writes through the same managed paths
+// importDesignContext() does, and used to run before any symlink check --
+// including importDesignContext()'s own, which never gets called at all if
+// migrate() itself already wrote through a symlinked `.impeccable` ancestor.
+describe('design-context-import.mjs refuses a symlinked .impeccable before migrate() runs', () => {
+  it('refuses without ever calling migrateContextFromCues() through the link', () => {
+    const cwd = makeCwd();
+    const outsideDir = path.join(path.dirname(cwd), `outside-impeccable-${path.basename(cwd)}`);
+    mkdirSync(path.join(outsideDir, 'visual-cues'), { recursive: true });
+    // migrateContextFromCues() (called by migrate() even with no legacy
+    // dir) writes context.json from cues.json when it carries modes/context
+    // and context.json does not exist yet -- exactly the write this guard
+    // must block before it goes through a symlinked `.impeccable`.
+    writeFileSync(path.join(outsideDir, 'visual-cues', 'cues.json'), JSON.stringify({ modes: ['persuade'] }));
+    symlinkSync(outsideDir, path.join(cwd, '.impeccable'));
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.notEqual(res.status, 0);
+    assert.match(res.stderr, /is a symlink/);
+    assert.equal(existsSync(path.join(outsideDir, 'design-context', 'context.json')), false,
+      'migrate() must never have written through the symlinked ancestor');
+  });
+
+  // Regression: the guard above only checked the four managed JSON
+  // destinations; migrate() also moves legacy assets/fonts/journal onto
+  // target.assetsDir/target.fontsDir/target.journalJsonl, and reads them
+  // from `.impeccable/design-interview` in the first place. Neither
+  // direction was covered.
+  it('refuses when the assets/ migration destination is a symlink, before moving anything onto it', () => {
+    const cwd = makeCwd();
+    const legacyDir = path.join(cwd, '.impeccable', 'design-interview');
+    mkdirSync(path.join(legacyDir, 'assets'), { recursive: true });
+    writeFileSync(path.join(legacyDir, 'assets', 'logo.svg'), '<svg></svg>');
+    const outsideDir = path.join(path.dirname(cwd), `outside-assets-${path.basename(cwd)}`);
+    mkdirSync(outsideDir, { recursive: true });
+    mkdirSync(path.join(cwd, '.impeccable', 'design-context'), { recursive: true });
+    symlinkSync(outsideDir, path.join(cwd, '.impeccable', 'design-context', 'assets'));
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.notEqual(res.status, 0);
+    assert.match(res.stderr, /is a symlink/);
+    assert.equal(existsSync(path.join(outsideDir, 'logo.svg')), false,
+      'migrate() must never have moved the legacy asset through the symlinked destination');
+  });
+
+  it('refuses when the legacy assets/ source is a symlink, before reading or moving anything from it', () => {
+    const cwd = makeCwd();
+    const outsideDir = path.join(path.dirname(cwd), `outside-legacy-assets-${path.basename(cwd)}`);
+    mkdirSync(outsideDir, { recursive: true });
+    writeFileSync(path.join(outsideDir, 'secret.svg'), 'do not move me');
+    mkdirSync(path.join(cwd, '.impeccable', 'design-interview'), { recursive: true });
+    symlinkSync(outsideDir, path.join(cwd, '.impeccable', 'design-interview', 'assets'));
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.notEqual(res.status, 0);
+    assert.match(res.stderr, /is a symlink/);
+    assert.equal(existsSync(path.join(outsideDir, 'secret.svg')), true,
+      'migrate() must never have moved the external file out through the symlinked legacy source');
+    assert.equal(existsSync(path.join(cwd, '.impeccable', 'design-context', 'assets', 'secret.svg')), false);
+  });
+
+  it('refuses when the legacy journal source is a symlink, before migrate() reads doc-session.json through it', () => {
+    const cwd = makeCwd();
+    const outsideDir = path.join(path.dirname(cwd), `outside-legacy-dir-${path.basename(cwd)}`);
+    mkdirSync(outsideDir, { recursive: true });
+    writeFileSync(path.join(outsideDir, 'doc-session.json'), JSON.stringify({ pid: process.pid, port: 4321 }));
+    mkdirSync(path.join(cwd, '.impeccable'), { recursive: true });
+    symlinkSync(outsideDir, path.join(cwd, '.impeccable', 'design-interview'));
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.notEqual(res.status, 0);
+    assert.match(res.stderr, /is a symlink/);
+  });
+
+  // Regression: the move-source/destination paths above (assets/, fonts/,
+  // journal, and every legacy.* path) were checked unconditionally, even
+  // though migrate() only ever touches them when a legacy store
+  // (.impeccable/design-interview) actually exists on disk -- with none,
+  // migrate() returns after calling only migrateContextFromCues(), which
+  // never goes near target.assetsDir/target.fontsDir. A symlinked
+  // current-store assets/ on a project that was never migrated hard-failed
+  // the whole import even though exportDesignContext() itself tolerates
+  // that same symlink and continues past it.
+  it('still imports when the current-store assets/ is a symlink but no legacy store exists to migrate', () => {
+    const cwd = makeCwd();
+    const outsideDir = path.join(path.dirname(cwd), `outside-current-assets-${path.basename(cwd)}`);
+    mkdirSync(outsideDir, { recursive: true });
+    mkdirSync(path.join(cwd, '.impeccable', 'design-context'), { recursive: true });
+    symlinkSync(outsideDir, path.join(cwd, '.impeccable', 'design-context', 'assets'));
+
+    const bundle = bundleFile(cwd);
+    const res = runImport(cwd, [bundle]);
+
+    assert.equal(res.status, 0, res.stderr);
+    assert.match(res.stdout, /IMPORTED \d+ files/);
+  });
+});
+
+describe('design-context-import.mjs validates the bundle before migrate() runs', () => {
+  // Regression: migrate() (which moves a legacy-layout project's
+  // design-interview store into the current one) used to run before the
+  // bundle was ever stat'd, parsed, or validated. A rejected import -- an
+  // oversized, malformed, or otherwise invalid bundle -- still left
+  // migrate()'s filesystem side effects in place before the process exited
+  // on the bundle error. Invalid input must have no side effects at all.
+  it('does not migrate a legacy store when the named bundle is malformed', () => {
+    const cwd = makeCwd();
+    const legacyDir = path.join(cwd, '.impeccable', 'design-interview');
+    mkdirSync(path.join(legacyDir, 'assets'), { recursive: true });
+    writeFileSync(path.join(legacyDir, 'assets', 'logo.svg'), '<svg></svg>');
+    writeFileSync(path.join(cwd, 'bundle.json'), JSON.stringify({ kind: 'not-a-design-context-bundle' }));
+
+    const res = runImport(cwd, ['bundle.json']);
+
+    assert.notEqual(res.status, 0, 'a malformed bundle must be refused');
+    assert.match(res.stderr, /Expected a .* bundle/);
+    assert.equal(
+      existsSync(path.join(legacyDir, 'assets', 'logo.svg')),
+      true,
+      'the legacy asset must still be at its original path: migrate() must never have run before the bundle was rejected',
+    );
+    assert.equal(
+      existsSync(path.join(cwd, '.impeccable', 'design-context', 'assets', 'logo.svg')),
+      false,
+      'nothing may have been moved into the current-layout store either',
+    );
+  });
+
+  it('does not migrate a legacy store when the named bundle is oversized', () => {
+    const cwd = makeCwd();
+    const legacyDir = path.join(cwd, '.impeccable', 'design-interview');
+    mkdirSync(path.join(legacyDir, 'assets'), { recursive: true });
+    writeFileSync(path.join(legacyDir, 'assets', 'logo.svg'), '<svg></svg>');
+    // Any content works: the size check must reject this before the file is
+    // ever read or parsed. Past MAX_BUNDLE_FILE_BYTES (32 MiB).
+    writeFileSync(path.join(cwd, 'bundle.json'), 'x'.repeat(33 * 1024 * 1024));
+
+    const res = runImport(cwd, ['bundle.json']);
+
+    assert.notEqual(res.status, 0, 'an oversized bundle must be refused');
+    assert.match(res.stderr, /this release reads bundles up to/);
+    assert.equal(
+      existsSync(path.join(legacyDir, 'assets', 'logo.svg')),
+      true,
+      'the legacy asset must still be at its original path: migrate() must never have run before the bundle was rejected',
+    );
+  });
+
+  // Regression: validateBundle() only checks the bundle's envelope (kind,
+  // schemaVersion, answers shape). The deeper per-file checks -- entry
+  // count, decoded size, canonical base64 -- lived only inside
+  // importDesignContext(), called after migrate(); a bundle that failed one
+  // of those still let migrate() run first. decodeBundleFiles() (the same
+  // function importDesignContext() itself now calls) runs here too, so
+  // these are caught before migrate() has a chance to move anything.
+  it('does not migrate a legacy store when the named bundle names too many files', () => {
+    const cwd = makeCwd();
+    const legacyDir = path.join(cwd, '.impeccable', 'design-interview');
+    mkdirSync(path.join(legacyDir, 'assets'), { recursive: true });
+    writeFileSync(path.join(legacyDir, 'assets', 'logo.svg'), '<svg></svg>');
+    const files = Array.from({ length: 513 }, (_, i) => ({
+      path: `assets/file-${i}.png`,
+      base64: Buffer.from('x').toString('base64'),
+    }));
+    writeFileSync(path.join(cwd, 'bundle.json'), JSON.stringify({
+      kind: 'impeccable-design-context',
+      schemaVersion: 1,
+      answers: null,
+      files,
+    }));
+
+    const res = runImport(cwd, ['bundle.json']);
+
+    assert.notEqual(res.status, 0, 'a bundle naming too many files must be refused');
+    assert.match(res.stderr, /imports at most/);
+    assert.equal(
+      existsSync(path.join(legacyDir, 'assets', 'logo.svg')),
+      true,
+      'the legacy asset must still be at its original path: migrate() must never have run before the bundle was rejected',
+    );
+  });
+
+  it('does not migrate a legacy store when the named bundle carries invalid base64', () => {
+    const cwd = makeCwd();
+    const legacyDir = path.join(cwd, '.impeccable', 'design-interview');
+    mkdirSync(path.join(legacyDir, 'assets'), { recursive: true });
+    writeFileSync(path.join(legacyDir, 'assets', 'logo.svg'), '<svg></svg>');
+    writeFileSync(path.join(cwd, 'bundle.json'), JSON.stringify({
+      kind: 'impeccable-design-context',
+      schemaVersion: 1,
+      answers: null,
+      files: [{ path: 'assets/logo.svg', base64: 'not-!!valid-base64!!' }],
+    }));
+
+    const res = runImport(cwd, ['bundle.json']);
+
+    assert.notEqual(res.status, 0, 'a bundle with invalid base64 must be refused');
+    assert.match(res.stderr, /valid base64/);
+    assert.equal(
+      existsSync(path.join(legacyDir, 'assets', 'logo.svg')),
+      true,
+      'the legacy asset must still be at its original path: migrate() must never have run before the bundle was rejected',
+    );
+  });
+});

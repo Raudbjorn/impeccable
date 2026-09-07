@@ -1,3 +1,4 @@
+import fs from 'fs';
 import path from 'path';
 import {
   cleanDir,
@@ -136,6 +137,24 @@ function buildClaudeAgent(agent, body) {
   return `${generateYamlFrontmatter(frontmatter)}\n${body.trim()}\n`;
 }
 
+// oh-my-pi task agents are markdown with frontmatter, discovered from
+// `.omp/agents/*.md` (project) and `~/.omp/agent/agents/*.md` (user). Only
+// `name` and `description` are portable, plus `autoloadSkills`: oh-my-pi
+// injects the named skills into the spawned agent before its first prompt,
+// which is the documented answer to a subagent that would otherwise start
+// without the skill that defines its job. `tools` is omitted deliberately --
+// oh-my-pi's tool vocabulary differs from ours, and omitting it grants the
+// default set rather than an intersection we cannot verify.
+function buildOmpAgent(agent, body) {
+  const frontmatter = {
+    name: agent.name,
+    description: agent.description,
+    autoloadSkills: ['impeccable'],
+  };
+
+  return `${generateYamlFrontmatter(frontmatter)}\n${body.trim()}\n`;
+}
+
 // GitHub Copilot custom agents are markdown files named `<name>.agent.md`
 // (project scope: `.github/agents/`; user scope: `~/.copilot/agents/`). Only
 // the portable frontmatter fields are emitted: `name` and `description`.
@@ -183,6 +202,13 @@ function buildAgentFile(config, agent, body) {
     };
   }
 
+  if (config.agentFormat === 'omp-md') {
+    return {
+      filename: `${agent.name}.md`,
+      content: buildOmpAgent(agent, body),
+    };
+  }
+
   if (config.agentFormat === 'copilot-agent-md') {
     return {
       filename: `${agent.name}.agent.md`,
@@ -210,6 +236,7 @@ export function createTransformer(config) {
     providerTags = [provider],
     writeOpenAIMetadata = false,
     includeVersion = true,
+    versionInMetadata = false,
   } = config;
   const placeholderKey = placeholderProvider || provider;
 
@@ -243,12 +270,21 @@ export function createTransformer(config) {
         name: skillName,
         description: skill.description,
       };
-      if (skillsVersion && includeVersion) frontmatterObj.version = skillsVersion;
+      if (skillsVersion && includeVersion && !versionInMetadata) {
+        frontmatterObj.version = skillsVersion;
+      }
 
       for (const spec of activeFields) {
         if (spec.condition && !spec.condition(skill)) continue;
         const val = spec.value ? spec.value(skill) : skill[spec.sourceKey];
         if (val) frontmatterObj[spec.yamlKey] = val;
+      }
+
+      if (skillsVersion && includeVersion && versionInMetadata) {
+        frontmatterObj.metadata = {
+          ...(frontmatterObj.metadata || {}),
+          version: skillsVersion,
+        };
       }
 
       // Replace {{command_hint}} in argument-hint with command names from metadata,
@@ -328,7 +364,12 @@ export function createTransformer(config) {
         ensureDir(scriptsOutDir);
         for (const script of skill.scripts) {
           const scriptContent = replaceScriptProviderMarker(script.content, placeholderKey, provider);
-          writeFile(path.join(scriptsOutDir, script.name), scriptContent);
+          const outPath = path.join(scriptsOutDir, script.name);
+          writeFile(outPath, scriptContent);
+          // The launcher must stay executable in every provider copy; a
+          // plain write would drop the bit and `impeccable context` would
+          // fail with EACCES on the first session.
+          if (script.mode) fs.chmodSync(outPath, script.mode);
           scriptCount++;
         }
       }
@@ -345,6 +386,28 @@ export function createTransformer(config) {
           ensureDir(path.join(skillDir, 'agents'));
           writeFile(path.join(skillDir, 'agents', filename), buildCodexAgent(agent, agentBody));
         }
+      }
+    }
+
+    // Ship an explicit slash-command surface for OpenCode. OpenCode registers
+    // skill commands natively but its TUI autocomplete hides them by deliberate
+    // design (anomalyco/opencode#25439); this file also pins execution policy
+    // (agent: build, subtask: true) and routes through OpenCode's skill tool,
+    // which resolves the skill base dir for any install scope. Menu visibility
+    // is the only part contingent on OpenCode's design; the rest is intentional.
+    // Schema restricted to what OpenCode recognises (description, agent, model,
+    // variant, subtask).
+    if (provider === 'opencode' && skills.length > 0) {
+      const commandsDir = path.join(providerDir, `${configDir}/commands`);
+      ensureDir(commandsDir);
+      for (const skill of skills) {
+        const bridgeBody = `Call skill({ name: "${skill.name}" }) and follow its \`Setup\` and \`Commands\` sections to handle $ARGUMENTS.\n`;
+        const bridgeFrontmatter = generateYamlFrontmatter({
+          description: skill.description,
+          agent: 'build',
+          subtask: true,
+        });
+        writeFile(path.join(commandsDir, `${skill.name}.md`), `${bridgeFrontmatter}\n${bridgeBody}`.replace(/\n+$/, '\n'));
       }
     }
 
