@@ -85,14 +85,33 @@ function git(args) {
 }
 
 function changedPaths() {
-  // Do not trim() the raw output before splitting: porcelain's leading
-  // status column is a literal space for "modified, not staged" ( M path),
-  // and trimming the whole multi-line string eats that space off only the
-  // FIRST line, corrupting its slice(3) into missing its leading character.
-  return git(['status', '--porcelain'])
-    .split('\n')
-    .filter((line) => line.length > 0)
-    .map((line) => line.slice(3).trim());
+  // -z, not the line-oriented form. Plain `--porcelain` is display text: it
+  // C-quotes any path with a space, a quote, or a non-ASCII byte, and writes
+  // a rename as `old -> new` on one line. Read literally, a dirty
+  // `.omp/agents/custom agent.md` arrives as `"..."` and matches no prefix,
+  // so the preflight waves through a file `build:release` is about to
+  // rewrite. NUL-delimited output is never quoted and never joined.
+  //
+  // Do not trim the records either: the status column is a literal space for
+  // "modified, not staged" ( M path), so the path begins at index 3 exactly.
+  const records = git(['status', '--porcelain', '-z']).split('\0').filter((r) => r.length > 0);
+  const paths = [];
+  for (let i = 0; i < records.length; i++) {
+    const record = records[i];
+    const status = record.slice(0, 2);
+    paths.push(record.slice(3));
+    // A rename or copy spends a second record on its source path, with no
+    // status prefix of its own. Both ends matter here: the old path is being
+    // removed and the new one written, and either can be generated output.
+    if (status.includes('R') || status.includes('C')) {
+      const source = records[i + 1];
+      if (source !== undefined) {
+        paths.push(source);
+        i++;
+      }
+    }
+  }
+  return paths;
 }
 
 const before = changedPaths().filter(isGeneratedPath);
@@ -105,7 +124,11 @@ if (before.length > 0) {
 }
 
 console.log('Rebuilding provider output...');
-execFileSync('bun', ['run', 'build:release'], { cwd: ROOT, stdio: 'ignore' });
+// Inherit rather than ignore: when build:release fails, its own validator or
+// compiler error is the whole diagnostic, and swallowing it leaves the caller
+// with nothing but an execFileSync stack trace for a gate whose job is to
+// tell them what is wrong.
+execFileSync('bun', ['run', 'build:release'], { cwd: ROOT, stdio: 'inherit' });
 
 const after = changedPaths().filter(isGeneratedPath);
 if (after.length === 0) {
