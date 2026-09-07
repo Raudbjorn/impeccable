@@ -590,6 +590,8 @@ dependencies = [
  "impeccable-comp",
  "impeccable-comp-verbs",
  "impeccable-core",
+ "impeccable-detect",
+ "impeccable-html",
  "once_cell",
  "regex",
  "serde",

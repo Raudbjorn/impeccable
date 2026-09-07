@@ -37,6 +37,7 @@ pub mod staleness_deep;
 pub mod doctor;
 pub use doctor::run as run_doctor;
 pub mod catalog;
+pub mod compose;
 pub mod retrieval;
 pub mod roll_selection;
 pub mod seed_text;

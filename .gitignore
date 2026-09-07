@@ -159,3 +159,4 @@ tmp/
 # the generated picker into the tracked provider harness directories.
 build-picker/
 skill/scripts/picker/
+__pycache__/

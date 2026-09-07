@@ -507,7 +507,11 @@ pub fn collect_boot_finding_groups(ctx: &Ctx, cwd: &str, extras: &BootExtras) ->
             Vec::new()
         },
         design_sidecar: check_design_sidecar(extras.abs_design_path.as_deref(), &extras.sidecar_candidates, &project_root),
-        config: check_config(&project_root, Some(&ctx.repo_root)),
+        config: {
+            let mut findings = check_config(&project_root, Some(&ctx.repo_root));
+            findings.extend(crate::compose::assessment::drift(&project_root, false));
+            findings
+        },
         build_path: check_build_path_unset(&project_root, Some(&ctx.repo_root), ctx.product.as_deref()),
         surface_briefs: check_surface_briefs(&ctx.surface_brief_candidates, &project_root),
         project_roots: match &extras.project_root_patterns {
