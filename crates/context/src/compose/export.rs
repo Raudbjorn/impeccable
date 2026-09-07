@@ -35,21 +35,23 @@ pub fn run(cwd: &Path, project: &Value, input: &Value) -> Result<Value> {
     let evidence = super::assessment::evidence(project, Some(key));
     let assets = input.get("assets").cloned().unwrap_or(json!([]));
     let mut asset_hashes = vec![];
+    let mut snapshots = vec![];
     for asset in assets
         .as_array()
         .ok_or("assets must be an array of paths")?
     {
-        asset_hashes.push(snapshot_asset(
-            cwd,
-            asset.as_str().ok_or("asset must be a path string")?,
-        )?);
+        let snapshot = snapshot_asset(cwd, asset.as_str().ok_or("asset must be a path string")?)?;
+        let path = std::path::PathBuf::from(snapshot["path"].as_str().unwrap());
+        let name = format!("asset-{}", path.file_name().unwrap().to_string_lossy());
+        asset_hashes.push(json!({"path":name,"hash":snapshot["hash"]}));
+        snapshots.push(path);
     }
     let revision = state::digest(project);
     let (document, diagnostics) = match format {
         "bcp" => (
             json!({
                 "$schema":"https://svnbjrn.dev/schemas/bcp-shaped.v1.json",
-                "brand":{"name":input["name"].as_str().unwrap_or("project"),"sources":draft["evidence"]},
+                "brand":{"name":input["name"].as_str().unwrap_or("project"),"sources":draft.get("evidence").and_then(Value::as_array).cloned().unwrap_or_default()},
                 "identity":{"principles":guidance(&draft,"principle"),"lineages":entries.iter().filter_map(|e| e.get("lineage")).collect::<Vec<_>>()},
                 "visual":{"tokens":draft["tokens"].as_object().map(|m| m.iter().map(|(k,v)| (k,v.get("$value").unwrap_or(v))).collect::<std::collections::BTreeMap<_,_>>()),"worlds":entries.iter().filter(|e| e["kind"]=="concept").collect::<Vec<_>>(),"compositions":entries.iter().filter(|e| e["kind"]=="composition").collect::<Vec<_>>()},
                 "verbal":{"rules":guidance(&draft,"verbal"),"vernacular":entries.iter().filter_map(|e| e.get("vernacular").map(|v| (e["id"].as_str().unwrap_or(""),v))).collect::<std::collections::BTreeMap<_,_>>()},
@@ -167,9 +169,15 @@ pub fn run(cwd: &Path, project: &Value, input: &Value) -> Result<Value> {
         }
     }
     if ["world-theme", "vernacular", "specimen"].contains(&format) {
-        dependencies["runtime"] = worker::export(cwd, &json!({"format":"identity","for":format}))?;
+        let mut runtime = worker::export(cwd, &json!({"format":"identity","for":format}))?;
+        if let Some(module) = runtime["module"].as_str() {
+            runtime["module"] = json!(Path::new(module)
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned()));
+        }
+        dependencies["runtime"] = runtime;
     }
-    let semantic = json!({"schemaVersion":1,"format":format,"draftId":key,"catalogRevision":revision,"review":catalog::review(project,key),"draft":draft,"evidence":evidence,"assets":asset_hashes,"dependencies":dependencies});
+    let semantic = json!({"schemaVersion":2,"format":format,"draftId":key,"catalogRevision":revision,"review":catalog::review(project,key),"draft":draft,"evidence":evidence,"assets":asset_hashes,"dependencies":dependencies});
     let build_id = state::digest(&json!({"semantic":semantic,"document":document}));
     let base = state::root(cwd).join("exports");
     let destination = base.join(&build_id);
@@ -187,16 +195,44 @@ pub fn run(cwd: &Path, project: &Value, input: &Value) -> Result<Value> {
     let stage = base.join(format!(".{}-{}.tmp", std::process::id(), super::nonce()));
     fs::create_dir_all(&stage).map_err(|e| e.to_string())?;
     let output = (|| {
+        for (asset, source) in asset_hashes.iter().zip(&snapshots) {
+            let bytes = state::bytes(source)?;
+            if state::hash(&bytes) != asset["hash"] {
+                return Err("Corrupt asset snapshot".into());
+            }
+            state::atomic(&stage.join(asset["path"].as_str().unwrap()), &bytes)?;
+        }
         state::atomic(&stage.join("document.json"), &state::canonical(&document))?;
         state::atomic(&stage.join("semantic.json"), &state::canonical(&semantic))?;
-        let validation = if ["world-theme", "vernacular", "specimen"].contains(&format) {
+        let mut validation = if ["world-theme", "vernacular", "specimen"].contains(&format) {
+            let mut render_document = document.clone();
+            if let Some(content) = render_document
+                .get_mut("content")
+                .and_then(Value::as_array_mut)
+            {
+                for item in content {
+                    if item["type"] == "image" {
+                        item["src"] = json!(stage.join(item["src"].as_str().unwrap()));
+                    }
+                }
+            }
             worker::export(
                 cwd,
-                &json!({"format":format,"document":document,"output":stage.join("specimen.pdf")}),
+                &json!({"format":format,"document":render_document,"output":stage.join("specimen.pdf")}),
             )?
         } else {
             json!({"valid":true,"status":"draft","factualReview":"required","visualReview":"required"})
         };
+        for field in ["validator", "renderer"] {
+            if let Some(value) = validation[field]
+                .as_str()
+                .filter(|v| Path::new(v).is_absolute())
+            {
+                validation[field] = json!(Path::new(value)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned()));
+            }
+        }
         if validation["valid"] != true {
             return Err("Worker did not validate export".into());
         }
@@ -234,12 +270,12 @@ pub fn run(cwd: &Path, project: &Value, input: &Value) -> Result<Value> {
         let failed = state::root(cwd)
             .join("failed-exports")
             .join(format!("{build_id}-{}", super::nonce()));
-        state::atomic(
+        let _ = state::atomic(
             &stage.join("failure.json"),
             &state::canonical(&json!({"error":error,"buildId":build_id})),
-        )?;
-        fs::create_dir_all(failed.parent().unwrap()).map_err(|e| e.to_string())?;
-        fs::rename(&stage, failed).map_err(|e| e.to_string())?;
+        );
+        let _ = fs::create_dir_all(failed.parent().unwrap());
+        let _ = fs::rename(&stage, failed);
     }
     output
 }
@@ -399,6 +435,20 @@ pub fn verify_bundle(path: &Path) -> Result<()> {
     for name in ["semantic.json", "document.json", "validation.json", output] {
         if manifest["files"].get(name).is_none() {
             return Err(format!("Missing export file {name}"));
+        }
+    }
+    if semantic["schemaVersion"] == 2 {
+        for asset in semantic["assets"]
+            .as_array()
+            .ok_or("Invalid bundle assets")?
+        {
+            let name = required(asset, "path")?;
+            if manifest["files"]
+                .get(name)
+                .is_none_or(|hash| hash != &asset["hash"])
+            {
+                return Err(format!("Missing or mismatched asset manifest entry {name}"));
+            }
         }
     }
     if state::read(&path.join("validation.json"))?["valid"] != true {

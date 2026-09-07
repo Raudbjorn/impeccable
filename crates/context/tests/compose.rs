@@ -201,12 +201,25 @@ fn failed_package_validation_preserves_existing_export_and_retain_draft() {
         &json!({"draftId":validated["draftId"],"format":"world-theme","entryId":"plate-one"})
     )
     .is_err());
+    let failed = ws.0.join(".impeccable/compose/failed-exports");
+    assert_eq!(fs::read_dir(&failed).unwrap().count(), 1);
+    fs::remove_dir_all(&failed).unwrap();
+    fs::write(&failed, "block diagnostic retention").unwrap();
+    let error = execute(
+        &ws.0,
+        "export",
+        &json!({"draftId":validated["draftId"],"format":"world-theme","entryId":"plate-one"}),
+    )
+    .unwrap_err();
+    assert!(error.contains("nonzero-exit"), "{error}");
+    fs::remove_file(&failed).unwrap();
+    fs::create_dir_all(&failed).unwrap();
     assert_eq!(before, fs::read(bcp["path"].as_str().unwrap()).unwrap());
     assert_eq!(
         fs::read_dir(ws.0.join(".impeccable/compose/failed-exports"))
             .unwrap()
             .count(),
-        1
+        0
     );
 }
 
@@ -375,7 +388,17 @@ fn export_assets_cannot_escape_the_project() {
             .unwrap();
     let snapshot = semantic["assets"][0]["path"].as_str().unwrap();
     fs::write(ws.0.join("image.png"), "changed").unwrap();
-    assert_eq!(fs::read(snapshot).unwrap(), bytes);
+    assert!(!std::path::Path::new(snapshot).is_absolute());
+    let bundle = PathBuf::from(exported["bundle"].as_str().unwrap());
+    assert_eq!(fs::read(bundle.join(snapshot)).unwrap(), bytes);
+    let mut manifest = state::read(&bundle.join("manifest.json")).unwrap();
+    manifest["files"].as_object_mut().unwrap().remove(snapshot);
+    state::atomic(&bundle.join("manifest.json"), &state::canonical(&manifest)).unwrap();
+    assert_eq!(ws.run("verify", json!({"deep":true}))["valid"], false);
+    manifest["files"][snapshot] = semantic["assets"][0]["hash"].clone();
+    state::atomic(&bundle.join("manifest.json"), &state::canonical(&manifest)).unwrap();
+    fs::write(bundle.join(snapshot), "corrupt").unwrap();
+    assert_eq!(ws.run("verify", json!({"deep":true}))["valid"], false);
 }
 
 #[test]
@@ -400,4 +423,169 @@ fn structured_processing_is_native_and_rejects_invalid_geometry() {
         json!({"action":"register","kind":"structured","target":path}),
     );
     assert!(execute(&ws.0, "derive", &json!({"sourceId":registered["sourceId"]})).is_err());
+}
+
+#[test]
+fn retained_invalid_draft_proposal_returns_an_error() {
+    let ws = Workspace::new();
+    fs::write(ws.0.join("source.json"), r#"{"pages":[{"text":"source"}]}"#).unwrap();
+    let source = ws.run(
+        "source",
+        json!({"kind":"structured","target":"source.json"}),
+    );
+    ws.run("derive", json!({"sourceId":source["sourceId"]}));
+    let draft = ws.run("validate", json!({"draft":{}}));
+    assert!(execute(&ws.0,"source",&json!({"op":"propose","sourceId":source["sourceId"],"draftId":draft["draftId"],"page":1,"entryId":"missing","actor":"tester"})).is_err());
+}
+
+#[test]
+fn explicit_project_root_preserves_invalid_exit_status() {
+    let ws = Workspace::new();
+    let (mut io, _) =
+        impeccable_common::Io::captured(r#"{"draft":{}}"#, ws.0.clone(), Default::default());
+    assert_eq!(
+        impeccable_context::compose::run(
+            &["validate".into(), "--project-root".into(), ".".into()],
+            &mut io
+        ),
+        1
+    );
+}
+
+#[test]
+fn caller_cannot_replace_the_measured_target_binding() {
+    let ws = Workspace::new();
+    fs::write(ws.0.join("page.html"), "<p>Measured content</p>").unwrap();
+    fs::write(ws.0.join("other.html"), "Other content").unwrap();
+    let report = ws.run(
+        "assess",
+        json!({"target":"page.html","targetFile":"other.html","observation":"source-text"}),
+    );
+    assert_eq!(
+        report["report"]["artifacts"]["targetFile"]["hash"],
+        state::file_hash(&ws.0.join("page.html")).unwrap()
+    );
+}
+
+#[test]
+fn bcp_without_evidence_has_an_empty_source_list() {
+    let ws = Workspace::new();
+    let draft = ws.run("validate", json!({"draft":draft()}));
+    ws.run("review",json!({"draftId":draft["draftId"],"actor":"tester","authority":"human","verdict":"approved","reason":"reviewed"}));
+    let output = ws.run("export", json!({"draftId":draft["draftId"],"format":"bcp"}));
+    assert_eq!(
+        state::read(std::path::Path::new(output["path"].as_str().unwrap())).unwrap()["brand"]
+            ["sources"],
+        json!([])
+    );
+}
+
+#[test]
+fn candidate_count_controls_the_lexical_pool() {
+    let ws = Workspace::new();
+    let mut data = draft();
+    let mut entries = vec![data["entries"][3].clone()];
+    for tier in ["graphic", "interaction", "atmosphere"] {
+        for n in 0..12 {
+            entries.push(concept(&format!("{tier}-{n}"), tier));
+        }
+    }
+    data["entries"] = json!(entries);
+    let draft = ws.run("validate", json!({"draft":data}));
+    ws.run("review",json!({"draftId":draft["draftId"],"actor":"tester","authority":"human","verdict":"approved","reason":"reviewed"}));
+    for count in [5, 7] {
+        let result = ws.run(
+            "select",
+            json!({"brief":"reading","settings":{"key":"deadbeef","candidateCount":count}}),
+        );
+        assert_eq!(result["approvedCount"], count * 3);
+    }
+}
+
+#[test]
+fn doctor_reports_compose_drift_once() {
+    let ws = Workspace::new();
+    fs::create_dir(ws.0.join(".git")).unwrap();
+    fs::write(ws.0.join("source.json"), "{}").unwrap();
+    ws.run(
+        "source",
+        json!({"kind":"structured","target":"source.json"}),
+    );
+    fs::remove_file(ws.0.join("source.json")).unwrap();
+    let (mut io, captured) = impeccable_common::Io::captured("", ws.0.clone(), Default::default());
+    impeccable_context::doctor::run(&["--json".into()], &mut io);
+    let report: Value = serde_json::from_slice(&captured.stdout.borrow()).unwrap();
+    assert_eq!(
+        report["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|f| f["id"] == "compose-source-missing")
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn critique_from_subdirectory_keeps_the_project_rubric() {
+    let ws = Workspace::new();
+    fs::write(ws.0.join("package.json"), r#"{"workspaces":["apps/*"]}"#).unwrap();
+    fs::create_dir(ws.0.join(".git")).unwrap();
+    fs::create_dir(ws.0.join("src")).unwrap();
+    ws.run("validate", json!({"draft":draft()}));
+    fs::write(ws.0.join("body.md"), "Review").unwrap();
+    let (mut io, _) = impeccable_common::Io::captured("", ws.0.join("src"), Default::default());
+    assert_eq!(
+        impeccable_context::critique_storage::run(
+            &[
+                "write".into(),
+                "test-target".into(),
+                ws.0.join("body.md").to_string_lossy().into_owned()
+            ],
+            &mut io
+        ),
+        0
+    );
+    let files = fs::read_dir(ws.0.join(".impeccable/critique")).unwrap();
+    let text = fs::read_to_string(files.into_iter().next().unwrap().unwrap().path()).unwrap();
+    assert!(text.contains(&impeccable_context::compose::assessment::rubric_revision()));
+}
+
+#[test]
+fn specimen_resolves_images_for_rendering_but_publishes_relative_paths() {
+    let ws = Workspace::new();
+    let image = impeccable_comp::raster::create_image(8, 8, [255, 255, 255, 255]);
+    fs::write(
+        ws.0.join("image.png"),
+        impeccable_comp::png_io::encode_png(&image, &[]).unwrap(),
+    )
+    .unwrap();
+    fs::create_dir(ws.0.join("adapter")).unwrap();
+    fs::write(ws.0.join("adapter/package.json"), r#"{"type":"module"}"#).unwrap();
+    fs::write(ws.0.join("adapter/renderer.mjs"), r#"
+        import {readFileSync} from 'node:fs';
+        import {isAbsolute} from 'node:path';
+        export const validateDocument = () => ({valid:true});
+        export function render(document) {
+            const image = document.content.find(item => item.type === 'image');
+            if (!isAbsolute(image.src) || readFileSync(image.src)[0] !== 137) throw Error('unreadable image');
+            return Buffer.from('%PDF-synthetic-adapter-test');
+        }
+    "#).unwrap();
+    ws.run("setup", json!({"rendererModule":"adapter/renderer.mjs"}));
+    let draft = ws.run("validate", json!({"draft":draft()}));
+    ws.run("review",json!({"draftId":draft["draftId"],"actor":"tester","authority":"human","verdict":"approved","reason":"reviewed"}));
+    let output = ws.run(
+        "export",
+        json!({"draftId":draft["draftId"],"format":"specimen","assets":["image.png"]}),
+    );
+    let bundle = PathBuf::from(output["bundle"].as_str().unwrap());
+    for name in ["document.json", "semantic.json", "validation.json"] {
+        let text = fs::read_to_string(bundle.join(name)).unwrap();
+        assert!(
+            !text.contains(ws.0.to_str().unwrap()),
+            "{name} leaked host paths"
+        );
+    }
+    assert_eq!(ws.run("verify", json!({"deep":true}))["valid"], true);
 }

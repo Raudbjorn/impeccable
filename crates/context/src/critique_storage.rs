@@ -453,7 +453,7 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
                 }
             }
             let dir = get_critique_dir(&cwd, &env);
-            if crate::compose::state::root(std::path::Path::new(&cwd)).join("current.json").exists() {
+            if crate::compose::state::root(std::path::Path::new(&resolve_project_root(&cwd, &TargetOptions::default(), &env))).join("current.json").exists() {
                 meta.insert("rubric_revision".into(), Value::String(crate::compose::assessment::rubric_revision()));
                 for field in ["observation", "observation_context"] {
                     meta.entry(field.to_string()).or_insert(Value::String("unassessed".into()));

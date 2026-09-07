@@ -167,6 +167,13 @@ pub fn export(cwd: &Path, input: &Value) -> Result<Value> {
     )?;
     serde_json::from_slice(&result).map_err(|e| format!("Invalid export response: {e}"))
 }
+fn install_specimen(dir: &Path, argv: &[String], timeout: Duration) -> Result<Vec<u8>> {
+    let result = process(dir, argv, b"", timeout);
+    if result.is_err() {
+        let _ = std::fs::remove_dir_all(dir.join("node_modules"));
+    }
+    result
+}
 pub fn setup(cwd: &Path, input: &Value) -> Result<Value> {
     let _lock = state::Lock::acquire(cwd)?;
     let dir = tools(cwd)?;
@@ -203,7 +210,7 @@ pub fn setup(cwd: &Path, input: &Value) -> Result<Value> {
                             "--check".into(),
                         ],
                         b"",
-                        Duration::from_secs(180),
+                        Duration::from_secs(900),
                     )?;
                 }
                 Some("specimen") => {
@@ -214,11 +221,10 @@ pub fn setup(cwd: &Path, input: &Value) -> Result<Value> {
                             &json!({"name":"impose-workers","private":true,"type":"module","dependencies":{"pretext-pdf":"2.2.6","@napi-rs/canvas":"0.1.100"},"overrides":{"@cantoo/pdf-lib":"2.6.5","pako":"1.0.11"}}),
                         ),
                     )?;
-                    process(
+                    install_specimen(
                         &dir,
                         &["npm".into(), "install".into(), "--ignore-scripts".into()],
-                        b"",
-                        Duration::from_secs(180),
+                        Duration::from_secs(900),
                     )?;
                 }
                 _ => return Err("Install lanes are extract and specimen".into()),
@@ -234,6 +240,20 @@ pub fn setup(cwd: &Path, input: &Value) -> Result<Value> {
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    #[test]
+    fn failed_specimen_install_removes_partial_modules() {
+        let dir = std::env::temp_dir().join(format!("impose-install-{}", super::super::nonce()));
+        std::fs::create_dir_all(dir.join("node_modules")).unwrap();
+        std::fs::write(dir.join("node_modules/partial"), "partial").unwrap();
+        let result = install_specimen(
+            &dir,
+            &["sh".into(), "-c".into(), "exit 3".into()],
+            Duration::from_secs(1),
+        );
+        assert!(result.unwrap_err().contains("nonzero-exit"));
+        assert!(!dir.join("node_modules").exists());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
     #[test]
     fn worker_drains_both_pipes_and_times_out_process_groups() {
         let cwd = std::env::temp_dir();

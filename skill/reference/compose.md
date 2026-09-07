@@ -80,6 +80,8 @@ Use the existing seed prompt with a project catalog:
 {{scripts_path}}/impeccable concept-seed --project-catalog . --brief-file brief.txt --from deadbeef --scope direction --mode read
 ```
 
+`--project-catalog <path>` names the project directory containing `.impeccable/compose`. `--approval-policy human|human-and-machine` defaults to `human`; `--selection-strategy seeded|ranked-1` defaults to `seeded`.
+
 `--approval-policy human-and-machine` explicitly includes machine-reviewed candidates. `--selection-strategy ranked-1` enables the experimental rank-weighted composition selector; default selection uses the existing seeded algorithm after offline lexical shortlisting. Lexical scores are not quality probabilities. Missing structural coverage cannot be repaired by ranking.
 
 Continue with the same `--project-catalog`, `--session`, and `--reroll`; use `--replay` for a saved round or `--chosen <id> --kind pick` to record its choice. Session settings are fixed. Existing configured retrieval commands keep their protocol-1 contract.

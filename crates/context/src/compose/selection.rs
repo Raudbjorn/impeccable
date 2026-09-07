@@ -211,7 +211,13 @@ pub fn handle(cwd: &Path, input: &Value) -> Result<Value> {
             if pool.iter().any(|c| c["review"]["breadth"] != "niche") {
                 pool.retain(|c| c["review"]["breadth"] != "niche");
             }
-            let (pool, signal) = shortlist(pool, brief, 10, 2, None);
+            let (pool, signal) = shortlist(
+                pool,
+                brief,
+                settings["candidateCount"].as_u64().unwrap() as usize,
+                2,
+                None,
+            );
             candidates.extend(pool);
             signals.push(signal);
         }

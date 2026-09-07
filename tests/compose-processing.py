@@ -3,6 +3,7 @@
 # dependencies = ["pymupdf==1.28.2", "pillow==12.3.0"]
 # ///
 """Synthetic processing regressions; no donor corpus or provider service."""
+import hashlib
 import importlib.util
 import json
 import tempfile
@@ -19,6 +20,15 @@ spec.loader.exec_module(worker)
 
 
 class Processing(unittest.TestCase):
+    def test_image_hash_streams_without_read_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "sample.png"
+            data = b"image bytes" * 100000
+            path.write_bytes(data)
+            from unittest.mock import patch
+            with patch.object(Path, "read_bytes", side_effect=AssertionError("unbounded read")):
+                self.assertEqual(worker.file_hash(path), hashlib.sha256(data).hexdigest())
+
     def test_accent_abstention_and_supported_color(self):
         grey = worker.palette([(1, Image.new("RGB", (40, 40), "#dddddd"))])
         self.assertTrue(grey["accentSeed"]["abstained"])

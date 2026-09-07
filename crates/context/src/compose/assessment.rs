@@ -263,6 +263,9 @@ pub fn assess(cwd: &Path, input: &Value) -> Result<Value> {
             json!({"path":cwd.join(target),"hash":state::file_hash(&cwd.join(target))?});
     }
     for field in ["spec", "comp", "build", "targetFile"] {
+        if field == "targetFile" && hashes.get(field).is_some() {
+            continue;
+        }
         if let Some(path) = input[field].as_str() {
             hashes[field] =
                 json!({"path":cwd.join(path),"hash":state::file_hash(&cwd.join(path))?});

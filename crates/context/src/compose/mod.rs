@@ -267,7 +267,7 @@ fn source(cwd: &Path, project: &mut Value, input: &Value) -> Result<Value> {
         let draft = catalog::load_draft(cwd, required(input, "draftId")?)?;
         if !draft["entries"]
             .as_array()
-            .unwrap()
+            .ok_or("Invalid draft entries; validate this draft first")?
             .iter()
             .any(|e| e["id"] == input["entryId"])
         {
@@ -331,24 +331,17 @@ pub fn run(args: &[String], io: &mut impeccable_common::Io) -> i32 {
         io.out("impeccable compose <setup|source|derive|validate|review|adopt|select|export|assess|verify> [--input file|-]\nCommands accept one JSON object on stdin or --input. See reference/compose.md.\n");
         return 0;
     }
-    if args.len() == 3 && args[1] == "--project-root" {
-        let root = io.cwd.join(&args[2]);
-        let text = io.stdin();
-        let input = serde_json::from_str(text).map_err(|e| e.to_string());
-        return match input.and_then(|input| execute(&root, &args[0], &input)) {
-            Ok(value) => {
-                io.out(&format!("{value}\n"));
-                0
-            }
-            Err(error) => {
-                io.err(&format!("{error}\n"));
-                1
-            }
-        };
-    }
+    let root = if args.len() == 3 && args[1] == "--project-root" {
+        io.cwd.join(&args[2])
+    } else {
+        io.cwd.clone()
+    };
     let input = if args.len() == 3 && args[1] == "--input" && args[2] != "-" {
         state::read(&io.cwd.join(&args[2]))
-    } else if args.len() == 1 || (args.len() == 3 && args[1] == "--input" && args[2] == "-") {
+    } else if args.len() == 1
+        || (args.len() == 3
+            && (args[1] == "--project-root" || (args[1] == "--input" && args[2] == "-")))
+    {
         let text = io.stdin();
         if text.trim().is_empty() {
             Ok(json!({}))
@@ -358,7 +351,7 @@ pub fn run(args: &[String], io: &mut impeccable_common::Io) -> i32 {
     } else {
         Err("Use --input file or JSON stdin".into())
     };
-    match input.and_then(|v| execute(&io.cwd, &args[0], &v)) {
+    match input.and_then(|v| execute(&root, &args[0], &v)) {
         Ok(value) => {
             let failed = value["valid"] == false;
             io.out(&format!(

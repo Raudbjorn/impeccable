@@ -22,6 +22,11 @@ VERSION = "compose-extract/1"
 PIXEL_CAP = 4_000_000
 
 
+def file_hash(path):
+    with path.open("rb") as file:
+        return hashlib.file_digest(file, "sha256").hexdigest()
+
+
 def palette(images):
     from PIL import Image
 
@@ -113,7 +118,7 @@ def retain_render(request, png):
     digest = hashlib.sha256(png).hexdigest()
     path = directory / f"{digest}.png"
     if path.exists():
-        if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+        if file_hash(path) != digest:
             raise ValueError("Corrupt retained source render")
     else:
         with tempfile.NamedTemporaryFile(dir=directory, delete=False) as file:
@@ -187,7 +192,7 @@ def extract(request):
             image.thumbnail((160, 160))
             images.append((page, image))
             pages.append({"page": page, "text": "", "spans": [], "geometry": geometry, **rendered,
-                          "file": str(path), "fileHash": hashlib.sha256(path.read_bytes()).hexdigest(),
+                          "file": str(path), "fileHash": file_hash(path),
                           "observation": "raster"})
     elif kind == "pdf":
         with pymupdf.open(source["path"]) as pdf:

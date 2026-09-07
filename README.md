@@ -39,6 +39,7 @@ All commands are accessed through `/impeccable`:
 
 | Command | What it does |
 |---------|--------------|
+| `/impeccable compose` | Design from reviewed source material |
 | `/impeccable craft` | Full shape-then-build flow with visual iteration |
 | `/impeccable init` | One-time setup: gather durable product context, write PRODUCT.md, configure live mode when applicable, recommend next steps |
 | `/impeccable document` | Generate root DESIGN.md from existing project code |
