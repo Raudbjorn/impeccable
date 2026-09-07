@@ -339,6 +339,22 @@ process.stdin.on('end', () => {
     );
     assert.equal(partial.content.length, 1);
     assert.match(partial.content[0].text, /finding for q\.css/);
+
+    // An entry whose required `path` is present but empty is not a target.
+    // hasUriScheme("") is false, so an unfiltered "" reaches the launcher as
+    // tool_input.file_path: "" and costs a child process per empty entry.
+    const withEmpty = await handlers.tool_result(
+      {
+        toolName: 'edit',
+        input: {},
+        details: { perFileResults: [{ path: 'q.css' }, { path: '' }] },
+        content: [],
+      },
+      { cwd: dir },
+    );
+    assert.equal(withEmpty.content.length, 1);
+    assert.match(withEmpty.content[0].text, /finding for q\.css/);
+    assert.doesNotMatch(withEmpty.content[0].text, /finding for \n|finding for $/);
   });
 
   it('asks to continue the session when the Stop pass has findings', async () => {

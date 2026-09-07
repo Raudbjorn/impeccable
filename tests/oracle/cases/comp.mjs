@@ -100,7 +100,11 @@ const cases = [
   },
   {
     id: 'genimg-plate-score-only-min-rejects', verb: 'generate-image', workspace: WS,
-    env: env(),
+    // Pin the plate itself, not just the exit code: a --min rejection is a
+    // verdict on a plate that stays on disk, and without a files selector the
+    // golden records {} and could not tell that apart from a run that deleted
+    // or never wrote it.
+    files: ['assets/plates/art.png*'], env: env(),
     steps: [
       { args: ['--plate', 'art', '--spec', 'spec.json'], env: env({ IMPECCABLE_IMAGE_GEN_FAKE: '1' }) },
       { args: ['--plate', 'art', '--spec', 'spec.json', '--score-only', '--min', '1.1'] },

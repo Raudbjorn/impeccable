@@ -180,7 +180,12 @@ export default function impeccableHook(pi) {
       // producing any).
       const fromDetails = Array.isArray(details.perFileResults)
         ? details.perFileResults
-            .map((entry) => entry && typeof entry.path === "string" ? entry.path : null)
+            // An empty `path` is a present-but-useless entry, and it has to
+            // be dropped here: hasUriScheme("") is false, so "" survives the
+            // scheme filter downstream and spawns the launcher against an
+            // empty target. The `details.path` branch below already required
+            // a non-empty string; these two now agree.
+            .map((entry) => entry && typeof entry.path === "string" && entry.path.length > 0 ? entry.path : null)
             .filter((entry) => entry !== null)
         : typeof details.path === "string" && details.path.length > 0
           ? [details.path]
