@@ -41,11 +41,9 @@ Choose the mode from the requested surface, not the product, and persist it only
 
 ## Commands
 
-Source-backed design uses [reference/compose.md](reference/compose.md): process explicitly supplied PDFs, URLs, or images into reviewed project candidates and evidence, without importing an existing corpus. Keep observations, interpretations, approvals, and adopted requirements distinct.
-
 | Command | Category | Description | Reference |
 |---|---|---|---|
-| `compose [command]` | Build | Distill source evidence into reviewed project designs and exports | [reference/compose.md](reference/compose.md) |
+| `compose` | Build | Design from sources | [compose.md](reference/compose.md) |
 | `craft [feature]` | Build | Deprecated alias for an ordinary new-work request | [reference/craft.md](reference/craft.md) |
 | `shape [feature]` | Build | Plan UX/UI before writing code | [reference/shape.md](reference/shape.md) |
 | `init` | Build | Capture durable product context in PRODUCT.md | [reference/init.md](reference/init.md) |
