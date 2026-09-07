@@ -50,6 +50,7 @@ export const SUITES = {
           'tests/root-commands-sync.test.js',
           'tests/validate-plugin-versions.test.js',
           'tests/validate-plugin-manifest.test.js',
+          'tests/check-generated.test.js',
           'tests/plugin-paths.test.js',
         ],
       },
