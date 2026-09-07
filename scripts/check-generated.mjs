@@ -26,14 +26,31 @@ import { PROVIDERS } from './lib/transformers/providers.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-// Every root the build writes generated output into: each provider's
-// configDir, plus the shared Claude Code marketplace plugin subtree.
-const GENERATED_PREFIXES = [...new Set(Object.values(PROVIDERS).map((p) => p.configDir)), 'plugin'].map(
-  (dir) => `${dir}/`,
-);
+// A provider's configDir is its ROOT, not its generated-output root: e.g.
+// `.github/` also holds hand-maintained `workflows/` and `ISSUE_TEMPLATE/`,
+// and `.codex/skills` is never synced at all (build.js's syncRootOutputs
+// explicitly excludes '.codex' from the skills/commands/agents loops --
+// only its hooks.json is generated, via the separate, unfiltered
+// syncRootHookManifests pass). Mirror the actual synced subpaths instead of
+// sweeping every file under each provider's directory.
+const SYNCED_PROVIDERS = Object.values(PROVIDERS).filter((p) => p.configDir !== '.codex');
+
+const GENERATED_PREFIXES = [
+  ...SYNCED_PROVIDERS.map((p) => `${p.configDir}/skills/`),
+  ...SYNCED_PROVIDERS.map((p) => `${p.configDir}/commands/`),
+  ...Object.values(PROVIDERS).filter((p) => p.agentFormat).map((p) => `${p.configDir}/agents/`),
+  'plugin/',
+];
+
+// Hook manifests are single named files (syncRootHookManifests), not
+// subtrees, and run over every provider regardless of the .codex skills
+// exclusion above -- .codex/hooks.json is real generated output.
+const GENERATED_FILES = Object.values(PROVIDERS)
+  .filter((p) => p.emitHooks)
+  .map((p) => `${p.configDir}/${p.hooksManifestRel || 'hooks/hooks.json'}`);
 
 function isGeneratedPath(file) {
-  return GENERATED_PREFIXES.some((prefix) => file.startsWith(prefix));
+  return GENERATED_PREFIXES.some((prefix) => file.startsWith(prefix)) || GENERATED_FILES.includes(file);
 }
 
 function git(args) {
