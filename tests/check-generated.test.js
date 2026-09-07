@@ -23,6 +23,7 @@ import {
   GENERATED_FILES,
   GENERATED_PREFIXES,
   GENERATED_SKILL,
+  DEPRECATED_LOCAL_SKILLS,
   isGeneratedPath,
   parsePorcelainZ,
 } from '../scripts/lib/generated-paths.mjs';
@@ -59,6 +60,23 @@ describe('isGeneratedPath', () => {
     // Even under OpenCode, only that exact file: it is an exact match, not a
     // prefix, so a hand-written sibling command survives.
     expect(isGeneratedPath('.opencode/commands/my-own-command.md')).toBe(false);
+  });
+
+  test('claims the deprecated skill stubs the build deletes', () => {
+    // build.js removes `<configDir>/skills/<name>` for each of these on every
+    // release build. A gate that did not claim them would filter the deletion
+    // out of its staleness diff and report the tree in sync while it was
+    // dirty, which is the one thing this script exists to prevent.
+    expect(DEPRECATED_LOCAL_SKILLS.length).toBeGreaterThan(0);
+    const synced = Object.values(PROVIDERS).filter((p) => p.configDir !== '.codex');
+    for (const { configDir } of synced) {
+      for (const name of DEPRECATED_LOCAL_SKILLS) {
+        expect(isGeneratedPath(`${configDir}/skills/${name}/SKILL.md`)).toBe(true);
+      }
+    }
+    // Still not a blanket claim on the directory: a name the build never
+    // deletes stays the owner's.
+    expect(isGeneratedPath('.claude/skills/some-other-skill/SKILL.md')).toBe(false);
   });
 
   test('claims a provider agents subtree whole, because that sync removes it first', () => {

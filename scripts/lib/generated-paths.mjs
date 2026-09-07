@@ -36,8 +36,24 @@ const SYNCED_PROVIDERS = Object.values(PROVIDERS).filter((p) => p.configDir !== 
 // them from drifting apart.
 export const GENERATED_SKILL = 'impeccable';
 
+// Skill directories the build DELETES from every synced harness dir. They
+// ship in dist/ so the cleanup script can redirect users, but they must not
+// sit in the repo's own provider dirs. `build:release` removes them
+// unconditionally, which makes them build-owned territory: a gate that did
+// not claim them would filter out the deletion and report the tree in sync
+// while it was dirty. Exported so build.js and this classifier cannot drift.
+export const DEPRECATED_LOCAL_SKILLS = [
+  'frontend-design', 'teach-impeccable',
+  'arrange', 'normalize', 'onboard', 'extract',
+  // v3.0 consolidation: standalone skills -> /impeccable sub-commands
+  'adapt', 'animate', 'audit', 'bolder', 'clarify', 'colorize',
+  'critique', 'delight', 'distill', 'harden', 'layout', 'optimize',
+  'overdrive', 'polish', 'quieter', 'shape', 'typeset',
+];
+
 export const GENERATED_PREFIXES = [
   ...SYNCED_PROVIDERS.map((p) => `${p.configDir}/skills/${GENERATED_SKILL}/`),
+  ...SYNCED_PROVIDERS.flatMap((p) => DEPRECATED_LOCAL_SKILLS.map((name) => `${p.configDir}/skills/${name}/`)),
   // Agents are the exception: syncRootOutputs rm -rf's the whole agents
   // destination before copying, so the build really does own that subtree.
   ...Object.values(PROVIDERS).filter((p) => p.agentFormat).map((p) => `${p.configDir}/agents/`),
