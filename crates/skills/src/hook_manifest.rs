@@ -423,7 +423,13 @@ fn json_parse_message(e: &serde_json::Error) -> String {
 
 /// JS: copyProviderHooks(bundleDir, root, providers, {force, skillRoot}).
 /// Returns the providers whose manifest was written (deduplicated, in order).
-pub fn copy_provider_hooks(sys: &crate::providers::Sys, bundle_dir: &str, root: &str, providers: &[&'static str], force: bool, skill_root: Option<&str>) -> Result<Vec<&'static str>, String> {
+///
+/// `scope` is the scope the SKILL was installed at, which is what decides
+/// where its launcher sits: the skills dir is `<skill_root>/<provider>/skills`
+/// for a project install and `sys.user_provider_skills_dir` for a user one,
+/// and those differ for any provider carrying a home-dir override. Passing
+/// `None` reads as project scope.
+pub fn copy_provider_hooks(sys: &crate::providers::Sys, bundle_dir: &str, root: &str, providers: &[&'static str], force: bool, skill_root: Option<&str>, scope: Option<crate::providers::Scope>) -> Result<Vec<&'static str>, String> {
     let skill_root = skill_root.unwrap_or(root);
     let mut written: Vec<&'static str> = Vec::new();
     for provider in providers {
@@ -445,14 +451,22 @@ pub fn copy_provider_hooks(sys: &crate::providers::Sys, bundle_dir: &str, root: 
                     util::write_bytes(&format!("{}.bak", artifact.dest), &util::read_bytes(&artifact.dest)?)?;
                 }
                 let mut module = util::read_text(&artifact.src)?;
-                if skill_root != root {
-                    // Global installs place the skill under the provider's
-                    // home-dir override when it has one (oh-my-pi reads user
-                    // skills from ~/.omp/agent/skills, not ~/.omp/skills), so
-                    // the rewritten launcher path must go through the same
-                    // resolver `sys.user_provider_skills_dir` uses, not a
-                    // hardcoded `<provider>/skills` join.
-                    let skills_dir = sys.user_provider_skills_dir(skill_root, provider);
+                // The bundled module resolves its launcher relative to itself:
+                // `<root>/<provider>/hooks/post/../../skills/impeccable/...`.
+                // That is right exactly when the skill really sits at
+                // `<root>/<provider>/skills`, so compare against that rather
+                // than against `skill_root != root`. A global install has
+                // skill_root == root == home and still needs the rewrite,
+                // because oh-my-pi reads user skills from ~/.omp/agent/skills;
+                // `is_home_dir` would not do either, since a project install
+                // that happens to live in the home directory keeps its skills
+                // at `~/.omp/skills` and must stay relative.
+                let skills_dir = if scope == Some(crate::providers::Scope::User) {
+                    sys.user_provider_skills_dir(skill_root, provider)
+                } else {
+                    jsp::join(&[skill_root, provider, "skills"])
+                };
+                if skills_dir != jsp::join(&[root, provider, "skills"]) {
                     let launcher = jsp::join(&[&skills_dir, "impeccable/scripts/impeccable"]);
                     let declaration = format!("const HOOK_SCRIPT = {} + (process.platform === \"win32\" ? \".cmd\" : \"\");", json_string(&launcher));
                     module = module.lines().map(|line| {

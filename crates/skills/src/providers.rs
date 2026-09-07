@@ -795,7 +795,7 @@ mod tests {
         std::fs::create_dir_all(bundle.join(".omp/hooks/post")).unwrap();
         std::fs::write(bundle.join(".omp/hooks/post/impeccable.js"), impeccable_context::provider::OMP_HOOK_MODULE).unwrap();
         let written = crate::hook_manifest::copy_provider_hooks(
-            &sys, &bundle.to_string_lossy(), &sys.cwd, &[".omp"], false, Some(&sys.home)
+            &sys, &bundle.to_string_lossy(), &sys.cwd, &[".omp"], false, Some(&sys.home), Some(Scope::User)
         ).unwrap();
         assert_eq!(written, vec![".omp"]);
         assert!(crate::hook_manifest::hook_installed_for_provider(&sys.cwd, ".omp"));
@@ -803,6 +803,59 @@ mod tests {
         // Global installs place the skill under the home-dir override
         // (~/.omp/agent/skills), never the bare ~/.omp/skills.
         assert!(module.contains(&crate::hook_manifest::json_string(&jsp::join(&[&sys.home, ".omp/agent/skills/impeccable/scripts/impeccable"]))));
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn omp_hook_launcher_follows_the_scope_the_skill_was_installed_at() {
+        // A global update writes hooks into the home dir itself, so
+        // skill_root == root == home and the old `skill_root != root` guard
+        // never fired: the module kept its relative launcher and resolved to
+        // ~/.omp/skills, which a user-scope install never populates. Scope is
+        // what decides where the skill sits, so scope is what gates this.
+        let root = std::env::temp_dir().join(format!(
+            "impeccable-omp-hook-scope-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        let home = root.join("home");
+        let sys = Sys {
+            env: Env::new(),
+            cwd: root.join("project").to_string_lossy().into_owned(),
+            home: home.to_string_lossy().into_owned(),
+        };
+        let bundle = root.join("bundle");
+        std::fs::create_dir_all(bundle.join(".omp/hooks/post")).unwrap();
+        std::fs::write(bundle.join(".omp/hooks/post/impeccable.js"), impeccable_context::provider::OMP_HOOK_MODULE).unwrap();
+        let bundle_dir = bundle.to_string_lossy().into_owned();
+
+        // Global update: root, skill_root and home are the same directory.
+        crate::hook_manifest::copy_provider_hooks(
+            &sys, &bundle_dir, &sys.home, &[".omp"], false, None, Some(Scope::User)
+        ).unwrap();
+        let module = std::fs::read_to_string(home.join(".omp/hooks/post/impeccable.js")).unwrap();
+        assert!(
+            module.contains(&crate::hook_manifest::json_string(&jsp::join(&[&sys.home, ".omp/agent/skills/impeccable/scripts/impeccable"]))),
+            "a user-scope hook must point at the home-dir override, not the relative default"
+        );
+
+        // Project scope in that same directory keeps the relative form: the
+        // skills really are at <root>/.omp/skills there, so absolutizing it
+        // to the agent/ override would break a working install. This is the
+        // case `sys.is_home_dir(root)` would have gotten wrong.
+        let project_in_home = root.join("home2");
+        let sys2 = Sys {
+            env: Env::new(),
+            cwd: project_in_home.to_string_lossy().into_owned(),
+            home: project_in_home.to_string_lossy().into_owned(),
+        };
+        crate::hook_manifest::copy_provider_hooks(
+            &sys2, &bundle_dir, &sys2.cwd, &[".omp"], false, None, Some(Scope::Project)
+        ).unwrap();
+        let module = std::fs::read_to_string(project_in_home.join(".omp/hooks/post/impeccable.js")).unwrap();
+        assert!(!module.contains("agent/skills"), "a project-scope hook must stay relative: {module}");
+        assert_eq!(module, impeccable_context::provider::OMP_HOOK_MODULE, "the project-scope module is the bundled one, unmodified");
 
         std::fs::remove_dir_all(root).unwrap();
     }
