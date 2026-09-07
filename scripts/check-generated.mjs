@@ -35,9 +35,26 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // sweeping every file under each provider's directory.
 const SYNCED_PROVIDERS = Object.values(PROVIDERS).filter((p) => p.configDir !== '.codex');
 
+// The skills and commands syncs copy PER ENTRY and never remove the
+// destination directory, precisely so unrelated repo-local skills and command
+// files survive a build (build.js's syncRootOutputs, and the header of
+// scripts/lib/root-commands-sync.mjs). So the build owns only the entries it
+// writes, not the directories they sit in: sweeping `<configDir>/skills/`
+// wholesale made an edit to someone's own `.github/skills/<other>/...` or
+// `.opencode/commands/<local>.md` block this script, over files the release
+// build never touches.
+//
+// Both names come from the same place -- the skill list the build reads from
+// `skill/`, written out as `skills/<skill.name>/` and, for OpenCode, the
+// bridge file `commands/<skill.name>.md` (factory.js:410). This repo ships
+// exactly one skill (see CLAUDE.md), so one constant covers both and keeps
+// them from drifting apart.
+const GENERATED_SKILL = 'impeccable';
+
 const GENERATED_PREFIXES = [
-  ...SYNCED_PROVIDERS.map((p) => `${p.configDir}/skills/`),
-  ...SYNCED_PROVIDERS.map((p) => `${p.configDir}/commands/`),
+  ...SYNCED_PROVIDERS.map((p) => `${p.configDir}/skills/${GENERATED_SKILL}/`),
+  // Agents are the exception: syncRootOutputs rm -rf's the whole agents
+  // destination before copying, so the build really does own that subtree.
   ...Object.values(PROVIDERS).filter((p) => p.agentFormat).map((p) => `${p.configDir}/agents/`),
   'plugin/',
 ];
@@ -45,9 +62,12 @@ const GENERATED_PREFIXES = [
 // Hook manifests are single named files (syncRootHookManifests), not
 // subtrees, and run over every provider regardless of the .codex skills
 // exclusion above -- .codex/hooks.json is real generated output.
-const GENERATED_FILES = Object.values(PROVIDERS)
-  .filter((p) => p.emitHooks)
-  .map((p) => `${p.configDir}/${p.hooksManifestRel || 'hooks/hooks.json'}`);
+const GENERATED_FILES = [
+  ...Object.values(PROVIDERS)
+    .filter((p) => p.emitHooks)
+    .map((p) => `${p.configDir}/${p.hooksManifestRel || 'hooks/hooks.json'}`),
+  ...SYNCED_PROVIDERS.map((p) => `${p.configDir}/commands/${GENERATED_SKILL}.md`),
+];
 
 function isGeneratedPath(file) {
   return GENERATED_PREFIXES.some((prefix) => file.startsWith(prefix)) || GENERATED_FILES.includes(file);

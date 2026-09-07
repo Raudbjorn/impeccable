@@ -508,7 +508,7 @@ fn run_plate(args: &[String], io: &mut Io, cwd: &str, env: &Env, plate_id: &str)
     let abs = |p: &str| jsp::resolve(cwd, &[p]);
     let spec_path = arg(args, "spec").unwrap_or_else(|| comp_spec::SPEC_PATH.to_string());
     let Some(spec) = comp_spec::load_spec(std::path::Path::new(&abs(&spec_path))) else {
-        io.err(&format!("generate-image: no spec at {spec_path}; run comp-spec.mjs first\n"));
+        io.err(&format!("generate-image: no spec at {spec_path}; run impeccable comp-spec first\n"));
         return 1;
     };
     let regions = build_phase::spec_regions(&spec);
@@ -639,7 +639,14 @@ fn run_plate(args: &[String], io: &mut Io, cwd: &str, env: &Env, plate_id: &str)
         let text = vec![("impeccable:prompt".to_string(), prompt.clone()), ("impeccable:fake".to_string(), "1".to_string())];
         match png_io::encode_png(&up, &text) {
             Ok(bytes) => {
-                let _ = std::fs::write(abs(&out), bytes);
+                // Same handling as the real path's write below: a discarded
+                // error here let fake mode print PLATE: and exit 0 with no
+                // plate on disk (--out naming a directory, an unwritable
+                // path), so fake-mode validation reported a false success.
+                if let Err(e) = std::fs::write(abs(&out), bytes) {
+                    io.err(&format!("Error: {}\n", node_read_error(&out, &e)));
+                    return 1;
+                }
             }
             Err(e) => {
                 io.err(&format!("generate-image: {e}\n"));
@@ -655,7 +662,11 @@ fn run_plate(args: &[String], io: &mut Io, cwd: &str, env: &Env, plate_id: &str)
         m.insert("refs".into(), Value::Array(vec![Value::String(ref_path.clone())]));
         let _ = std::fs::write(abs(&format!("{out}.json")), json_pretty(&Value::Object(m)));
         io.out(&format!("PLATE: {out} ({}x{}, fake 2x crop of region {plate_id}, $0.00, no API call)\n", up.width, up.height));
-        return 0;
+        // Fall through to the shared gate, as the real path does and as the
+        // CLI contract already specified. Returning here emitted no
+        // PLATE-SCORE and ignored --min, so fake mode could not stand in for
+        // a real one in validation.
+        return report_plate_score(io, &spec, &comp, &region, &out, &ref_path, arg(args, "min"));
     }
 
     let Some(key) = env.get("OPENAI_API_KEY").filter(|k| !k.is_empty()).cloned() else {
@@ -845,6 +856,10 @@ mod plate_tests {
         let (code, out, err) = run_capture(&cwd, fake_env(), &["--plate", "hero-art"]);
         assert_eq!(code, 0, "stderr: {err}");
         assert!(out.starts_with("PLATE: "), "unexpected stdout: {out}");
+        // The name of this test is the contract: fake mode runs the same
+        // plate gate the real path does, so it scores and honors --min
+        // rather than reporting a bare PLATE: and exiting.
+        assert!(out.contains("PLATE-SCORE hero-art"), "unexpected stdout: {out}");
         assert!(std::path::Path::new(&cwd).join("assets/plates/hero-art.png").exists());
         assert!(std::path::Path::new(&cwd).join(".impeccable/build/crops/hero-art.png").exists());
     }

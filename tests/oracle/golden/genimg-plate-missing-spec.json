@@ -1,6 +1,6 @@
 {
   "stdout": "",
-  "stderr": "generate-image: no spec at nope.json; run comp-spec.mjs first\n",
+  "stderr": "generate-image: no spec at nope.json; run impeccable comp-spec first\n",
   "exit": 1,
   "signal": null,
   "files": {}
