@@ -78,6 +78,51 @@ const cases = [
     steps: [{ args: ['start', '--comp', 'comp.png'] }, { args: ['status'] }],
   },
   { id: 'build-phase-usage', verb: 'build-phase', workspace: WS, args: [], env: env() },
+
+  // generate-image --plate: one raster region (spec.json's "art", kind
+  // plate) end to end against comp-basic's pre-measured spec. Fake mode only
+  // (real mode needs an API key and is not byte-stable); score-only needs no
+  // key at all, so its step deliberately runs with the base (keyless,
+  // non-fake) env to pin that.
+  {
+    id: 'genimg-plate-fake', verb: 'generate-image', workspace: WS,
+    args: ['--plate', 'art', '--spec', 'spec.json'],
+    env: env({ IMPECCABLE_IMAGE_GEN_FAKE: '1' }),
+    files: ['assets/plates/art.png*', 'crops/art.png*'],
+  },
+  {
+    id: 'genimg-plate-score-only', verb: 'generate-image', workspace: WS,
+    files: ['assets/plates/art.png*'], env: env(),
+    steps: [
+      { args: ['--plate', 'art', '--spec', 'spec.json'], env: env({ IMPECCABLE_IMAGE_GEN_FAKE: '1' }) },
+      { args: ['--plate', 'art', '--spec', 'spec.json', '--score-only'] },
+    ],
+  },
+  {
+    id: 'genimg-plate-score-only-min-rejects', verb: 'generate-image', workspace: WS,
+    env: env(),
+    steps: [
+      { args: ['--plate', 'art', '--spec', 'spec.json'], env: env({ IMPECCABLE_IMAGE_GEN_FAKE: '1' }) },
+      { args: ['--plate', 'art', '--spec', 'spec.json', '--score-only', '--min', '1.1'] },
+    ],
+  },
+  { id: 'genimg-plate-score-only-missing-plate', verb: 'generate-image', workspace: WS, args: ['--plate', 'art', '--spec', 'spec.json', '--score-only'], env: env() },
+  { id: 'genimg-plate-unknown-region', verb: 'generate-image', workspace: WS, args: ['--plate', 'nope', '--spec', 'spec.json'], env: env() },
+  { id: 'genimg-plate-non-raster-region', verb: 'generate-image', workspace: WS, args: ['--plate', 'top', '--spec', 'spec.json'], env: env() },
+  { id: 'genimg-plate-missing-spec', verb: 'generate-image', workspace: WS, args: ['--plate', 'art', '--spec', 'nope.json'], env: env() },
+  {
+    id: 'genimg-plate-empty-plate-path', verb: 'generate-image', workspace: WS,
+    setup: (ws) => write(ws, 'bad-plate.json', JSON.stringify({
+      allowUncovered: true,
+      regions: [{ id: 'art', kind: 'plate', grid: 'E2:J4', note: 'an exploded illustration drawing', plate: '' }],
+    })),
+    args: ['--comp', 'comp.png', '--regions', 'bad-plate.json'],
+    steps: [
+      { verb: 'comp-spec', args: ['--comp', 'comp.png', '--regions', 'bad-plate.json', '--spec', 'bad-spec.json'] },
+      { args: ['--plate', 'art', '--spec', 'bad-spec.json'], env: env({ IMPECCABLE_IMAGE_GEN_FAKE: '1' }) },
+    ],
+    env: env(),
+  },
 ];
 
 export default cases;

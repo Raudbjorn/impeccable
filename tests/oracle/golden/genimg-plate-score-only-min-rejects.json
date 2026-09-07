@@ -1,0 +1,17 @@
+{
+  "steps": [
+    {
+      "stdout": "PLATE: assets/plates/art.png (922x308, fake 2x crop of region art, $0.00, no API call)\n",
+      "stderr": "",
+      "exit": 0,
+      "signal": null
+    },
+    {
+      "stdout": "PLATE-SCORE art 78% against the comp region (structure 99%, color 78%, detail 65%)\nPLATE-REJECTED below --min 110%\n",
+      "stderr": "",
+      "exit": 3,
+      "signal": null
+    }
+  ],
+  "files": {}
+}

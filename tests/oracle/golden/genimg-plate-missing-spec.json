@@ -1,0 +1,7 @@
+{
+  "stdout": "",
+  "stderr": "generate-image: no spec at nope.json; run comp-spec.mjs first\n",
+  "exit": 1,
+  "signal": null,
+  "files": {}
+}
