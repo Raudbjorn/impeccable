@@ -247,6 +247,58 @@ process.stdin.on('end', () => {
     fs.rmSync(deadDir, { recursive: true, force: true });
   });
 
+  it('holds the worker slot until a timed-out scan has actually exited', async () => {
+    // child.kill() sends SIGTERM and returns; it does not wait. Reporting the
+    // timeout there released the pool slot while the process could still be
+    // alive, so a launcher that ignores termination let the next scan start
+    // and put more than MAX_CONCURRENT_SCANS engines on the machine. The
+    // module escalates to SIGKILL and reports from `close` instead.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'imp-omp-mod-stuck-'));
+    const moduleDir = path.join(dir, '.omp', 'hooks', 'post');
+    fs.mkdirSync(moduleDir, { recursive: true });
+    const launcherDir = path.join(dir, '.omp', 'skills', 'impeccable', 'scripts');
+    fs.mkdirSync(launcherDir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'a.css'), 'a{}');
+    // Ignores SIGTERM and never answers, so only SIGKILL ends it.
+    fs.writeFileSync(
+      path.join(launcherDir, 'impeccable'),
+      `#!/usr/bin/env node
+process.on('SIGTERM', () => {});
+process.stdin.resume();
+setInterval(() => {}, 1000);
+`,
+      { mode: 0o755 },
+    );
+    const modulePath = path.join(moduleDir, 'impeccable.js');
+    // A 200ms scan timeout keeps the test bounded; the SIGKILL grace is the
+    // module's own KILL_GRACE_MS and is what the elapsed assertion measures.
+    fs.writeFileSync(modulePath, buildOmpHookModule().replace('}, 5000, ctx)', '}, 200, ctx)'));
+    const graceMs = Number(/const KILL_GRACE_MS = (\d+);/.exec(buildOmpHookModule())[1]);
+    const mod = await import(pathToFileURL(modulePath).href);
+    const handlers = {};
+    mod.default({ on: (event, fn) => { handlers[event] = fn; } });
+
+    const errors = [];
+    const started = Date.now();
+    const result = await handlers.tool_result(
+      { toolName: 'edit', input: { path: 'a.css' }, content: [] },
+      { cwd: dir, hasUI: true, ui: { notify: (m) => errors.push(m) } },
+    );
+    const elapsed = Date.now() - started;
+
+    assert.equal(result, undefined, 'a timed-out scan produces no finding');
+    assert.equal(errors.length, 1, `the failure is reported once: ${JSON.stringify(errors)}`);
+    assert.match(errors[0], /timed out after 200ms/);
+    // Resolving at SIGTERM would return in about 200ms. Waiting for the
+    // process to actually die cannot return before the SIGKILL escalation.
+    assert.ok(
+      elapsed >= graceMs,
+      `expected the slot to be held until the child exited (>= ${graceMs}ms), took ${elapsed}ms`,
+    );
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
   it('covers ast_edit, and ignores tools that do not write files', async () => {
     const handlers = load();
     // ast_edit's own result details are authoritative (oh-my-pi's

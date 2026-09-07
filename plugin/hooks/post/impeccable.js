@@ -9,9 +9,19 @@ const HOOK_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "s
 // block the tool-result handler for up to timeoutMs * N. Spawned
 // concurrently and awaited via Promise.all, the wall-clock cost is bounded
 // by the single slowest scan instead.
+// How long a timed-out scan gets to honor SIGTERM before SIGKILL, and then
+// how long SIGKILL gets to produce a `close` before the slot is freed anyway.
+const KILL_GRACE_MS = 2000;
+
 function runHook(payload, timeoutMs, ctx) {
   return new Promise((resolve) => {
+    // Reported once: the timeout path can reach here from `close` and from
+    // its own give-up timer, and a doubled notification is a doubled report
+    // of one failure.
+    let reported = false;
     const fail = (reason) => {
+      if (reported) return;
+      reported = true;
       const message = `Impeccable hook failed to run: ${reason}`;
       if (ctx.hasUI) ctx.ui.notify(message, "error");
       else console.error(message);
@@ -31,11 +41,32 @@ function runHook(payload, timeoutMs, ctx) {
     let stdout = "";
     let stderr = "";
     let settled = false;
+    let timedOut = null;
+    let escalate = null;
+    let abandon = null;
+    const clearTimers = () => {
+      clearTimeout(timer);
+      if (escalate) clearTimeout(escalate);
+      if (abandon) clearTimeout(abandon);
+    };
+    // On timeout, decide the outcome but do NOT resolve yet. `child.kill()`
+    // only sends SIGTERM and returns; it does not wait. Resolving there
+    // released this worker slot while the process could still be alive, so a
+    // launcher that delays or ignores termination let the pool start the next
+    // scan and put more than MAX_CONCURRENT_SCANS engines on the machine at
+    // once. The slot is held until `close` says the process is really gone.
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
-      child.kill();
-      fail(`timed out after ${timeoutMs}ms`);
+      timedOut = `timed out after ${timeoutMs}ms`;
+      child.kill("SIGTERM");
+      escalate = setTimeout(() => {
+        child.kill("SIGKILL");
+        // SIGKILL is not refusable, so `close` follows. If it somehow does
+        // not, free the slot anyway: a wedged promise would stall the whole
+        // pool, which is worse than one unreaped process.
+        abandon = setTimeout(() => fail(timedOut), KILL_GRACE_MS);
+      }, KILL_GRACE_MS);
     }, timeoutMs);
     // Buffer mode decodes each chunk independently, so a multi-byte UTF-8
     // character split across a chunk boundary comes out as replacement
@@ -49,7 +80,7 @@ function runHook(payload, timeoutMs, ctx) {
     child.on("error", (err) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      clearTimers();
       fail(err.message);
     });
     // A launcher that exits (or never opens stdin) before the write lands
@@ -58,13 +89,19 @@ function runHook(payload, timeoutMs, ctx) {
     child.stdin.on("error", (err) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      clearTimers();
       fail(err.message);
     });
     child.on("close", (code, signal) => {
+      clearTimers();
+      // A timed-out scan reports here rather than at the timer, so the worker
+      // slot is only released once the process has actually exited.
+      if (timedOut) {
+        fail(timedOut);
+        return;
+      }
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
       if (code !== 0) {
         fail(signal || stderr.trim() || `exit code ${code}`);
         return;

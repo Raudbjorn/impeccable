@@ -821,7 +821,7 @@ fn update(flags: &[String], io: &mut Io) -> R<()> {
             hook_manifest::repair_stale_hook_manifests(&sys, &root, &copy_providers, None).map_err(Flow::Throw)?;
             let want_hooks = install_hooks && decide_hook_install(&mut prompt, io, &root, &copy_providers, yes)?;
             let hook_targets = if want_hooks {
-                copy_provider_hooks(&sys, &tmp_dir, &root, &copy_providers, force, None, scope).map_err(Flow::Throw)?
+                copy_provider_hooks(&sys, &tmp_dir, &root, &copy_providers, force, None, agent_scope).map_err(Flow::Throw)?
             } else {
                 Vec::new()
             };
@@ -877,7 +877,7 @@ fn update(flags: &[String], io: &mut Io) -> R<()> {
         hook_manifest::repair_stale_hook_manifests(&sys, &root, &copy_providers, None).map_err(Flow::Throw)?;
         let want_hooks = install_hooks && decide_hook_install(&mut prompt, io, &root, &providers, yes)?;
         let hook_targets = if want_hooks {
-            copy_provider_hooks(&sys, &tmp_dir, &root, &providers, force, None, scope).map_err(Flow::Throw)?
+            copy_provider_hooks(&sys, &tmp_dir, &root, &providers, force, None, agent_scope).map_err(Flow::Throw)?
         } else {
             Vec::new()
         };

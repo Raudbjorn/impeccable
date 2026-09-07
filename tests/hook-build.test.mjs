@@ -200,7 +200,12 @@ describe('hook manifest builders', () => {
     // own setTimeout + child.kill(), reaching the same explicit
     // error-reporting path as other subprocess failures.
     assert.match(source, /function runHook\(payload, timeoutMs, ctx\)/);
-    assert.match(source, /setTimeout\(\(\) => \{[\s\S]*?child\.kill\(\)/);
+    // The timeout escalates SIGTERM -> SIGKILL and reports from `close`, not
+    // from the timer: child.kill() does not wait, so resolving there released
+    // the pool slot while the process could still be running and let a batch
+    // exceed MAX_CONCURRENT_SCANS.
+    assert.match(source, /setTimeout\(\(\) => \{[\s\S]*?child\.kill\("SIGTERM"\)/);
+    assert.match(source, /child\.kill\("SIGKILL"\)/);
     // A launcher that exits before the payload lands raises EPIPE on the
     // stdin stream, a distinct event from child.on("error")/("close").
     assert.match(source, /child\.stdin\.on\("error"/);
