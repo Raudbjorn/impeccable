@@ -480,6 +480,7 @@ pub struct BootExtras {
 /// grouped by artifact, so deeper reports (doctor) can interleave their own
 /// checks without rebuilding this policy (upstream 80997663).
 pub struct BootFindingGroups {
+    pub compose: Vec<Finding>,
     pub product: Vec<Finding>,
     pub native_platform: Vec<Finding>,
     pub design_sidecar: Vec<Finding>,
@@ -508,6 +509,7 @@ pub fn collect_boot_finding_groups(ctx: &Ctx, cwd: &str, extras: &BootExtras) ->
         },
         design_sidecar: check_design_sidecar(extras.abs_design_path.as_deref(), &extras.sidecar_candidates, &project_root),
         config: check_config(&project_root, Some(&ctx.repo_root)),
+        compose: crate::compose::assessment::drift(&project_root, false),
         build_path: check_build_path_unset(&project_root, Some(&ctx.repo_root), ctx.product.as_deref()),
         surface_briefs: check_surface_briefs(&ctx.surface_brief_candidates, &project_root),
         project_roots: match &extras.project_root_patterns {
@@ -525,6 +527,7 @@ pub fn collect_boot_findings(ctx: &Ctx, cwd: &str, extras: &BootExtras) -> Vec<F
     out.extend(groups.native_platform);
     out.extend(groups.design_sidecar);
     out.extend(groups.config);
+    out.extend(groups.compose);
     out.extend(groups.build_path);
     out.extend(groups.surface_briefs);
     out.extend(groups.project_roots);

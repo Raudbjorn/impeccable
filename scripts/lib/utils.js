@@ -55,6 +55,7 @@ function readSkillScripts(scriptsDir) {
     for (const entry of entries) {
       const entryPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
+        if (entry.name === '__pycache__') continue;
         if (dir === scriptsDir && entry.name === SKILL_BINARY_DIR) continue;
         walk(entryPath);
         continue;
@@ -572,7 +573,7 @@ const EXCLUDED_FROM_SUGGESTIONS = new Set([
 // Sub-commands of /impeccable that should appear in {{available_commands}}.
 // These are the commands that audit/critique/etc. reference when suggesting next steps.
 const IMPECCABLE_SUB_COMMANDS = [
-  'adapt', 'animate', 'audit', 'bolder', 'clarify', 'colorize',
+  'adapt', 'animate', 'audit', 'bolder', 'clarify', 'colorize', 'compose',
   'critique', 'delight', 'design-context', 'distill', 'document', 'harden',
   'layout', 'onboard', 'optimize', 'overdrive', 'polish', 'quieter', 'shape',
   'typeset',

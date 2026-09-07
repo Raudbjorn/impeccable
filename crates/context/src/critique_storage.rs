@@ -453,6 +453,12 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
                 }
             }
             let dir = get_critique_dir(&cwd, &env);
+            if crate::compose::state::root(std::path::Path::new(&resolve_project_root(&cwd, &TargetOptions::default(), &env))).join("current.json").exists() {
+                meta.insert("rubric_revision".into(), Value::String(crate::compose::assessment::rubric_revision()));
+                for field in ["observation", "observation_context"] {
+                    meta.entry(field.to_string()).or_insert(Value::String("unassessed".into()));
+                }
+            }
             let _ = std::fs::create_dir_all(&dir);
             let timestamp = now_filename_stamp();
             let mut front = meta.clone();
@@ -617,10 +623,17 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
             };
             let all = list_snapshots(&format!("__{}.md", slug), &cwd, &env);
             let slice = js_slice_last(&all, limit);
-            let rows: Vec<Value> = slice
+            let mut rows: Vec<Value> = slice
                 .iter()
                 .map(|f| Value::Object(parse_frontmatter(&safe_read(f).unwrap_or_default())))
                 .collect();
+            if rows.iter().any(|r| r.get("rubric_revision").is_some()) {
+                if let Some(latest) = rows.last().cloned() {
+                    for row in &mut rows {
+                        row["comparable_to_latest"] = Value::Bool(crate::compose::assessment::comparable(row, &latest));
+                    }
+                }
+            }
             io.out(&format!("{}\n", json_pretty(&Value::Array(rows))));
             0
         }

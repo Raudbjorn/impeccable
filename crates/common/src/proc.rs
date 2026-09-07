@@ -133,6 +133,32 @@ pub fn hide_window(cmd: &mut Command) {
     }
 }
 
+/// Isolate a bounded worker so its descendants can be stopped with it.
+pub fn worker_group(cmd: &mut Command) {
+    hide_window(cmd);
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+}
+
+/// Kill a worker's entire process tree after a timeout, then reap the parent.
+pub fn kill_worker(child: &mut std::process::Child) {
+    #[cfg(unix)]
+    unsafe { libc::kill(-(child.id() as libc::pid_t), libc::SIGKILL); }
+    #[cfg(windows)]
+    {
+        let mut cmd = Command::new("taskkill");
+        cmd.args(["/F", "/T", "/PID", &child.id().to_string()])
+            .stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+        hide_window(&mut cmd);
+        let _ = cmd.status();
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
 /// `process.on('SIGINT', h); process.on('SIGTERM', h)` where the handler
 /// only flips a flag the main loop polls. Unix installs signal handlers (and
 /// ignores SIGPIPE, so a client that vanished mid-write does not kill a

@@ -563,7 +563,7 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
         // With retrieval configured the choice belongs to the local session, and
         // pinging the remote /chosen endpoint would be the leak this feature
         // exists to close.
-        match crate::retrieval::retrieval_config(&cwd) {
+        match crate::compose::selection::configuration(&cwd, val("--project-catalog").flatten().as_deref()) {
             Err(e) => {
                 io.err(&format!("{e}\n"));
                 return 1;
@@ -649,7 +649,7 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
     let brief_file = val("--brief-file").flatten();
     let session = val("--session").flatten();
     let replay = idx("--replay").is_some();
-    let retrieval = match crate::retrieval::retrieval_config(&cwd) {
+    let retrieval = match crate::compose::selection::configuration(&cwd, val("--project-catalog").flatten().as_deref()) {
         Ok(cfg) => cfg,
         Err(e) => {
             io.err(&format!("{e}\n"));
@@ -668,6 +668,8 @@ pub fn run(args: &[String], io: &mut Io) -> i32 {
             ("mode", "--mode"),
             ("grain", "--grain"),
             ("platform", "--platform"),
+            ("approvalPolicy", "--approval-policy"),
+            ("strategy", "--selection-strategy"),
         ] {
             if let Some(v) = val(flag).flatten() {
                 settings.insert(name.into(), Value::String(v));

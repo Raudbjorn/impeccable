@@ -1,0 +1,7 @@
+{
+  "stdout": "{\n  \"draftId\": \"f934b5192b4d3104076319e89d21a75434425419f5ffd1b92ef45206446c4f6c\",\n  \"valid\": false,\n  \"errors\": [\n    \"invalid: composition needs four ordered grammar rules, 12–180 characters each\"\n  ],\n  \"revision\": \"b54d45b8101329184bb1c588670233ddeeae4d5f65c0b84d44341cfdebb60dd2\"\n}\n",
+  "stderr": "",
+  "exit": 1,
+  "signal": null,
+  "files": {}
+}

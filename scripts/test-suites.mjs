@@ -72,6 +72,7 @@ export const SUITES = {
           'tests/design-context-import.test.mjs',
           'tests/design-context-portability.test.mjs',
           'tests/score-evidence.test.mjs',
+          'tests/compose.test.mjs',
           'tests/visual-cues.test.mjs',
           'tests/hook-build.test.mjs',
           'tests/omp-hook-module.test.mjs',
