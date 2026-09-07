@@ -138,11 +138,19 @@ async function mapWithConcurrencyLimit(items, limit, fn) {
 export default function impeccableHook(pi) {
   pi.on("tool_result", async (event, ctx) => {
     // ast_edit mutates files like edit and write do; omitting it left a whole
-    // class of edits unscanned. apply_patch is oh-my-pi's own toolName for the
-    // apply_patch edit mode (EditTool running in that mode, surfaced under its
-    // own name rather than "edit" — see resolveEditModeForTool /
-    // isEditLikeToolName in oh-my-pi's tool-execution.ts), not only a
-    // Claude/Codex one; omitting it left every apply_patch-mode edit unscanned.
+    // class of edits unscanned. The apply_patch edit mode arrives here with
+    // toolName "edit" too, never literally "apply_patch": hooks/tool-wrapper.ts
+    // emits `toolName: this.tool.name`, and edit/index.ts's EditTool has a
+    // fixed `readonly name = "edit"` regardless of mode -- `apply_patch` is
+    // only the wire-level name GPT-5's custom-tool grammar uses, resolved back
+    // to this same tool by the dispatcher before a hook ever sees the call
+    // (its sibling getter is literally named customWireName). The distinct
+    // "apply_patch" toolName that isEditLikeToolName/resolveEditModeForTool
+    // check in oh-my-pi's tool-execution.ts is real, but that is the
+    // transcript-rendering path, fed the model's raw, unresolved tool-call
+    // name -- a different value from this hook contract's toolName. The
+    // "apply_patch" arm below is therefore dead today; kept as a harmless
+    // guard against a future oh-my-pi version that starts surfacing it here.
     if (
       event.toolName !== "edit" &&
       event.toolName !== "write" &&

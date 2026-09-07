@@ -227,10 +227,13 @@ describe('hook manifest builders', () => {
       'module must register tool_result and session_stop handlers',
     );
     assert.ok(/hasUriScheme\(filePath\)/.test(source), 'module must guard filePath');
-    // ast_edit and apply_patch mutate files like edit and write do; omitting
-    // either left a whole class of edits unscanned. apply_patch is
-    // oh-my-pi's own toolName for the apply_patch edit mode, not only a
-    // Claude/Codex one.
+    // ast_edit mutates files like edit and write do; omitting it left a whole
+    // class of edits unscanned. The apply_patch edit mode arrives with
+    // toolName "edit" too (hooks/tool-wrapper.ts emits `this.tool.name`,
+    // fixed at "edit" regardless of mode -- "apply_patch" is only the
+    // wire-level name GPT-5's custom-tool grammar uses, resolved back to the
+    // same tool before a hook ever sees the call), so the "apply_patch"
+    // toolName arm is defensive rather than reachable today.
     assert.match(source, /event\.toolName !== "ast_edit"/);
     assert.match(source, /event\.toolName !== "apply_patch"/);
     // Buffer mode decodes each chunk independently, corrupting a multi-byte
@@ -284,10 +287,13 @@ describe('hook manifest builders', () => {
       'a single-target OMP shaped event must still resolve one target',
     );
     assert.deepEqual(pickTargets({}), [], 'an event with no target carries none');
-    // apply_patch is oh-my-pi's own toolName for the apply_patch edit mode
-    // (EditTool running in that mode); its input is a raw patch envelope
-    // with no hashline paths, so input.paths is unusable and the result's
-    // own details are the only authoritative source.
+    // toolName "apply_patch" does not occur in practice (see the note above
+    // the toolName guard), but the extraction covers it defensively; verify
+    // that arm still resolves correctly for it. Every real apply_patch-mode
+    // edit reaches this same code as toolName "edit": its input is a raw
+    // patch envelope with no hashline paths, so input.paths is unusable
+    // there too, and the result's own details are the only authoritative
+    // source either way.
     assert.deepEqual(
       pickTargets({ toolName: 'apply_patch', input: {}, details: { path: 'patched.tsx' } }),
       ['patched.tsx'],
