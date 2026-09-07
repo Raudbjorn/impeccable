@@ -86,7 +86,12 @@ function loadSkillBody() {
   return md.trim();
 }
 
-export const SKILL_BODY = loadSkillBody();
+// This provider-neutral fixture assumes a loaded skill with a known base
+// directory, not an exact copy of each host's transformed prompt. Claude's
+// loader supplies a base-directory prefix; here it is workspace-relative
+// because the file tools reject absolute paths. Provider rewrite/loader
+// contracts are tested separately, not established by these behavior cases.
+export const SKILL_BODY = `Base directory for this skill (workspace-relative): .claude/skills/impeccable\n\n${loadSkillBody()}`;
 
 /**
  * Create a temp workspace and prepopulate it.
@@ -219,7 +224,7 @@ function defaultSimulatedAnswer(question) {
   return 'Use the brief, preserve real operational content, and make the primary decision obvious.';
 }
 
-export function makeTools(workspace, extraEnv = {}, simulatedUser = {}) {
+export function makeTools(workspace, extraEnv = {}, simulatedUser = {}, { contextOnlyBash = false, denyBash = false } = {}) {
   const trace = {
     toolCalls: [],
     bashCommands: [],
@@ -242,13 +247,29 @@ export function makeTools(workspace, extraEnv = {}, simulatedUser = {}) {
   }
   const tools = {
     bash: tool({
-      description:
-        'Run a bash command in the workspace root. Use this to invoke skill commands (e.g. `.claude/skills/impeccable/scripts/impeccable context`).',
+      description: contextOnlyBash
+        ? 'Only `.claude/skills/impeccable/scripts/impeccable context` is allowed here. Use read/list for workspace files and skill references; write remains available for requested edits.'
+        : 'Run a bash command in the workspace root. Use this to invoke skill commands (e.g. `.claude/skills/impeccable/scripts/impeccable context`).',
       inputSchema: z.object({
         command: z.string().describe('The bash command to execute.'),
       }),
       execute: async ({ command }) => {
         const call = record('bash', { command });
+        // Simulate a host refusal, not a process failure. Nothing reaches a
+        // shell, including retries, alternate launchers, and compound commands.
+        if (denyBash) {
+          call.denied = true;
+          const out = 'Error: Bash permission denied by the host. This command was not executed.';
+          trace.bashOutputs.push(out);
+          return out;
+        }
+        // Routing tests need the real context loader, not a general-purpose
+        // shell on the host. Reject before execution (still record attempts).
+        if (contextOnlyBash && command.trim() !== '.claude/skills/impeccable/scripts/impeccable context') {
+          const out = 'Error: only `.claude/skills/impeccable/scripts/impeccable context` is allowed. Use read/list for files; references live at .claude/skills/impeccable/reference/.';
+          trace.bashOutputs.push(out);
+          return out;
+        }
         const before = snapshotWorkspaceFiles(workspace);
         const res = await execBash(workspace, command, 20_000, extraEnv);
         call.mutatedPaths = changedPaths(before, snapshotWorkspaceFiles(workspace));
@@ -265,13 +286,16 @@ export function makeTools(workspace, extraEnv = {}, simulatedUser = {}) {
         path: z.string().describe('Workspace-relative file path.'),
       }),
       execute: async ({ path: p }) => {
-        record('read', { path: p });
+        const call = record('read', { path: p });
+        call.succeeded = false;
         const resolved = safeResolve(workspace, p);
         if (typeof resolved !== 'string') return `Error: ${resolved.error}`;
         if (!fs.existsSync(resolved)) return `File not found: ${p}`;
         const stat = fs.statSync(resolved);
         if (stat.isDirectory()) return `Path is a directory: ${p}. Use list instead.`;
-        return fs.readFileSync(resolved, 'utf8');
+        const contents = fs.readFileSync(resolved, 'utf8');
+        call.succeeded = true;
+        return contents;
       },
     }),
     write: tool({
@@ -284,6 +308,9 @@ export function makeTools(workspace, extraEnv = {}, simulatedUser = {}) {
         const call = record('write', { path: p, contents });
         const resolved = safeResolve(workspace, p);
         if (typeof resolved !== 'string') return `Error: ${resolved.error}`;
+        if ((contextOnlyBash || denyBash) && path.relative(workspace, resolved).split(path.sep)[0] === '.claude') {
+          return 'Error: the staged skill is read-only; edits must target project files.';
+        }
         fs.mkdirSync(path.dirname(resolved), { recursive: true });
         fs.writeFileSync(resolved, contents);
         call.mutatedPaths = [p];
@@ -359,8 +386,8 @@ export function makeTools(workspace, extraEnv = {}, simulatedUser = {}) {
 // run is never killed. The timer is unref'd (it must not keep the loop alive
 // after a healthy turn) and cleared on completion.
 const TURN_TIMEOUT_MS = Number(process.env.IMPECCABLE_SKILL_BEHAVIOR_TURN_TIMEOUT_MS) || 840_000;
-export async function runTurn({ workspace, model, userPrompt, priorMessages = [], maxSteps = 8, env = {}, simulatedUser = {}, timeoutMs = TURN_TIMEOUT_MS }) {
-  const { tools, trace } = makeTools(workspace, env, simulatedUser);
+export async function runTurn({ workspace, model, userPrompt, priorMessages = [], maxSteps = 8, env = {}, simulatedUser = {}, timeoutMs = TURN_TIMEOUT_MS, contextOnlyBash = false, denyBash = false }) {
+  const { tools, trace } = makeTools(workspace, env, simulatedUser, { contextOnlyBash, denyBash });
   const messages = [
     ...priorMessages,
     { role: 'user', content: userPrompt },
@@ -382,6 +409,10 @@ export async function runTurn({ workspace, model, userPrompt, priorMessages = []
       // Real client-side deadline on the provider call: without it a stalled
       // stream wedges the whole sweep with no tally.
       abortSignal: controller.signal,
+      // The Anthropic-compatible adapter does not recognize DeepSeek and
+      // otherwise caps each response at 4096 tokens, truncating valid tool
+      // continuations. Keep an explicit ceiling; length remains a test failure.
+      maxOutputTokens: model?.modelId?.startsWith('deepseek-') ? 16_384 : undefined,
       // Resolved from the model object so the 21 runTurn call sites stay
       // unchanged. Reasoning models run at the provider default otherwise,
       // which is not the tier this suite is meant to measure.
@@ -398,6 +429,7 @@ export async function runTurn({ workspace, model, userPrompt, priorMessages = []
   return {
     trace,
     text: result.text ?? '',
+    stepTexts: result.steps.map((step) => step.text ?? ''),
     finishReason: result.finishReason,
     usage: result.usage,
     responseMessages,

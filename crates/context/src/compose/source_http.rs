@@ -93,7 +93,7 @@ struct Response {
 }
 fn request(url: &Url, addresses: &[SocketAddr], deadline: Instant) -> Result<Response> {
     let addresses = addresses.to_vec();
-    let agent = ureq::AgentBuilder::new()
+    let agent = crate::http::agent_builder()
         .redirects(0)
         .try_proxy_from_env(false)
         .timeout(remaining(deadline)?)

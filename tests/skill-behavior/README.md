@@ -72,6 +72,121 @@ The trace is the source of truth, not the model's free-form reply.
 | 13 | empty workspace; prompt is `/impeccable teach` | runs `impeccable context` and diverts into `reference/init.md` because `teach` aliases `init` |
 | 14 | PRODUCT.md with `## Platform: ios` (native iOS app); prompt is `/impeccable craft a tide detail screen` | `impeccable context` runs and emits the contents of `reference/ios.md` directly, placing native conventions in context without a second model-directed read |
 | 15 | same iOS fixture; prompt is `/impeccable audit` | agent loads `reference/audit.native.md` (the Commands-table native variant, routed instead of `audit.md`) |
+| 16 | existing surface, with and without PRODUCT.md; asks where to start | loads `routing.md`, delivers advice, and does not edit project files, start an interview, archive a critique, or run menu scans |
+| 17 | existing surface; asks whether critique is required before polish | loads `routing.md` and both command references, then delivers advice without executing the playbooks |
+| 18 | existing surface; explicitly requests polish followed by a next-command recommendation | loads `polish.md` rather than substituting workflow advice for the requested work |
+| 19 | tiny spacing edit with PRODUCT.md + DESIGN.md; Bash denied, a real-loader success control, and a denied-launcher planning-only case | edits require successful playbook/craft-floor reads and a pre-edit denial warning; planning stays read-only and skips craft-floor |
+
+## Setup launcher-failure branch (2026-09-06, PR #750)
+
+Scenario 19 injects a host permission error before any shell command executes,
+including retries and compound commands. File tools remain available; the
+staged skill is read-only. Assertions require successful reads, an actual UI
+edit, unchanged context files, and disclosure before the first write in the
+assistant message sequence. Failed read attempts and shell commands merely
+mentioning a reference do not count as loading it. The success control allows
+only the real context-loader command through Bash and requires exit 0.
+
+The suite measures continuation after a tool refusal, not Claude's skill
+activation or plugin substitution. Those are separate loader/path checks.
+It also does not establish behavior for every missing-binary or runtime error.
+
+Focused baseline (2026-09-06): both scenario 19 cases passed on
+`claude-sonnet-5`, one run each. The original wording also continued after
+denial in the comparison run, but disclosed the failure only in its final
+summary. This does not reproduce the reporter's complete reference-loading
+failure or establish a multi-provider pass. An earlier scenario 6 result used
+attempt-based reference assertions and is not counted as a success control.
+
+### Refusal follow-up (2026-09-06, #744)
+
+The provider-neutral harness models a loaded skill with a known base directory
+using synthetic workspace-relative host metadata, not each provider's exact
+generated prompt. The source instructions and `<skill-base-dir>` resolution
+remain under test; reference reads still have to succeed. Provider transforms
+and plugin loading have separate path/loader tests. The harness also sets an
+explicit 16,384-token response ceiling for DeepSeek: the Anthropic-compatible
+SDK otherwise treats that model as unknown and caps it at 4,096. Truncation
+still fails the scenario; this changes the test runner, not the shipped skill.
+
+The unchanged-source baseline with directory metadata passed 5/8 focused
+cases: Sonnet skipped craft-floor in its successful-launcher control, OpenAI
+stopped without editing after denial, and Gemini warned only after editing.
+DeepSeek passed both cases. An initial candidate got OpenAI to edit but still
+warned late on Sonnet, OpenAI, and Gemini; DeepSeek's denial response truncated.
+All four successful-launcher controls passed that candidate.
+
+The pre-review candidate separates the fallback from the long first step, says to
+send the warning first and continue through permitted tools, and clarifies
+that craft-floor also applies to small refinements. Setup grows by 18
+whitespace-separated words; the description is unchanged. Sonnet and OpenAI
+passed both final cases, as did DeepSeek with the explicit output ceiling.
+Gemini still warned after the edit; its control passed. The final result is
+7/8; the warning-order assertion remains unchanged.
+
+Review follow-up: the fallback now says to follow the **applicable** steps
+2–3, preserving step 3's planning-only exclusion (20 added Setup words overall).
+A new denied-launcher planning case requires a real plan, no mutations or
+craft-floor read, and successful context/target/playbook reads. On Sonnet,
+the editing denial and successful-loader cases both passed again. The planning
+run stayed read-only and skipped craft-floor, but failed because it did not
+read `polish.md`. That assertion remains intact: this is another reference-loading
+gap under #744, not a green planning result. Other providers were not rerun for
+this wording-only review clarification.
+
+The planning case also checks the response-message sequence: the launcher must
+actually be denied, then an assistant warning must precede the first fallback
+PRODUCT.md or DESIGN.md read. Deterministic tests reject silent continuation,
+final-only warnings, warnings before denial, and user-authored warnings. This
+checks disclosure even when no editing occurs; the editing cases retain their
+existing pre-edit warning assertion.
+
+One focused Sonnet rerun with this guard read the playbook and produced a
+read-only plan without craft-floor, but omitted the launcher warning entirely.
+The strengthened assertion correctly failed that run; #744 remains open for
+the behavior failure rather than treating this coverage fix as a skill fix.
+
+These are single samples per case and candidate, not reliability estimates.
+This API harness starts with the skill loaded and readable references. It
+does not measure activation, reproduce Windows command parsing, or establish
+fallback behavior when the host also denies required file reads or writes.
+Keep #744 open; evaluate activation separately with #375.
+
+To repeat only these cases (provider keys and an engine binary required):
+
+```sh
+IMPECCABLE_SKILL_BEHAVIOR_MODELS=claude-sonnet-5,gpt-5.6-terra,gemini-3.7-flash,deepseek-v4-flash \
+  node --test --test-name-pattern='scenario 19:' tests/skill-behavior/scenarios.test.mjs
+```
+
+## Workflow-advice baseline (2026-09-05, PR #737)
+
+The four cases in scenarios 16-18 are new; prior scenario results do not
+establish their behavior. The advice-only assertions inspect write-tool calls
+and file mutations from bash (excluding context's internal `.impeccable/`
+state, but not critique reports), require an actual answer, and reject
+interviews and menu scans. Scenario 18 checks command-reference precedence;
+it does not assert completion of a full polish pass. These cases allow only
+the exact context-loader command through bash; references use read/list, and
+the write tool remains available for project files so unsolicited edits still
+fail the test. Writes to the staged skill are rejected. This keeps the routing
+measurement from running arbitrary shell searches outside its fixture.
+
+| Scenario | claude-sonnet-5 | gpt-5.6-terra | gemini-3.7-flash |
+|---|---|---|---|
+| 16 (existing project) | pass | pass | pass |
+| 16 (missing product context) | flaky (1 of 2) | pass | pass |
+| 17 (command comparison) | pass | pass | pass |
+| 18 (explicit command) | pass | pass | pass |
+
+Rechecked after reducing the skill addition to 59 words. Claude's first
+missing-context response stayed read-only but skipped `routing.md`; an unchanged
+repeat passed on all three providers. Keep that reference-read miss visible as
+a flake rather than adding instructions for a single observation. All assertions
+remain unchanged. Scenario 18 uses an eight-step budget and actual read-tool
+evidence, not rejected bash reads. The initial unrestricted run (stopped after
+host-wide search attempts), earlier rejected-read results, and broader suite's
+sandboxed provider DNS errors are excluded from this baseline.
 
 The workflow-contract file adds end-to-end assertions for attended fresh init,
 an initialized natural build request, replacement-world redesign, scope-preserving bolder

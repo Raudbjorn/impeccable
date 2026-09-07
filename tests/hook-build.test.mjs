@@ -66,6 +66,46 @@ function manifestCommands(manifest) {
 }
 
 describe('hook manifest builders', () => {
+  it('emits commandWindows only for Codex-shaped manifests', () => {
+    // Codex reads a `commandWindows` sibling; Claude, Cursor, Grok, and Copilot
+    // have no per-platform field, and an unknown key is a risk under a strict
+    // parser, so it stays off everywhere else.
+    const withWindows = [buildCodexHooksManifest(), buildCodexPluginHooksManifest()];
+    const without = [
+      buildClaudeSettingsManifest(),
+      buildClaudePluginHooksManifest(),
+      buildGitHubHooksManifest(),
+    ];
+    const entries = (manifest) => {
+      const out = [];
+      const walk = (value) => {
+        if (Array.isArray(value)) { value.forEach(walk); return; }
+        if (value && typeof value === 'object') {
+          if (typeof value.command === 'string' || typeof value.bash === 'string') out.push(value);
+          Object.values(value).forEach(walk);
+        }
+      };
+      walk(manifest.hooks);
+      return out;
+    };
+    for (const manifest of withWindows) {
+      for (const entry of entries(manifest)) {
+        assert.equal(typeof entry.commandWindows, 'string', `missing commandWindows in ${JSON.stringify(entry)}`);
+        assert.ok(entry.commandWindows.includes('impeccable.cmd'));
+      }
+    }
+    for (const manifest of without) {
+      for (const entry of entries(manifest)) {
+        assert.equal(entry.commandWindows, undefined, `unexpected commandWindows in ${JSON.stringify(entry)}`);
+      }
+    }
+    for (const manifest of [...withWindows, ...without]) {
+      for (const command of manifestCommands(manifest)) {
+        assert.ok(!/node|systemMessage|node-unsupported/.test(command), `Node-era fragment in ${command}`);
+      }
+    }
+  });
+
   it('builds Claude project settings for the real detector hook', () => {
     const manifest = buildClaudeSettingsManifest();
     const group = manifest.hooks.PostToolUse[0];
@@ -658,7 +698,7 @@ describe('generated hook artifacts in repo', { skip: SYNCED ? false : 'generated
     assert.ok(fs.existsSync(path.join(REPO_ROOT, '.claude/skills/impeccable/scripts')));
   });
 
-  it('Codex project hooks reference hook.mjs in the .codex skill payload', () => {
+  it('Codex project hooks reference the launcher in the .codex skill payload', () => {
     // The committed `.codex/hooks.json` is the distribution artifact for a
     // `.codex`-directory install, whose skill payload lives at `.codex/skills/`
     // (issue: it previously hardcoded `.agents/skills`, so the guarded hook

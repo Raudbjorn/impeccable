@@ -14,7 +14,7 @@ The vanilla critique blends three things into one prompt: collect observations, 
 
 Send the LLM the target page (HTML and/or screenshot) plus the full evidence catalog: the 10 files under `.agents/skills/impeccable/scripts/data/critique-evidence/heuristic-*.json`, one per Nielsen heuristic. The LLM returns a JSON list of `{heuristic_id, item_id, citation}` triples drawn ONLY from the catalog. No score, no prose summary.
 
-Prompt template: [reference/evidence-collection.md](reference/evidence-collection.md).
+Prompt template: [reference/evidence-collection.md](evidence-collection.md).
 
 ### Stage 2 (detector): rule-based items
 
@@ -40,7 +40,7 @@ The scorer applies the canonical evidence-item formula: net impact summed across
 
 Build `<merged-items.json>` from Stage 1's LLM items plus Stage 2's capped detector items before invoking the scorer; the scorer itself does no catalog lookups or capping.
 
-**Stage 1 items arrive with no `impact` field** (`{heuristic_id, item_id, citation}` only, per [reference/evidence-collection.md](reference/evidence-collection.md)). Before invoking the scorer, look up each Stage 1 item's `impact` in its catalog entry: catalog entries are keyed `id` (not `item_id`), so find the entry whose `id` equals the Stage 1 item's `item_id`, under the matching `heuristic_id`'s `positive` / `negative` / `critical_negative` list in `.agents/skills/impeccable/scripts/data/critique-evidence/heuristic-*.json`, and copy that entry's `impact` onto the item, tagging it `"source": "llm"`. A Stage 1 `item_id` with no matching catalog `id` gets dropped here (see Hard rules), not passed through with a missing or guessed impact. The scorer rejects any item whose `impact` isn't a finite number rather than silently producing a garbage score.
+**Stage 1 items arrive with no `impact` field** (`{heuristic_id, item_id, citation}` only, per [reference/evidence-collection.md](evidence-collection.md)). Before invoking the scorer, look up each Stage 1 item's `impact` in its catalog entry: catalog entries are keyed `id` (not `item_id`), so find the entry whose `id` equals the Stage 1 item's `item_id`, under the matching `heuristic_id`'s `positive` / `negative` / `critical_negative` list in `.agents/skills/impeccable/scripts/data/critique-evidence/heuristic-*.json`, and copy that entry's `impact` onto the item, tagging it `"source": "llm"`. A Stage 1 `item_id` with no matching catalog `id` gets dropped here (see Hard rules), not passed through with a missing or guessed impact. The scorer rejects any item whose `impact` isn't a finite number rather than silently producing a garbage score.
 
 ### Hard rules
 

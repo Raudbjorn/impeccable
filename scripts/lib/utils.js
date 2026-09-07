@@ -421,6 +421,12 @@ export const PROVIDER_PLACEHOLDERS = {
     ask_instruction: 'STOP and call the AskUserQuestion tool to clarify.',
     command_prefix: '/'
   },
+  'dsh': {
+    model: 'DeepSeek',
+    config_file: 'AGENTS.md',
+    ask_instruction: 'STOP and call the ask_user_question tool to clarify.',
+    command_prefix: '/'
+  },
   'gemini': {
     model: 'Gemini',
     config_file: 'GEMINI.md',
@@ -504,6 +510,7 @@ export const PROVIDER_BLOCK_TAGS = new Set([
   'claude',
   'claude-code',
   'codex',
+  'dsh',
   'gemini',
   'github',
   'kiro',

@@ -49,7 +49,7 @@ const RATIO_GUARD_FLOOR: u64 = 1024 * 1024;
 /// through `download_file`, which streams to disk. Reads are capped at
 /// [`MAX_DOWNLOAD_BYTES`]; a longer response is an error, not a truncation.
 pub fn download(url: &str) -> Result<Vec<u8>, String> {
-    let agent = ureq::AgentBuilder::new()
+    let agent = impeccable_context::http::agent_builder()
         .timeout_connect(std::time::Duration::from_secs(30))
         .build();
     match agent.get(url).call() {
@@ -79,7 +79,7 @@ pub struct FetchResponse {
 }
 
 fn ureq_fetch(url: &str) -> Result<FetchResponse, String> {
-    let agent = ureq::AgentBuilder::new()
+    let agent = impeccable_context::http::agent_builder()
         .timeout_connect(std::time::Duration::from_secs(30))
         .timeout(std::time::Duration::from_secs(120))
         .redirects(0)
@@ -405,7 +405,7 @@ pub fn list_skill_tree_files(root: &str) -> Vec<String> {
 }
 
 static PROVIDER_PATH_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\.(claude|cursor|agents|agent|github|gemini|codex|grok|hermes|kiro|opencode|pi|qoder|trae|trae-cn|rovodev|vibe)/skills/").unwrap()
+    Regex::new(r"\.(claude|cursor|dsh|agents|agent|github|gemini|codex|grok|hermes|kiro|opencode|pi|qoder|trae|trae-cn|rovodev|vibe)/skills/").unwrap()
 });
 
 /// JS: normalizeForHash(content)

@@ -327,7 +327,7 @@ fn key_chroma(path: &std::path::Path, key_hex: &str) -> Result<f64, String> {
 /// decoded image bytes, or an (exit code, already-newline-terminated stderr
 /// message) pair.
 fn call_openai_image(key: &str, prompt: &str, size: &str, quality: &str, refs: &[String], abs: &dyn Fn(&str) -> String) -> Result<Vec<u8>, (i32, String)> {
-    let agent = ureq::AgentBuilder::new().build();
+    let agent = crate::http::agent_builder().build();
     let response = if !refs.is_empty() {
         let boundary = format!("----impeccable{:x}", crate::util::now_ms() as u64);
         let mut body: Vec<u8> = Vec::new();

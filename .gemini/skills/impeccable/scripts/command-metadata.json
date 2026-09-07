@@ -1,4 +1,8 @@
 {
+  "compose": {
+    "description": "Process explicit source documents into project-local design evidence, grammar, reviewed concepts, tokens, and exports. Keeps original files in place, distinguishes machine and human approval, supports offline seeded selection, and checks adopted requirements against observed page state.",
+    "argumentHint": "[setup|source|derive|validate|review|adopt|select|export|assess|verify]"
+  },
   "craft": {
     "description": "Deprecated compatibility alias for an ordinary Impeccable new-work request. It adds no behavior; natural build and redesign requests use the same flow.",
     "argumentHint": "[feature description]"

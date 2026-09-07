@@ -159,7 +159,11 @@ fn walk(root: &str, dir: &str, depth: usize, hits: &mut Hits) {
         let Ok(bytes) = std::fs::read(&abs) else { continue };
         let slice = if bytes.len() > MAX_READ_BYTES { &bytes[..MAX_READ_BYTES] } else { &bytes[..] };
         let body = String::from_utf8_lossy(slice);
-        visit(root, &abs, &jsp::relative("/", root, &abs), &body, hits);
+        // Candidate patterns use '/', while native Windows relative paths
+        // use '\\'. Normalize once for classification and portable signals;
+        // to_posix preserves literal backslashes in Unix filenames.
+        let rel = jsp::to_posix(&jsp::relative("/", root, &abs));
+        visit(root, &abs, &rel, &body, hits);
     }
 }
 
@@ -188,4 +192,89 @@ pub fn run(_args: &[String], io: &mut Io) -> i32 {
     let v = detect_csp(&cwd);
     io.out(&format!("{}\n", json_pretty(&v)));
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static NEXT_FIXTURE: AtomicUsize = AtomicUsize::new(0);
+
+    struct Fixture(PathBuf);
+
+    impl Fixture {
+        fn new() -> Self {
+            loop {
+                let root = std::env::temp_dir().join(format!(
+                    "impeccable-csp-761-{}-{}",
+                    std::process::id(), NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed),
+                ));
+                match std::fs::create_dir(&root) {
+                    Ok(()) => return Self(root),
+                    // Never reuse or remove files left by another run.
+                    Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                    Err(e) => panic!("create CSP fixture: {e}"),
+                }
+            }
+        }
+
+        fn scan(&self, path: &str, body: &str) -> Value {
+            let file = self.0.join(path);
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(file, body).unwrap();
+            detect_csp(self.0.to_str().unwrap())
+        }
+    }
+
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn nested_csp_candidates_use_portable_paths() {
+        // Exercise the filesystem walker and native path.relative semantics,
+        // not just regexes with pre-normalized input. Windows CI reproduces #761.
+        for (path, body, shape) in [
+            ("packages/app/src/security/csp.ts", "buildCSPConfig()", "append-arrays"),
+            ("packages/app/src/next-config.ts", "createBaseNextConfig()", "append-arrays"),
+            ("apps/web/svelte.config.js", "kit: { csp: { directives: {} } }", "append-arrays"),
+            ("apps/web/nuxt.config.ts", "'nuxt-security'; contentSecurityPolicy", "append-arrays"),
+            ("apps/web/next.config.mjs", "'Content-Security-Policy': 'script-src self; connect-src self'", "append-string"),
+            ("next.config.mjs", "'Content-Security-Policy': 'script-src self; connect-src self'", "append-string"),
+            ("apps/web/src/middleware.ts", "headers.set('Content-Security-Policy', policy)", "middleware"),
+            ("apps/web/src/layout.astro", "<meta http-equiv='Content-Security-Policy'>", "meta-tag"),
+        ] {
+            assert_eq!(Fixture::new().scan(path, body), serde_json::json!({
+                "shape": shape, "signals": [path],
+            }), "{path}");
+        }
+    }
+
+    #[test]
+    fn unrelated_nested_files_are_not_csp_candidates() {
+        for (path, body) in [
+            ("packages/app/src/utils/csp.ts", "buildCSPConfig()"),
+            ("apps/web/not-svelte.config.js", "kit: { csp: { directives: {} } }"),
+            ("apps/web/next.config.mjs", "'Content-Security-Policy': 'script-src self'"),
+        ] {
+            assert_eq!(Fixture::new().scan(path, body), serde_json::json!({
+                "shape": null, "signals": [],
+            }), "{path}");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn posix_backslashes_remain_literal_filename_characters() {
+        let result = Fixture::new().scan(
+            "packages/app/src/config\\notes.ts", "buildCSPConfig()",
+        );
+        assert_eq!(result, serde_json::json!({
+            "shape": "append-arrays", "signals": ["packages/app/src/config\\notes.ts"],
+        }));
+    }
 }

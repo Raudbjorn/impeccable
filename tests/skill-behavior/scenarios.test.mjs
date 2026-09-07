@@ -27,6 +27,7 @@ import {
   ENGINE_MISSING_MESSAGE,
 } from './harness.mjs';
 import { detectProvider, getModel, hasKey, resolveModelList, PROVIDERS } from './providers.mjs';
+import { assertPlanningFallbackWarning, LAUNCHER_FAILURE_WARNING } from './assertions.mjs';
 import {
   PRODUCT_MD_SAMPLE,
   PRODUCT_MD_SAMPLE_NO_REGISTER,
@@ -34,6 +35,7 @@ import {
   MINIMAL_ANDROID_SOURCE,
   DESIGN_MD_SAMPLE,
   MINIMAL_LANDING_HTML,
+  WORKFLOW_ADVICE_FILES,
   SVELTE_PROJECT_FILES,
 } from './fixtures.mjs';
 
@@ -131,6 +133,16 @@ function executedUpdateCommands(trace) {
   return executableSegments.filter((segment) =>
     /^(?:(?:npx|bunx|pnpx)\s+)?(?:impeccable|skills)\s+update\b/.test(segment),
   );
+}
+
+function assertAdviceOnly(trace, text) {
+  assert.ok(text.trim(), 'advice must reach the user, not stop at reference loading');
+  assert.deepEqual(trace.writePaths, [], 'advice must not use the write tool');
+  const mutations = trace.toolCalls.flatMap((call) => call.mutatedPaths ?? [])
+    .filter((file) => !file.startsWith('.impeccable/') || file.startsWith('.impeccable/critique/'));
+  assert.deepEqual(mutations, [], 'advice must not edit project files or archive an unsolicited critique');
+  assert.deepEqual(trace.questionCalls, [], 'advice must not start an init or design interview');
+  assert.equal(bashCommandsMatching(trace, 'impeccable detect').length, 0, 'workflow advice does not run menu scans');
 }
 
 for (const modelId of resolveModelList()) {
@@ -652,7 +664,136 @@ for (const modelId of resolveModelList()) {
       }
     });
 
-    it('scenario 16: explicit cultural-palette request survives craft-floor.md\'s guardrail', async () => {
+    for (const [label, files] of [
+      ['existing project', WORKFLOW_ADVICE_FILES],
+      ['missing product context', { 'index.html': MINIMAL_LANDING_HTML }],
+    ]) {
+      it(`scenario 16: workflow advice stays read-only (${label})`, async () => {
+        const workspace = prepareWorkspace({ files });
+        try {
+          const { trace, text } = await runTurn({
+            workspace,
+            model,
+            userPrompt: "I'm joining this project. Where should I start with Impeccable?",
+            maxSteps: 8,
+            contextOnlyBash: true,
+          });
+          logTrace('S16', label, modelId, trace, { textSample: text.slice(0, 300) });
+          assert.ok(readsMatching(trace, 'reference/routing.md').length, 'workflow advice loads the shared routing reference');
+          assertAdviceOnly(trace, text);
+        } finally {
+          cleanupWorkspace(workspace);
+        }
+      });
+    }
+
+    it('scenario 17: command comparison reads references without running them', async () => {
+      const workspace = prepareWorkspace({ files: WORKFLOW_ADVICE_FILES });
+      try {
+        const { trace, text } = await runTurn({
+          workspace,
+          model,
+          userPrompt: 'Should I use critique or polish on index.html? Is a critique required before polishing?',
+          maxSteps: 8,
+          contextOnlyBash: true,
+        });
+        logTrace('S17', 'command-comparison', modelId, trace, { textSample: text.slice(0, 300) });
+        assert.ok(readsMatching(trace, 'reference/routing.md').length, 'a command name in a question still routes to advice');
+        assert.ok(readsMatching(trace, 'reference/critique.md').length, 'comparison consults the critique contract');
+        assert.ok(readsMatching(trace, 'reference/polish.md').length, 'comparison consults the polish contract');
+        assertAdviceOnly(trace, text);
+      } finally {
+        cleanupWorkspace(workspace);
+      }
+    });
+
+    for (const denyBash of [true, false]) {
+      it(`scenario 19: ${denyBash ? 'denied launcher' : 'successful launcher control'} loads context and references before editing`, async () => {
+        const workspace = prepareWorkspace({ files: {
+          'PRODUCT.md': PRODUCT_MD_SAMPLE,
+          'DESIGN.md': DESIGN_MD_SAMPLE,
+          'index.html': '<!doctype html><html lang="en"><head><title>Fieldnotes</title><style>body{font:16px system-ui;margin:32px}button{padding:2px 4px}</style></head><body><main><h1>Fieldnotes</h1><p>A calmer place for your notes.</p><button>New note</button></main></body></html>',
+        } });
+        try {
+          const { trace, stepTexts, finishReason, responseMessages } = await runTurn({
+            workspace,
+            model,
+            userPrompt: '/impeccable polish index.html. Keep this pass small: improve the button spacing only, preserving the page content and structure.',
+            maxSteps: 12,
+            denyBash,
+            contextOnlyBash: !denyBash,
+          });
+          const allText = stepTexts.join('\n');
+          logTrace('S19', denyBash ? 'denied-launcher' : 'successful-launcher', modelId, trace, { finishReason, text: allText });
+          assert.notEqual(finishReason, 'length', 'a truncated response is not a completed fallback');
+          if (denyBash) {
+            assert.ok(trace.toolCalls.some((call) => call.name === 'bash' && call.denied && /impeccable\s+context\b/.test(call.input.command)), 'must encounter an actual denied context attempt');
+          } else {
+            assert.ok(trace.bashOutputs.some((out) => out.startsWith('exit=0\n')), 'the control must execute the real context loader successfully');
+          }
+          const writeIndex = trace.toolCalls.findIndex((call) => call.mutatedPaths.includes('index.html'));
+          assert.ok(writeIndex >= 0, 'must continue to the requested edit, not just load references');
+          for (const filename of [...(denyBash ? ['PRODUCT.md', 'DESIGN.md'] : []), 'reference/polish.md', 'reference/craft-floor.md']) {
+            const readIndex = trace.toolCalls.findIndex((call) => call.name === 'read' && call.succeeded && (call.input.path === filename || call.input.path.endsWith(`/${filename}`)));
+            assert.ok(readIndex >= 0 && readIndex < writeIndex, `${filename} must actually be read before editing`);
+          }
+          const assistantBlocks = responseMessages.filter((message) => message.role === 'assistant')
+            .flatMap((message) => typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : message.content);
+          const warningIndex = assistantBlocks.findIndex((block) => block.type === 'text' && LAUNCHER_FAILURE_WARNING.test(block.text));
+          const writeBlockIndex = assistantBlocks.findIndex((block) => block.type === 'tool-call' && block.toolName === 'write');
+          if (denyBash) assert.ok(warningIndex >= 0 && writeBlockIndex > warningIndex, 'must disclose the failed context launcher before editing, not only in the final summary');
+          assert.ok(!trace.toolCalls.some((call) => call.mutatedPaths.some((p) => /(?:^|\/)(?:PRODUCT|DESIGN)\.md$/.test(p))), 'must not fabricate or replace project context');
+        } finally {
+          cleanupWorkspace(workspace);
+        }
+      });
+    }
+
+    it('scenario 19: denied launcher keeps planning-only work read-only without craft-floor', async () => {
+      const workspace = prepareWorkspace({ files: {
+        'PRODUCT.md': PRODUCT_MD_SAMPLE,
+        'DESIGN.md': DESIGN_MD_SAMPLE,
+        'index.html': '<!doctype html><html><body><button style="padding:2px 4px">New note</button></body></html>',
+      } });
+      try {
+        const { trace, text, stepTexts, finishReason, responseMessages } = await runTurn({
+          workspace,
+          model,
+          userPrompt: '/impeccable polish index.html. Inspect the button spacing and propose a short plan only. Do not edit any files or implement the plan yet.',
+          maxSteps: 12,
+          denyBash: true,
+        });
+        logTrace('S19', 'denied-launcher-planning', modelId, trace, { finishReason, text: stepTexts.join('\n') });
+        assert.notEqual(finishReason, 'length', 'a truncated response is not a completed plan');
+        assert.ok(trace.toolCalls.some((call) => call.name === 'bash' && call.denied && /impeccable\s+context\b/.test(call.input.command)), 'must encounter an actual denied context attempt');
+        assert.deepEqual(readsMatching(trace, 'craft-floor.md'), [], 'planning-only work must not load the editing floor');
+        assertAdviceOnly(trace, text);
+        assertPlanningFallbackWarning(responseMessages);
+        for (const filename of ['PRODUCT.md', 'DESIGN.md', 'index.html', 'reference/polish.md']) {
+          assert.ok(trace.toolCalls.some((call) => call.name === 'read' && call.succeeded && (call.input.path === filename || call.input.path.endsWith(`/${filename}`))), `${filename} must actually be read`);
+        }
+      } finally {
+        cleanupWorkspace(workspace);
+      }
+    });
+
+    it('scenario 18: explicit command request takes precedence over workflow advice', async () => {
+      const workspace = prepareWorkspace({ files: WORKFLOW_ADVICE_FILES });
+      try {
+        const { trace, text } = await runTurn({
+          workspace,
+          model,
+          userPrompt: '/impeccable polish index.html. Please do the polish pass now; afterward tell me which command would be useful next.',
+          maxSteps: 8,
+          contextOnlyBash: true,
+        });
+        logTrace('S18', 'explicit-command', modelId, trace, { textSample: text.slice(0, 300) });
+        assert.ok(readsMatching(trace, 'reference/polish.md').length, 'the requested command must not be replaced with advice');
+      } finally {
+        cleanupWorkspace(workspace);
+      }
+    });
+    it('scenario 20: explicit cultural-palette request survives craft-floor.md\'s guardrail', async () => {
       // craft-floor.md's cultural-symbol-palette rule tells the agent to
       // reach past a domain's obvious stock palette (a holiday's colors, a
       // cuisine's, a flag's) *unless the brief explicitly names it* -- the
@@ -688,7 +829,7 @@ for (const modelId of resolveModelList()) {
             '/impeccable polish index.html. Keep the marigold-and-deep-red palette from the storefront awning exactly as DESIGN.md describes it.',
           maxSteps: 14,
         });
-        logTrace('S16', 'cultural-palette-override', modelId, trace, { textSample: text.slice(0, 400) });
+        logTrace('S20', 'cultural-palette-override', modelId, trace, { textSample: text.slice(0, 400) });
         assert.ok(
           bashCommandsMatching(trace, 'context.mjs').length >= 1,
           `expected agent to run context.mjs at least once.\n` +
