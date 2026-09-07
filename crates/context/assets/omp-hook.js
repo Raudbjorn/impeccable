@@ -37,6 +37,13 @@ function runHook(payload, timeoutMs, ctx) {
       child.kill();
       fail(`timed out after ${timeoutMs}ms`);
     }, timeoutMs);
+    // Buffer mode decodes each chunk independently, so a multi-byte UTF-8
+    // character split across a chunk boundary comes out as replacement
+    // characters and JSON.parse on the finding payload throws. setEncoding
+    // switches the stream to a StringDecoder, which buffers a trailing
+    // partial sequence until the next chunk completes it.
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk) => { stdout += chunk; });
     child.stderr.on("data", (chunk) => { stderr += chunk; });
     child.on("error", (err) => {
@@ -131,23 +138,73 @@ async function mapWithConcurrencyLimit(items, limit, fn) {
 export default function impeccableHook(pi) {
   pi.on("tool_result", async (event, ctx) => {
     // ast_edit mutates files like edit and write do; omitting it left a whole
-    // class of edits unscanned. apply_patch is deliberately absent: that is a
-    // Claude/Codex tool name, not one oh-my-pi has.
-    if (event.toolName !== "edit" && event.toolName !== "write" && event.toolName !== "ast_edit") return;
-    // `input.paths` is the authoritative multi-target list a multi-file edit
-    // carries; the runner drops the single-target `path`/`tool_input.file_path`
-    // convenience entirely once an edit touches two or more files, so reading
-    // only one of those skipped every multi-file edit.
-    const input = event.input || {};
-    const singlePath =
-      (event.tool_input && typeof event.tool_input.file_path === 'string' && event.tool_input.file_path) ||
-      (typeof input.path === 'string' && input.path) ||
-      null;
-    const targets = Array.isArray(input.paths)
-      ? input.paths.filter((entry) => typeof entry === "string" && entry.length > 0)
-      : singlePath
-        ? [singlePath]
+    // class of edits unscanned. apply_patch is oh-my-pi's own toolName for the
+    // apply_patch edit mode (EditTool running in that mode, surfaced under its
+    // own name rather than "edit" — see resolveEditModeForTool /
+    // isEditLikeToolName in oh-my-pi's tool-execution.ts), not only a
+    // Claude/Codex one; omitting it left every apply_patch-mode edit unscanned.
+    if (
+      event.toolName !== "edit" &&
+      event.toolName !== "write" &&
+      event.toolName !== "ast_edit" &&
+      event.toolName !== "apply_patch"
+    ) return;
+    const details = event.details || {};
+    let targets;
+    if (event.toolName === "ast_edit") {
+      // A preview (dry-run) tool_result stages changes for a later `resolve`
+      // and applies nothing yet; `details.files` on that result names files
+      // *considered*, not files on disk with new content. Scan only once
+      // `applied` is true, and then only the files ast_edit actually touched
+      // (EditToolDetails-style `files`, not `input.paths`, which are the
+      // search scopes — directories and globs like `src/**/*.ts` — the edit
+      // ran over, not the files it changed).
+      targets = details.applied === true && Array.isArray(details.files)
+        ? details.files.filter((entry) => typeof entry === "string" && entry.length > 0)
         : [];
+    } else if (event.toolName === "edit" || event.toolName === "apply_patch") {
+      // The edit tool's own result details are the authoritative changed-file
+      // list for every mode, including apply_patch, whose input is a raw
+      // patch envelope rather than the `¶PATH#TAG` hashline headers
+      // `input.paths` is derived from — so `input.paths` can be empty here
+      // even though real files changed. Prefer details; fall back to input
+      // for a result that carries no details (e.g. the call errored before
+      // producing any).
+      const fromDetails = Array.isArray(details.perFileResults)
+        ? details.perFileResults
+            .map((entry) => entry && typeof entry.path === "string" ? entry.path : null)
+            .filter((entry) => entry !== null)
+        : typeof details.path === "string" && details.path.length > 0
+          ? [details.path]
+          : [];
+      if (fromDetails.length > 0) {
+        targets = fromDetails;
+      } else {
+        // `input.paths` is the authoritative multi-target list a multi-file
+        // edit carries; the runner drops the single-target
+        // `path`/`tool_input.file_path` convenience entirely once an edit
+        // touches two or more files, so reading only one of those skipped
+        // every multi-file edit.
+        const input = event.input || {};
+        const singlePath =
+          (event.tool_input && typeof event.tool_input.file_path === 'string' && event.tool_input.file_path) ||
+          (typeof input.path === 'string' && input.path) ||
+          null;
+        targets = Array.isArray(input.paths)
+          ? input.paths.filter((entry) => typeof entry === "string" && entry.length > 0)
+          : singlePath
+            ? [singlePath]
+            : [];
+      }
+    } else {
+      // write
+      const input = event.input || {};
+      const singlePath =
+        (event.tool_input && typeof event.tool_input.file_path === 'string' && event.tool_input.file_path) ||
+        (typeof input.path === 'string' && input.path) ||
+        null;
+      targets = singlePath ? [singlePath] : [];
+    }
     if (targets.length === 0) return;
     // Some tool surfaces carry a scheme-prefixed identifier that is not a
     // real filesystem target. Spawning the hook on them is wasted work — the

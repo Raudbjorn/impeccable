@@ -546,7 +546,18 @@ fn run_plate(args: &[String], io: &mut Io, cwd: &str, env: &Env, plate_id: &str)
             return 1;
         }
     }
-    let out = arg(args, "out").unwrap_or_else(|| region.get("plate").and_then(Value::as_str).unwrap_or("").to_string());
+    let out = match arg(args, "out")
+        .or_else(|| region.get("plate").and_then(Value::as_str).map(String::from))
+        .filter(|p| !p.is_empty())
+    {
+        Some(p) => p,
+        None => {
+            io.err(&format!(
+                "generate-image: region {plate_id} has no \"plate\" path in {spec_path}; re-run comp-spec --regions or pass --out <path>\n"
+            ));
+            return 1;
+        }
+    };
     if let Some(parent) = std::path::Path::new(&abs(&out)).parent() {
         let _ = std::fs::create_dir_all(parent);
     }
@@ -882,6 +893,34 @@ mod plate_tests {
         let (code, _, err) = run_capture(&cwd, HashMap::new(), &["--plate", "headline"]);
         assert_eq!(code, 1);
         assert!(err.contains("not a plate"), "stderr: {err}");
+    }
+
+    #[test]
+    fn empty_explicit_plate_path_is_refused_before_generation() {
+        // comp-spec defaults an *omitted* plate field, but passes an
+        // *explicit* empty string through unchanged. Generation must not
+        // then resolve `out` to the project directory and attempt to write
+        // a directory as the plate file.
+        let cwd = tmp();
+        let (code, _, err) = run_capture(&cwd, fake_env(), &["--prompt", "a test comp", "--out", "comp.png", "--size", "600x400"]);
+        assert_eq!(code, 0, "comp generation failed: {err}");
+        let regions = r#"{ "regions": [
+            { "id": "hero-art", "kind": "plate", "grid": "A0:E4", "note": "a decorative illustration", "plate": "" }
+        ] }"#;
+        std::fs::write(std::path::Path::new(&cwd).join("regions.json"), regions).unwrap();
+        let (mut io, _) = Io::captured("", PathBuf::from(&cwd), HashMap::new());
+        let code = comp_spec::run(
+            &["--comp", "comp.png", "--regions", "regions.json", "--spec", comp_spec::SPEC_PATH]
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(),
+            &mut io,
+        );
+        assert_eq!(code, 0, "comp-spec measure failed");
+
+        let (code, _, err) = run_capture(&cwd, fake_env(), &["--plate", "hero-art"]);
+        assert_eq!(code, 1);
+        assert!(err.contains("no \"plate\" path"), "stderr: {err}");
     }
 
     #[test]

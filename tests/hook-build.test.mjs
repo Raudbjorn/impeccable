@@ -176,8 +176,8 @@ describe('hook manifest builders', () => {
     assert.match(source, /pi\.on\("tool_result"/);
     assert.match(source, /pi\.on\("session_stop"/);
     assert.match(source, /"\.\.", "\.\.", "skills", "impeccable", "scripts", process.platform/);
-    // Filters to the two file-modifying tools; never fires on bash/read/etc.
-    assert.match(source, /event\.toolName !== "edit" && event\.toolName !== "write"/);
+    // Filters to the file-modifying tools; never fires on bash/read/etc.
+    assert.match(source, /event\.toolName !== "edit" &&\s*\n\s*event\.toolName !== "write"/);
     // Shaped exactly like Claude Code's own PostToolUse/Stop JSON so
     // hook-lib.mjs's existing shape-driven extraction (resolveTargetFiles(),
     // isStopEvent(), the stop_hook_active re-entrancy guard) needs no
@@ -227,16 +227,31 @@ describe('hook manifest builders', () => {
       'module must register tool_result and session_stop handlers',
     );
     assert.ok(/hasUriScheme\(filePath\)/.test(source), 'module must guard filePath');
-    // ast_edit mutates files like edit and write do; omitting it left a whole
-    // class of edits unscanned. apply_patch is deliberately absent: that is a
-    // Claude/Codex tool name, not one oh-my-pi has.
+    // ast_edit and apply_patch mutate files like edit and write do; omitting
+    // either left a whole class of edits unscanned. apply_patch is
+    // oh-my-pi's own toolName for the apply_patch edit mode, not only a
+    // Claude/Codex one.
     assert.match(source, /event\.toolName !== "ast_edit"/);
-    assert.doesNotMatch(source, /toolName !== "apply_patch"/);
-    // `input.paths` is the authoritative multi-target list: the runner drops
-    // the single-target `path`/`tool_input.file_path` convenience entirely
-    // once an edit touches two or more files, so reading only one of those
-    // left every multi-file edit unscanned.
+    assert.match(source, /event\.toolName !== "apply_patch"/);
+    // Buffer mode decodes each chunk independently, corrupting a multi-byte
+    // character split across a chunk boundary; setEncoding switches to a
+    // StringDecoder that buffers a trailing partial sequence.
+    assert.match(source, /child\.stdout\.setEncoding\("utf8"\)/);
+    assert.match(source, /child\.stderr\.setEncoding\("utf8"\)/);
+    // `input.paths` is the authoritative multi-target list for an edit whose
+    // result carries no per-file details: the runner drops the single-target
+    // `path`/`tool_input.file_path` convenience entirely once an edit
+    // touches two or more files, so reading only one of those left every
+    // multi-file edit unscanned.
     assert.match(source, /Array\.isArray\(input\.paths\)/);
+    // The edit tool's own result details (perFileResults / path) are
+    // authoritative over input.paths, since apply_patch mode's input is a
+    // raw patch envelope with no hashline paths to derive input.paths from.
+    assert.match(source, /Array\.isArray\(details\.perFileResults\)/);
+    assert.match(source, /details\.path/);
+    // ast_edit previews (dry-run) apply nothing; only an applied result's
+    // files are real, on-disk changes worth scanning.
+    assert.match(source, /details\.applied === true && Array\.isArray\(details\.files\)/);
     assert.match(source, /mapWithConcurrencyLimit\(scannable, MAX_CONCURRENT_SCANS, \(filePath\) => runHook/);
   });
   it('oh-my-pi adapter scans every path in a multi-file edit, guarding each for a URI scheme', () => {
@@ -245,28 +260,73 @@ describe('hook manifest builders', () => {
     // data:... under a data: URL, breaking HOOK_SCRIPT resolution), so the
     // target-selection logic is pulled out and run directly.
     const source = buildOmpHookModule();
-    const fnMatch = source.match(/const input = event\.input[\s\S]*?const targets = [\s\S]*?: \[\];/);
-    assert.ok(fnMatch, 'module must compute a multi-target list from event.input.paths');
+    const fnMatch = source.match(
+      /const details = event\.details[\s\S]*?\n(?=\s*if \(targets\.length === 0\) return;)/,
+    );
+    assert.ok(fnMatch, 'module must compute a multi-target list per toolName');
     const pickTargets = new Function(
       'event',
       `${fnMatch[0]}\nreturn targets;`,
     );
     assert.deepEqual(
-      pickTargets({ input: { paths: ['a.tsx', 'b.tsx'] } }),
+      pickTargets({ toolName: 'edit', input: { paths: ['a.tsx', 'b.tsx'] } }),
       ['a.tsx', 'b.tsx'],
-      'a multi-file edit must scan every path, not just the first',
+      'a multi-file edit with no per-file details must scan every input path, not just the first',
     );
     assert.deepEqual(
-      pickTargets({ tool_input: { file_path: 'single.tsx' } }),
+      pickTargets({ toolName: 'write', tool_input: { file_path: 'single.tsx' } }),
       ['single.tsx'],
       'a single-target Claude Code shaped event must still resolve one target',
     );
     assert.deepEqual(
-      pickTargets({ input: { path: 'single.tsx' } }),
+      pickTargets({ toolName: 'write', input: { path: 'single.tsx' } }),
       ['single.tsx'],
       'a single-target OMP shaped event must still resolve one target',
     );
     assert.deepEqual(pickTargets({}), [], 'an event with no target carries none');
+    // apply_patch is oh-my-pi's own toolName for the apply_patch edit mode
+    // (EditTool running in that mode); its input is a raw patch envelope
+    // with no hashline paths, so input.paths is unusable and the result's
+    // own details are the only authoritative source.
+    assert.deepEqual(
+      pickTargets({ toolName: 'apply_patch', input: {}, details: { path: 'patched.tsx' } }),
+      ['patched.tsx'],
+      'a single-file apply_patch result must resolve its one changed file from details.path',
+    );
+    assert.deepEqual(
+      pickTargets({
+        toolName: 'edit',
+        input: { paths: ['stale-a.tsx'] },
+        details: { perFileResults: [{ path: 'a.tsx' }, { path: 'b.tsx' }] },
+      }),
+      ['a.tsx', 'b.tsx'],
+      'a multi-file edit result must scan every file details.perFileResults names, over any input.paths',
+    );
+    assert.deepEqual(
+      pickTargets({ toolName: 'edit', input: { paths: ['fallback.tsx'] }, details: {} }),
+      ['fallback.tsx'],
+      'an edit result with no usable details must fall back to input.paths',
+    );
+    // ast_edit previews (dry-run) stage changes for a later `resolve` and
+    // apply nothing yet; scanning a preview's files would scan content that
+    // was never written.
+    assert.deepEqual(
+      pickTargets({ toolName: 'ast_edit', details: { applied: false, files: ['src/a.ts', 'src/b.ts'] } }),
+      [],
+      'an unapplied ast_edit preview must not be scanned',
+    );
+    assert.deepEqual(
+      pickTargets({ toolName: 'ast_edit', details: { applied: true, files: ['src/a.ts', 'src/b.ts'] } }),
+      ['src/a.ts', 'src/b.ts'],
+      'an applied ast_edit result must scan the files it actually touched',
+    );
+    // input.paths for ast_edit are search scopes (directories, globs like
+    // src/**/*.ts) the edit ran over, never the files it changed.
+    assert.deepEqual(
+      pickTargets({ toolName: 'ast_edit', input: { paths: ['src/**/*.ts'] }, details: { applied: true } }),
+      [],
+      'ast_edit must never fall back to input.paths, which are search scopes, not changed files',
+    );
   });
   it('oh-my-pi adapter rejects device URI tool targets before spawning hook.mjs', () => {
     // Some tool surfaces (e.g. `xd://` LSP targets, or scheme-only virtual

@@ -29,7 +29,7 @@ pass, and for anything that fails, paste the actual output. A failure at step
 ```bash
 omp --version                 # verified against omp/18.0.7
 node --version                # 20 or newer
-cd /home/svnbjrn/projects/mpccbl/integrate-upstream-2026-08
+cd "$(git rev-parse --show-toplevel)"   # the Impeccable checkout
 git log --oneline -1          # expect the oh-my-pi integration branch
 ```
 
@@ -54,7 +54,7 @@ heading rather than the side-tab you might expect.
 
 ```bash
 bun run build:release
-export IMP=/home/svnbjrn/projects/mpccbl/integrate-upstream-2026-08
+export IMP="$(git rev-parse --show-toplevel)"
 
 SCRATCH=$(mktemp -d)
 cd "$SCRATCH"

@@ -249,11 +249,25 @@ process.stdin.on('end', () => {
 
   it('covers ast_edit, and ignores tools that do not write files', async () => {
     const handlers = load();
+    // ast_edit's own result details are authoritative (oh-my-pi's
+    // AstEditToolDetails: `applied` + `files`), never input.path/paths --
+    // those are the search scopes (directories, globs) the edit ran over,
+    // not the files it changed, and a dry-run preview with `applied: false`
+    // must not be scanned at all.
     const edited = await handlers.tool_result(
-      { toolName: 'ast_edit', input: { path: 'x.ts' }, content: [] },
+      { toolName: 'ast_edit', input: { paths: ['src/**/*.ts'] }, details: { applied: true, files: ['x.ts'] }, content: [] },
       { cwd: dir },
     );
     assert.equal(edited.content.length, 1);
+
+    assert.equal(
+      await handlers.tool_result(
+        { toolName: 'ast_edit', input: { paths: ['src/**/*.ts'] }, details: { applied: false, files: ['x.ts'] }, content: [] },
+        { cwd: dir },
+      ),
+      undefined,
+      'an unapplied ast_edit preview must not trigger a scan',
+    );
 
     for (const toolName of ['bash', 'read', 'glob']) {
       assert.equal(
