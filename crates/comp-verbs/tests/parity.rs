@@ -17,6 +17,28 @@ fn fixtures() -> PathBuf {
 }
 
 #[test]
+fn usage_and_recovery_commands_use_the_engine() {
+    use impeccable_common::Io;
+    use impeccable_comp_verbs::font_match;
+
+    let (mut io, output) = Io::captured("", fixtures(), Default::default());
+    assert_eq!(comp_spec::run(&[], &mut io), 0);
+    assert_eq!(comp_spec::run(&["--unknown".into()], &mut io), 1);
+    assert_eq!(comp_diff::run(&[], &mut io), 1);
+    assert_eq!(font_match::run(&[], &mut io, &mut font_match::NoRenderer), 1);
+    assert_eq!(font_match::run(&["--measure".into(), "title".into()], &mut io, &mut font_match::NoRenderer), 1);
+    let stdout = String::from_utf8(output.stdout.borrow().clone()).unwrap();
+    let stderr = String::from_utf8(output.stderr.borrow().clone()).unwrap();
+    assert!(stdout.contains("usage: impeccable comp-spec"));
+    for command in ["comp-spec", "comp-diff", "font-match"] {
+        assert!(stderr.contains(&format!("usage: impeccable {command}")), "{stderr}");
+    }
+    assert!(stderr.contains("run impeccable comp-spec first"));
+    assert!(!stdout.contains(".mjs"));
+    assert!(!stderr.contains(".mjs"));
+}
+
+#[test]
 fn transparent_plate_prompt_preserves_paint_and_reference_spacing() {
     let dir = std::env::temp_dir().join(format!("impeccable-alpha-prompt-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();

@@ -689,7 +689,7 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
     let comp_path = arg(argv, "comp");
     let build_path = arg(argv, "build");
     let (Some(comp_path), Some(build_path)) = (comp_path, build_path) else {
-        io.err("usage: comp-diff.mjs --comp <png> --build <png> [--spec spec.json] [--out-dir dir] [--align top|stretch] [--label name] [--threshold 0.75] [--json]\n");
+        io.err("usage: impeccable comp-diff --comp <png> --build <png> [--spec spec.json] [--out-dir dir] [--align top|stretch] [--label name] [--threshold 0.75] [--json]\n");
         return 1;
     };
     let comp = match read_png(io, comp_path) {
