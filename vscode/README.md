@@ -24,4 +24,4 @@ Commands you request may edit your project or launch local previews. This is not
 
 Avoid installing another Impeccable skill copy in the same workspace or user profile: duplicate skill names can make selection ambiguous. Browser-only VS Code without a terminal is unsupported. Remote SSH, WSL, and container setups need the extension and engine on the workspace host and are not yet smoke-tested.
 
-[Documentation](https://impeccable.style/docs) · [Source and issues](https://github.com/pbakaus/impeccable)
+[Documentation](https://impeccable.style/docs) · [Source and issues](https://github.com/Raudbjorn/impeccable)

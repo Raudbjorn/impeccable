@@ -243,7 +243,7 @@ Two release kinds touch the runtime, in this order:
    pushes; `.github/workflows/release-engine.yml` builds the five targets and
    publishes the binaries with `.sha256` sidecars. The launcher, the npm shim
    and `impeccable install` download from
-   `github.com/pbakaus/impeccable/releases/download/engine-v<X>/`.
+   `github.com/Raudbjorn/impeccable/releases/download/engine-v<X>/`.
 2. **npm platform packages**, then the **skill** and **CLI** releases, which
    `scripts/check-engine-release.mjs` gates on the engine release.
 

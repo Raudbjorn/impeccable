@@ -99,7 +99,7 @@ fn launchers_reference_the_same_release_channel() {
     let sh = launcher_file("impeccable");
     let cmd = launcher_file("impeccable.cmd");
     for text in [&sh, &cmd] {
-        assert!(text.contains("https://github.com/pbakaus/impeccable/releases"));
+        assert!(text.contains("https://github.com/Raudbjorn/impeccable/releases"));
     }
     // Spot-check the engine's own URL builder against the launcher template.
     assert_eq!(

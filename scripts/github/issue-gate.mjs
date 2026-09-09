@@ -31,7 +31,7 @@ export const LABEL_DEFS = [
 export const GATE_MARKER = '<!-- impeccable-issue-gate:needs-template -->';
 export const REJECT_MARKER = '<!-- impeccable-issue-gate:reject -->';
 
-const DEFAULT_MAINTAINERS = ['pbakaus', 'abdulwahabone'];
+const DEFAULT_MAINTAINERS = ['Raudbjorn'];
 const DEFAULT_TRUSTED_MARKER_AUTHORS = ['github-actions', 'github-actions[bot]'];
 const EXEMPT_ASSOCIATIONS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
 const AI_DISCLOSURE = /^\s*(?:[-*>\s]*)ai-assisted:\s*yes\b/im;

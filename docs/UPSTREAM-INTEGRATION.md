@@ -71,7 +71,7 @@ have written somewhere temporary.
   gap that can be closed on their own.
 - The fork's `crates/` lead upstream by the `.omp` provider, `omp-hook.js`, the
   label-line-height rule, the live glob tests and now local retrieval, but the
-  launcher downloads engine binaries from `pbakaus/impeccable` and this fork
+  launcher downloads engine binaries from `Raudbjorn/impeccable` and this fork
   publishes no engine release. Anyone who does not build from source runs an
   upstream binary without that work, whatever `ENGINE_VERSION` says. The pin
   stays at main's 0.1.0 here: this branch is a merge, not a release, and moving

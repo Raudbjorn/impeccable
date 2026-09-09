@@ -114,7 +114,7 @@ if [ -n "$probing" ]; then
   exit 127
 fi
 if [ -n "$version" ] && [ "$os" != unknown ] && [ "$arch" != unknown ]; then
-  base="${IMPECCABLE_DOWNLOAD_BASE:-https://github.com/pbakaus/impeccable/releases/download}"
+  base="${IMPECCABLE_DOWNLOAD_BASE:-https://github.com/Raudbjorn/impeccable/releases/download}"
   asset="impeccable-$os-$arch"
   [ "$os" = windows ] && asset="$asset.exe"
   url="$base/engine-v$version/$asset"
@@ -183,5 +183,5 @@ if [ -n "$version" ] && [ "$os" != unknown ] && [ "$arch" != unknown ]; then
 fi
 
 echo "impeccable: no engine binary for $os-$arch found (looked in $bin, $cached, PATH)." >&2
-echo "Download impeccable-$os-$arch from https://github.com/pbakaus/impeccable/releases (tag engine-v$version) into $cache_root/bin/$version/impeccable$exe (then chmod +x), or set IMPECCABLE_BIN to a preinstalled engine binary. Docs: https://impeccable.style" >&2
+echo "Download impeccable-$os-$arch from https://github.com/Raudbjorn/impeccable/releases (tag engine-v$version) into $cache_root/bin/$version/impeccable$exe (then chmod +x), or set IMPECCABLE_BIN to a preinstalled engine binary. Docs: https://impeccable.style" >&2
 exit 127
