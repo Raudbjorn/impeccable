@@ -12,11 +12,11 @@
 tests/fixtures/** -text
 tests/oracle/** -text
 
-# Generated output is resolved by rebuilding its source, never by combining
-# rendered copies. The built-in binary merge driver leaves a conflict without
-# inserting markers; run bun run build:release (provider output) or
-# cargo xtask bundle (live assets), then stage the regenerated files.
-[attr]generated linguist-generated=true -diff merge=binary
+# Generated provider files are text: allow ordinary diffs and three-way merges
+# instead of forcing a binary conflict whenever both branches change a file.
+# After merging sources, run bun run build:release and stage the regenerated
+# output. Attributes cannot resolve semantic conflicts or delete/modify pairs.
+[attr]generated linguist-generated=true
 .claude/skills/impeccable/** generated
 .gemini/skills/impeccable/** generated
 .dsh/skills/impeccable/** generated
@@ -38,5 +38,7 @@ plugin/** generated
 .github/hooks/impeccable.json generated
 .omp/hooks/post/impeccable.js generated
 .opencode/commands/impeccable.md generated
-crates/live/assets/detect-antipatterns-browser.js generated
+# The compiled detector bundle embeds WASM; regenerate it with cargo xtask
+# bundle rather than merging its payload. Registry JSON remains mergeable text.
+crates/live/assets/detect-antipatterns-browser.js generated -diff merge=binary
 crates/live/assets/antipatterns.json generated
