@@ -17,12 +17,8 @@ const COMMON_INFRA_PATTERNS = [
   /^bun\.lock$/,
   /^scripts\/run-tests\.mjs$/,
   /^scripts\/test-suites\.mjs$/,
-  /^scripts\/ci-test-plan\.mjs$/,
   /^scripts\/lib\/(live-server-processes|process-group|test-orphan-reaper)\.mjs$/,
   /^tests\/lib\/live-servers\.mjs$/,
-  /^scripts\/lib\/(live-server-processes|process-group|test-orphan-reaper)\.mjs$/,
-  /^tests\/lib\/live-servers\.mjs$/,
-  /^\.github\/workflows\/ci\.yml$/,
 ];
 
 export const SUITES = {
@@ -35,7 +31,6 @@ export const SUITES = {
       /^ENGINE_VERSION$/,
       /^README(\.npm)?\.md$/,
       /^vscode\//,
-      /^\.github\/workflows\/release-engine\.yml$/,
       /^cli\/bin\//,
       /^cli\/engine\/registry\//,
     ],
@@ -54,8 +49,6 @@ export const SUITES = {
           'tests/validate-plugin-versions.test.js',
           'tests/validate-plugin-manifest.test.js',
           'tests/plugin-paths.test.js',
-          'tests/release-engine-workflow.test.js',
-          'tests/workflow-security.test.js',
           'tests/check-generated.test.js',
         ],
       },
@@ -69,14 +62,12 @@ export const SUITES = {
         // is safe.
         timeoutMs: 180000,
         files: [
-          'tests/ci-test-plan.test.mjs',
           'tests/cli-shim.test.mjs',
           'tests/launcher-download.test.mjs',
           'tests/publish-platform-packages.test.mjs',
           'tests/hook-build.test.mjs',
           'tests/openai-plugin.test.mjs',
           'tests/vscode-extension.test.mjs',
-          'tests/github-issue-gate.test.mjs',
           'tests/design-context-export.test.mjs',
           'tests/design-context-import.test.mjs',
           'tests/design-context-portability.test.mjs',

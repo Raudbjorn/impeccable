@@ -44,9 +44,8 @@ certificates. Don't pin a leaf certificate thumbprint: Azure rotates them.
 If signing or verification fails, fix the cause and retry; don't add an
 unsigned fallback or weaken the environment gate.
 
-The workflow configuration is regression-tested by
-`bun test tests/release-engine-workflow.test.js`. An actual protected engine
-release is still needed to verify Azure OIDC and Authenticode end to end.
+This describes upstream's GitHub Actions signing setup; this fork carries no
+`.github/workflows/` and does not run or test it.
 
 References: [Azure signing roles](https://learn.microsoft.com/en-us/azure/artifact-signing/tutorial-assign-roles),
 [official signing action](https://github.com/Azure/artifact-signing-action).
