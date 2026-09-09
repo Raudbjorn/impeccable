@@ -738,11 +738,16 @@ describe('generated hook artifacts in repo', { skip: SYNCED ? false : 'generated
     }
   });
 
-  it('does not generate stale Codex hook packaging artifacts', () => {
+  it('does not regenerate pruned providers or stale plugin artifacts', () => {
     for (const rel of [
       '.claude/hooks/hooks.json',
       '.agents/hooks',
       '.agents/plugins/marketplace.json',
+      ...['.cursor', '.grok', '.hermes', '.qoder', '.rovodev', '.trae', '.trae-cn']
+        .map((provider) => `${provider}/skills/impeccable`),
+      '.cursor-plugin',
+      'cursor-plugin',
+      'plugin/.grok-plugin',
       'plugin/.codex-plugin',
       'plugin/assets',
       'plugin-codex',
