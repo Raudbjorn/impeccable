@@ -78,6 +78,16 @@ pub fn automatic_hook_mode(ctx: &Ctx, cwd: &str, env: &Env, provider: &Provider)
     if !hook_enabled_at(&active_root, env) {
         return "none";
     }
+    if provider.id == "omp" {
+        for root in hook_manifest_search_roots(ctx, cwd, env) {
+            if hook_enabled_at(&root, env)
+                && safe_read(&jsp::join(&[&root, ".omp/hooks/post/impeccable.js"]))
+                    .is_some_and(|s| s.contains("export default function impeccableHook(") && s.contains("\"impeccable.cmd\""))
+            {
+                return "stop";
+            }
+        }
+    }
     let manifests = hook_manifests_for(&provider.id);
     for root in hook_manifest_search_roots(ctx, cwd, env) {
         // A manifest can live above the resolved product. Honor the hook
@@ -172,7 +182,7 @@ fn append_image_gen_directive(parts: &mut Vec<String>, env: &Env, provider: &Pro
     parts.push([
         "IMAGE_GEN_AVAILABLE: your harness-native image tool is always the first choice for generation; use it whenever one exists.".to_string(),
         "This environment also carries an OpenAI key as the fallback for harnesses with no native tool:".to_string(),
-        format!("`{} --prompt \"...\" --out <file>` ({}, billed to the user's key; say so before the first render, and never reach for it when a native tool exists).", provider.verb_cmd("generate-image"), crate::generate_image::DEFAULT_MODEL),
+        format!("`{} --prompt \"...\" --out <file>` (gpt-image-2, billed to the user's key; say so before the first render, and never reach for it when a native tool exists).", provider.verb_cmd("generate-image")),
         "Visualizing a direction before building it measurably strengthens the result.".to_string(),
     ].join(" "));
 }

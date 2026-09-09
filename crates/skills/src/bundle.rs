@@ -687,6 +687,14 @@ fn agent_artifact(provider: &str) -> Option<AgentArtifact> {
             user_dir: |home| jsp::join(&[home, ".cursor", "agents"]),
             user_shadows_project: false,
         }),
+        // oh-my-pi's user-scope skills live under ~/.omp/agent/skills (the
+        // same home-dir override providers.rs uses), so its agents follow
+        // the same `agent` segment: ~/.omp/agent/agents/.
+        ".omp" => Some(AgentArtifact {
+            ext: ".md",
+            user_dir: |home| jsp::join(&[home, ".omp", "agent", "agents"]),
+            user_shadows_project: false,
+        }),
         _ => None,
     }
 }
@@ -1072,5 +1080,41 @@ mod tests {
             assert_eq!(requested[1], format!("{release}.sig.json"));
             util::rm_rf(&root);
         }
+    }
+
+    #[test]
+    fn copy_provider_agents_covers_omp_project_and_user_scope() {
+        // Regression: agent_artifact() had no `.omp` arm, so `.omp` returned
+        // early and neither `.omp/agents/` nor `~/.omp/agent/agents/` ever
+        // got the shipped subagents through the normal install/update flow,
+        // even though the bundle carries them (agentFormat: 'omp-md').
+        let root = tmp_dir("omp-agents");
+        let home = format!("{root}/home");
+        let project = format!("{root}/project");
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::create_dir_all(&project).unwrap();
+        let bundle_dir = format!("{root}/bundle");
+        std::fs::create_dir_all(format!("{bundle_dir}/.omp/agents")).unwrap();
+        std::fs::write(format!("{bundle_dir}/.omp/agents/impeccable-asset-producer.md"), "agent body").unwrap();
+
+        let sys = Sys { env: util::Env::new(), cwd: project.clone(), home: home.clone() };
+
+        let project_results = copy_provider_agents(&sys, &bundle_dir, &project, &[".omp"], Some(Scope::Project)).unwrap();
+        assert_eq!(project_results.len(), 1);
+        assert_eq!(project_results[0].written, 1);
+        assert_eq!(
+            std::fs::read_to_string(format!("{project}/.omp/agents/impeccable-asset-producer.md")).unwrap(),
+            "agent body"
+        );
+
+        let user_results = copy_provider_agents(&sys, &bundle_dir, &home, &[".omp"], Some(Scope::User)).unwrap();
+        assert_eq!(user_results.len(), 1);
+        assert_eq!(user_results[0].written, 1);
+        assert_eq!(
+            std::fs::read_to_string(format!("{home}/.omp/agent/agents/impeccable-asset-producer.md")).unwrap(),
+            "agent body"
+        );
+
+        util::rm_rf(&root);
     }
 }

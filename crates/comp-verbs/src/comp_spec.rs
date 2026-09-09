@@ -645,7 +645,7 @@ pub fn plate_prompt(spec: &Value, region: &Value) -> String {
     plate_prompt_background(spec, region, false)
 }
 
-fn plate_prompt_background(spec: &Value, region: &Value, transparent: bool) -> String {
+pub fn plate_prompt_background(spec: &Value, region: &Value, transparent: bool) -> String {
     let world = spec
         .get("palette")
         .and_then(Value::as_array)

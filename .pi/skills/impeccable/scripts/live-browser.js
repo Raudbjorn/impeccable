@@ -7173,7 +7173,7 @@
             // generation and triggers removeChild errors on the next HMR
             // commit. Let HMR own reconciliation while variants stream in;
             // source injection runs only on the final `done` (which keeps its
-            // 750ms settle + retry ladder for non-HMR harnesses like Cursor).
+            // 750ms settle + retry ladder for non-HMR harnesses).
             // The visible progress count still advances from the variant
             // MutationObserver as HMR lands each variant.
           }

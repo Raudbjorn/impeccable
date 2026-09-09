@@ -1,0 +1,80 @@
+{
+  "heuristic_id": "err",
+  "heuristic_name": "Help Users Recognize, Diagnose, and Recover from Errors",
+  "nielsen_index": 9,
+  "short_description": "Error messages should use plain language, precisely indicate the problem, and constructively suggest a solution.",
+  "catalog": {
+    "positive": [
+      {
+        "id": "err-pos-plain-language",
+        "impact": 2,
+        "definition": "Error messages are written in plain language without codes or jargon",
+        "evidence_required": "cite the message"
+      },
+      {
+        "id": "err-pos-specific-problem",
+        "impact": 2,
+        "definition": "Error message names the specific field or value that caused the problem",
+        "evidence_required": "cite the message and what it identifies"
+      },
+      {
+        "id": "err-pos-actionable-fix",
+        "impact": 3,
+        "definition": "Error message suggests a concrete next step the user can take",
+        "evidence_required": "cite the message and the suggested action"
+      },
+      {
+        "id": "err-pos-error-near-source",
+        "impact": 1,
+        "definition": "Error appears next to the field or control that caused it",
+        "evidence_required": "name the field and the error placement"
+      },
+      {
+        "id": "err-pos-preserves-input",
+        "impact": 2,
+        "definition": "Error condition does not wipe the user's input",
+        "evidence_required": "name the form and what is preserved"
+      }
+    ],
+    "negative": [
+      {
+        "id": "err-neg-generic-something-wrong",
+        "impact": -2,
+        "definition": "Error message is generic (\"Something went wrong\" / \"Error\") with no detail",
+        "evidence_required": "cite the message"
+      },
+      {
+        "id": "err-neg-error-code-only",
+        "impact": -2,
+        "definition": "Error surfaces a numeric or technical error code with no plain-language explanation",
+        "evidence_required": "cite the code or message"
+      },
+      {
+        "id": "err-neg-no-suggestion",
+        "impact": -1,
+        "definition": "Error names the problem but offers no suggestion for how to recover",
+        "evidence_required": "cite the message"
+      },
+      {
+        "id": "err-neg-error-far-from-source",
+        "impact": -1,
+        "definition": "Error message appears in a banner or modal far from the offending field",
+        "evidence_required": "name the field and the error placement"
+      },
+      {
+        "id": "err-neg-input-wiped",
+        "impact": -2,
+        "definition": "Error wipes the form, requiring user to re-enter all data",
+        "evidence_required": "name the form and the wiped fields"
+      }
+    ],
+    "critical_negative": [
+      {
+        "id": "err-neg-blocking-cryptic",
+        "impact": -5,
+        "definition": "Critical error blocks the user with a cryptic message and no path forward",
+        "evidence_required": "cite the message and the blocked state"
+      }
+    ]
+  }
+}

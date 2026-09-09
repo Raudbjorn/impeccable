@@ -1,0 +1,7 @@
+{
+  "stdout": "impeccable compose <setup|source|derive|validate|review|adopt|select|export|assess|verify> [--input file|-]\nCommands accept one JSON object on stdin or --input. See reference/compose.md.\n",
+  "stderr": "",
+  "exit": 0,
+  "signal": null,
+  "files": {}
+}

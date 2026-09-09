@@ -9,7 +9,7 @@ pub const API_BASE: &str = "https://impeccable.style";
 
 pub const PROVIDER_DIRS: &[&str] = &[
     ".claude", ".cursor", ".dsh", ".gemini", ".agents", ".agent", ".github", ".grok", ".hermes", ".kiro",
-    ".opencode", ".pi", ".qoder", ".trae", ".trae-cn", ".rovodev", ".vibe",
+    ".opencode", ".pi", ".qoder", ".trae", ".trae-cn", ".rovodev", ".vibe", ".veto", ".omp",
 ];
 
 const PROVIDER_ALIASES: &[(&str, &str)] = &[
@@ -39,6 +39,8 @@ const PROVIDER_ALIASES: &[(&str, &str)] = &[
     ("trae", ".trae"),
     ("trae-cn", ".trae-cn"),
     ("vibe", ".vibe"),
+    ("veto", ".veto"),
+    ("omp", ".omp"),
 ];
 
 const PROVIDER_DISPLAY: &[(&str, &str, &str)] = &[
@@ -59,11 +61,13 @@ const PROVIDER_DISPLAY: &[(&str, &str, &str)] = &[
     (".trae", "Trae", "trae"),
     (".trae-cn", "Trae CN", "trae-cn"),
     (".vibe", "Mistral Vibe", "vibe"),
+    (".veto", "Veto", "veto"),
+    (".omp", "oh-my-pi", "omp"),
 ];
 
 pub const PROVIDER_INPUT_ORDER: &[&str] = &[
     "antigravity", "claude", "codex", "cursor", "dsh", "gemini", "github", "grok", "hermes", "kiro",
-    "opencode", "pi", "qoder", "trae", "trae-cn", "rovo-dev", "vibe",
+    "opencode", "pi", "qoder", "trae", "trae-cn", "rovo-dev", "vibe", "veto", "omp",
 ];
 
 pub const DEFAULT_TARGETS: &[&str] = &[".claude", ".agents"];
@@ -119,13 +123,16 @@ fn home_skills_dir_override(env: &Env, cwd: &str, provider: &str, home: &str) ->
         ".dsh" => Some(jsp::join(&[&dsh_global_home(env, cwd, home), "skills"])),
         ".hermes" => Some(jsp::join(&[&hermes_global_home(env, cwd, home), "skills"])),
         ".pi" => Some(jsp::join(&[home, ".pi", "agent", "skills"])),
+        // oh-my-pi reads user skills from ~/.omp/agent/skills, the same
+        // `agent` segment Pi uses; ~/.omp/skills is never scanned.
+        ".omp" => Some(jsp::join(&[home, ".omp", "agent", "skills"])),
         ".opencode" => Some(jsp::join(&[&opencode_global_config_dir(env, home), "skills"])),
         _ => None,
     }
 }
 
 fn has_home_override(provider: &str) -> bool {
-    matches!(provider, ".agent" | ".dsh" | ".hermes" | ".pi" | ".opencode")
+    matches!(provider, ".agent" | ".dsh" | ".hermes" | ".pi" | ".omp" | ".opencode")
 }
 
 /// Everything the scans need from the process: env, cwd, and the resolved
@@ -480,6 +487,8 @@ const GLOBAL_HARNESS_HINTS: &[Hint] = &[
     Hint::Home(".qoder", ".qoder"),
     Hint::Home(".rovodev", ".rovodev"),
     Hint::Home(".vibe", ".vibe"),
+    Hint::Home(".veto", ".veto"),
+    Hint::Home(".omp", ".omp"),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -784,6 +793,111 @@ mod tests {
     use super::*;
 
     #[test]
+    fn veto_install_detection_and_update() {
+        assert_eq!(parse_provider_list("omp,.omp"), (vec![".omp"], vec![]));
+        assert_eq!(parse_provider_list("veto,.veto"), (vec![".veto"], vec![]));
+        assert_eq!(provider_display_name(".veto"), "Veto");
+        assert!(PROVIDER_INPUT_ORDER.contains(&"veto"));
+        let root = std::env::temp_dir().join(format!(
+            "impeccable-veto-providers-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        let project = root.join("project");
+        let home = root.join("home");
+        let sys = Sys {
+            env: Env::new(),
+            cwd: project.to_string_lossy().into_owned(),
+            home: home.to_string_lossy().into_owned(),
+        };
+        for (dir, scope) in [(&project, Scope::Project), (&home, Scope::User)] {
+            let skills = dir.join(".veto/skills/impeccable");
+            std::fs::create_dir_all(&skills).unwrap();
+            std::fs::write(skills.join("SKILL.md"), "---\nversion: 9.9.9\n---\n").unwrap();
+            let dir = dir.to_string_lossy();
+            assert_eq!(sys.find_installed_providers(&dir, Some(scope)), vec![".veto"]);
+            assert_eq!(sys.find_impeccable_providers(&dir, Some(scope)), vec![".veto"]);
+            assert_eq!(sys.get_skills_version(&dir, Some(scope)).as_deref(), Some("9.9.9"));
+            assert!(matches!(
+                sys.resolve_update_target(&sys.cwd, Some(scope)),
+                Some(UpdateTarget::Resolved { providers, .. }) if providers == vec![".veto"]
+            ));
+        }
+        let detections = sys.collect_install_detections(&sys.cwd);
+        for scope in [Scope::Project, Scope::User] {
+            assert!(detections.iter().any(|d| d.provider == ".veto" && d.scope == scope));
+        }
+        assert_eq!(sys.resolve_install_targets(&sys.cwd, None), vec![".veto"]);
+        let bundle = root.join("bundle");
+        std::fs::create_dir_all(bundle.join(".omp/hooks/post")).unwrap();
+        std::fs::write(bundle.join(".omp/hooks/post/impeccable.js"), impeccable_context::provider::OMP_HOOK_MODULE).unwrap();
+        let written = crate::hook_manifest::copy_provider_hooks(
+            &sys, &bundle.to_string_lossy(), &sys.cwd, &[".omp"], false, Some(&sys.home), Some(Scope::User)
+        ).unwrap();
+        assert_eq!(written, vec![".omp"]);
+        assert!(crate::hook_manifest::hook_installed_for_provider(&sys.cwd, ".omp"));
+        let module = std::fs::read_to_string(project.join(".omp/hooks/post/impeccable.js")).unwrap();
+        // Global installs place the skill under the home-dir override
+        // (~/.omp/agent/skills), never the bare ~/.omp/skills.
+        assert!(module.contains(&crate::hook_manifest::json_string(&jsp::join(&[&sys.home, ".omp/agent/skills/impeccable/scripts/impeccable"]))));
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn omp_hook_launcher_follows_the_scope_the_skill_was_installed_at() {
+        // A global update writes hooks into the home dir itself, so
+        // skill_root == root == home and the old `skill_root != root` guard
+        // never fired: the module kept its relative launcher and resolved to
+        // ~/.omp/skills, which a user-scope install never populates. Scope is
+        // what decides where the skill sits, so scope is what gates this.
+        let root = std::env::temp_dir().join(format!(
+            "impeccable-omp-hook-scope-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        let home = root.join("home");
+        let sys = Sys {
+            env: Env::new(),
+            cwd: root.join("project").to_string_lossy().into_owned(),
+            home: home.to_string_lossy().into_owned(),
+        };
+        let bundle = root.join("bundle");
+        std::fs::create_dir_all(bundle.join(".omp/hooks/post")).unwrap();
+        std::fs::write(bundle.join(".omp/hooks/post/impeccable.js"), impeccable_context::provider::OMP_HOOK_MODULE).unwrap();
+        let bundle_dir = bundle.to_string_lossy().into_owned();
+
+        // Global update: root, skill_root and home are the same directory.
+        crate::hook_manifest::copy_provider_hooks(
+            &sys, &bundle_dir, &sys.home, &[".omp"], false, None, Some(Scope::User)
+        ).unwrap();
+        let module = std::fs::read_to_string(home.join(".omp/hooks/post/impeccable.js")).unwrap();
+        assert!(
+            module.contains(&crate::hook_manifest::json_string(&jsp::join(&[&sys.home, ".omp/agent/skills/impeccable/scripts/impeccable"]))),
+            "a user-scope hook must point at the home-dir override, not the relative default"
+        );
+
+        // Project scope in that same directory keeps the relative form: the
+        // skills really are at <root>/.omp/skills there, so absolutizing it
+        // to the agent/ override would break a working install. This is the
+        // case `sys.is_home_dir(root)` would have gotten wrong.
+        let project_in_home = root.join("home2");
+        let sys2 = Sys {
+            env: Env::new(),
+            cwd: project_in_home.to_string_lossy().into_owned(),
+            home: project_in_home.to_string_lossy().into_owned(),
+        };
+        crate::hook_manifest::copy_provider_hooks(
+            &sys2, &bundle_dir, &sys2.cwd, &[".omp"], false, None, Some(Scope::Project)
+        ).unwrap();
+        let module = std::fs::read_to_string(project_in_home.join(".omp/hooks/post/impeccable.js")).unwrap();
+        assert!(!module.contains("agent/skills"), "a project-scope hook must stay relative: {module}");
+        assert_eq!(module, impeccable_context::provider::OMP_HOOK_MODULE, "the project-scope module is the bundled one, unmodified");
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn provider_aliases_resolve() {
         assert_eq!(normalize_provider_name("codex"), Some(".agents"));
         assert_eq!(normalize_provider_name(".Claude"), Some(".claude"));
@@ -882,6 +996,22 @@ mod tests {
         assert_eq!(extract_version("---  \nversion: 4.1.3\n---  \n").as_deref(), Some("4.1.3"));
         assert_eq!(extract_version("version: 4.1.3\n"), None);
         assert_eq!(extract_version("---\nversion:\n---\n"), None);
+    }
+
+    #[test]
+    fn omp_global_scope_reads_the_agent_skills_dir_not_the_bare_dot_omp() {
+        // P0: oh-my-pi reads user skills from ~/.omp/agent/skills, not
+        // ~/.omp/skills. Before this override existed, `--scope global`
+        // installed to a path the harness never scans.
+        let home = std::env::temp_dir().join(format!(
+            "impeccable-omp-home-override-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        let sys = Sys { env: Env::new(), cwd: home.to_string_lossy().into_owned(), home: home.to_string_lossy().into_owned() };
+        let home_str = home.to_string_lossy();
+        assert_eq!(sys.user_provider_skills_dir(&home_str, ".omp"), jsp::join(&[&home_str, ".omp", "agent", "skills"]));
+        assert!(has_home_override(".omp"));
     }
 
     #[test]

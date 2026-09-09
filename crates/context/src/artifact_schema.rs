@@ -5,6 +5,7 @@ use regex::Regex;
 
 pub const PRODUCT_SCHEMA_VERSION: i64 = 1;
 pub const DESIGN_SIDECAR_SCHEMA_VERSION: i64 = 2;
+pub const COMPOSE_SCHEMA_VERSION: u64 = 1;
 pub const PRODUCT_V4_SECTIONS: [&str; 4] = ["Positioning", "Operating Context", "Evidence on Hand", "Product Principles"];
 pub const PRODUCT_DEPRECATED_SECTIONS: [(&str, &str); 1] = [(
     "Register",

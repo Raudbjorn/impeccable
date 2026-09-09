@@ -146,6 +146,17 @@ function tinyPng() {
   const idat = zlib.deflateSync(Buffer.from([0, 255, 0, 0]));
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), pngChunk('IHDR', ihdr), pngChunk('IDAT', idat), pngChunk('IEND', Buffer.alloc(0))]);
 }
+// A PNG carrying the literal bytes `IEND` inside a tEXt chunk, before the real
+// terminator chunk. An embedder that located the terminator with a byte search
+// (buf.indexOf('IEND')) would splice at the decoy and corrupt the file; the
+// engine walks the chunk list instead. Nothing else in the corpus has metadata
+// that can impersonate the terminator.
+function pngWithIendDecoy() {
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(1, 0); ihdr.writeUInt32BE(1, 4); ihdr[8] = 8; ihdr[9] = 2; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
+  const idat = zlib.deflateSync(Buffer.from([0, 255, 0, 0]));
+  const decoy = pngChunk('tEXt', Buffer.from('Comment\u0000synthetic IEND source marker', 'latin1'));
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), pngChunk('IHDR', ihdr), decoy, pngChunk('IDAT', idat), pngChunk('IEND', Buffer.alloc(0))]);
+}
 function tinyJpeg() {
   // SOI, APP0 (JFIF), SOS, EOI. Enough structure for the COM reader/writer.
   const app0 = Buffer.from([0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00]);
@@ -576,6 +587,12 @@ const cases = [
     { args: ['assets/a.png', '--read'] },
   ] },
   { id: 'embed-png-malformed', verb: 'embed-prompt', workspace: 'ctx-empty', setup: (ws) => { imagesSetup(ws); fs.writeFileSync(path.join(ws, 'assets/bad.png'), Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('garbage-not-chunks')])); }, args: ['assets/bad.png', '--prompt', 'x'], env: env(), files: ['assets/bad.png*'] },
+  { id: 'embed-png-iend-in-metadata', verb: 'embed-prompt', workspace: 'ctx-empty', setup: (ws) => { imagesSetup(ws); fs.writeFileSync(path.join(ws, 'assets/iend.png'), pngWithIendDecoy()); }, env: env(), files: ['assets/iend.png*'], steps: [
+    { args: ['assets/iend.png', '--prompt', 'First production prompt.'] },
+    { args: ['assets/iend.png', '--read'] },
+    { args: ['assets/iend.png', '--prompt', 'Replacement production prompt.'] },
+    { args: ['assets/iend.png', '--read'] },
+  ] },
   { id: 'embed-jpeg', verb: 'embed-prompt', workspace: 'ctx-empty', setup: imagesSetup, env: env(), files: ['assets/b.jpg*'], steps: [
     { args: ['assets/b.jpg', '--prompt', 'JPEG prompt one.'] },
     { args: ['assets/b.jpg', '--read'] },
@@ -632,7 +649,7 @@ const cases = [
   { id: 'csp-proxy-src', verb: 'detect-csp', workspace: 'ctx-csp-none', setup: (ws) => write(ws, 'src/proxy.ts', PROXY_CSP_SOURCE), env: env() },
   {
     id: 'csp-proxy-nested-app', verb: 'detect-csp', workspace: 'ctx-csp-none',
-    setup: (ws) => { write(ws, 'apps/web/app/page.tsx', 'export default function Page() { return null; }\n'); write(ws, 'apps/web/proxy.ts', PROXY_CSP_SOURCE); },
+    setup: (ws) => { write(ws, 'apps/web/next.config.mjs', 'export default {};\n'); write(ws, 'apps/web/app/page.tsx', 'export default function Page() { return null; }\n'); write(ws, 'apps/web/proxy.ts', PROXY_CSP_SOURCE); },
     env: env(),
   },
   {

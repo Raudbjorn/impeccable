@@ -1,0 +1,7 @@
+{
+  "stdout": "",
+  "stderr": "generate-image: --min NaN is not a finite number\n",
+  "exit": 1,
+  "signal": null,
+  "files": {}
+}

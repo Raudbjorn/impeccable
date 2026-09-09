@@ -119,8 +119,7 @@ pub fn check_typography(dom: &dyn Dom) -> Vec<BrowserFinding> {
         if ff.is_empty() {
             continue;
         }
-        let stack: Vec<String> = ff
-            .split(',')
+        let stack: Vec<String> = crate::fonts::split_font_family_list(&ff).into_iter()
             .map(|f| js::to_lower_case(&strip_edge_quotes(js::trim(f))))
             .collect();
         // JS-PARITY: checks.mjs#checkTypography uses primaryFontFace(ff) whose

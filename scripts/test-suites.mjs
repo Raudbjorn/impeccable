@@ -37,6 +37,7 @@ export const SUITES = {
       /^vscode\//,
       /^\.github\/workflows\/release-engine\.yml$/,
       /^cli\/bin\//,
+      /^cli\/engine\/registry\//,
     ],
     commands: [
       {
@@ -55,6 +56,7 @@ export const SUITES = {
           'tests/plugin-paths.test.js',
           'tests/release-engine-workflow.test.js',
           'tests/workflow-security.test.js',
+          'tests/check-generated.test.js',
         ],
       },
       {
@@ -71,11 +73,19 @@ export const SUITES = {
           'tests/cli-shim.test.mjs',
           'tests/launcher-download.test.mjs',
           'tests/publish-platform-packages.test.mjs',
-          'tests/github-sheriff.test.mjs',
           'tests/hook-build.test.mjs',
           'tests/openai-plugin.test.mjs',
-          'tests/cursor-plugin.test.mjs',
           'tests/vscode-extension.test.mjs',
+          'tests/github-issue-gate.test.mjs',
+          'tests/design-context-export.test.mjs',
+          'tests/design-context-import.test.mjs',
+          'tests/design-context-portability.test.mjs',
+          'tests/score-evidence.test.mjs',
+          'tests/compose.test.mjs',
+          'tests/visual-cues.test.mjs',
+          'tests/omp-hook-module.test.mjs',
+          'tests/omp-plugin-layout.test.mjs',
+          'tests/prompt-budget.test.mjs',
           'tests/process-group.test.mjs',
           'tests/release.test.mjs',
           'tests/bundle-signing.test.mjs',
@@ -129,7 +139,7 @@ export const SUITES = {
     commands: [
       {
         runner: 'node',
-        files: ['tests/extension-build.test.mjs'],
+        files: ['tests/extension-build.test.mjs', 'tests/detect-static-html-skill-install.test.mjs'],
       },
     ],
   },
@@ -191,6 +201,7 @@ export const SUITES = {
       /^skill\/agents\//,
       /^scripts\/build\.js$/,
       /^scripts\/lib\/validate-plugin-manifest\.js$/,
+      /^scripts\/lib\/plugin-paths\.js$/,
       /^tests\/plugin-e2e\.test\.mjs$/,
     ],
     commands: [
