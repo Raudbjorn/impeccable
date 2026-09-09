@@ -3,7 +3,7 @@
 LLM-backed scenarios that verify how the impeccable skill drives context,
 command-reference, new-work, and native-platform loading. Each scenario runs
 against one current model from each supported provider (Anthropic, OpenAI,
-Google, DeepSeek).
+Google, DeepSeek, MiniMax).
 
 These are the tests you re-run when you refactor anything in SKILL.md's
 `## Setup` section. They fail when the agent stops following the loading
@@ -16,11 +16,18 @@ bun run test:skill-behavior
 IMPECCABLE_SKILL_BEHAVIOR_VERBOSE=1 bun run test:skill-behavior   # dump per-scenario traces
 IMPECCABLE_SKILL_BEHAVIOR_MODELS=claude-sonnet-5 bun run test:skill-behavior   # scope to one model
 IMPECCABLE_SKILL_BEHAVIOR_EFFORT=xhigh bun run test:skill-behavior             # OpenAI reasoning effort (default: high)
+export MINIMAX_API_KEY="$(minimax-api-key)"
+IMPECCABLE_SKILL_BEHAVIOR_MODELS=MiniMax-M3 bun run test:skill-behavior
 ```
 
 Requires `.env` at repo root with at least one of `ANTHROPIC_API_KEY`,
-`OPENAI_API_KEY`, `GOOGLE_CLOUD_API_KEY`, `DEEPSEEK_API_KEY`. Providers without a key are
+`OPENAI_API_KEY`, `GOOGLE_CLOUD_API_KEY`, `DEEPSEEK_API_KEY`, `MINIMAX_API_KEY`. Providers without a key are
 skipped, not failed.
+
+Shell tools require Linux with `bwrap` (Bubblewrap). Commands run with their own
+process namespace and temporary directory. Only the fixture workspace persists writes; browser configuration and caches use the private temporary directory.
+This prevents model-authored cleanup commands from killing other test browsers.
+The read tool delivers local images as image content for vision-capable models, including MiniMax.
 
 Also requires the engine binary (`bun run fetch:engine`, or `IMPECCABLE_BIN`).
 The staged skill dir ships the launcher (`scripts/impeccable`); the harness
@@ -409,3 +416,16 @@ loading the sub-command reference. Stronger SKILL.md wording (MUST,
 "non-optional", reordered earlier) didn't move it; this looks like a
 model-floor behavior rather than a skill ambiguity. Claude and Gemini
 honor the load.
+
+MiniMax uses the installed Anthropic-compatible provider with adaptive thinking and a 32,768-token output budget; a measured 16k response exhausted its budget before emitting the edit. `MiniMax-M3` joins the default lineup; missing keys still skip their provider. Its routing checks use the same six-step allowance as Gemini.
+
+For paid live checks with MiniMax:
+
+```sh
+export MINIMAX_API_KEY="$(minimax-api-key)"
+IMPECCABLE_E2E_AGENT=llm IMPECCABLE_E2E_LLM_PROVIDER=minimax bun run test:live-e2e
+IMPECCABLE_E2E_LLM_PROVIDER=minimax bun run test:live-e2e-accept-cleanup
+IMPECCABLE_E2E_LLM_PROVIDER=minimax bun run test:live-svelte-adapter-deepseek
+```
+
+The last command retains its existing name for compatibility; its provider is selectable. MiniMax receives annotated screenshots automatically as base64 image blocks. Unannotated requests remain text-only.

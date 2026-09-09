@@ -77,6 +77,9 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Install shell sandbox
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+
       - name: Run core tests
         run: bun run test:core
 
@@ -618,6 +621,7 @@ jobs:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       GOOGLE_CLOUD_API_KEY: ${{ secrets.GOOGLE_CLOUD_API_KEY }}
+      MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -634,6 +638,9 @@ jobs:
 
       - name: Install dependencies
         run: bun install
+
+      - name: Install shell sandbox
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
 
       - name: Run skill behavior tests
         run: bun run test:skill-behavior

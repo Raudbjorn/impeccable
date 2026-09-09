@@ -28,6 +28,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { getProviderOptions } from './providers.mjs';
 import { ENGINE_MISSING_MESSAGE, findEngineBinary } from '../lib/engine-bin.mjs';
+import { imageSource } from '../../skill/scripts/image-analyze.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -159,9 +160,16 @@ function safeResolve(root, userPath) {
 
 function execBash(workspace, command, timeoutMs = 20_000, extraEnv = {}) {
   return new Promise((resolve) => {
-    const proc = spawn('bash', ['-lc', command], {
+    // Model-authored shell commands must not kill host browsers or write outside the fixture.
+    const proc = spawn('bwrap', [
+      '--ro-bind', '/', '/', '--bind', workspace, workspace,
+      '--dev', '/dev', '--proc', '/proc', '--tmpfs', '/tmp',
+      ...(ENGINE_BIN ? ['--ro-bind', ENGINE_BIN, ENGINE_BIN] : []),
+      '--unshare-pid', '--die-with-parent', '--', 'bash', '-c', command,
+    ], {
       cwd: workspace,
-      env: { ...process.env, ...(ENGINE_BIN ? { IMPECCABLE_BIN: ENGINE_BIN } : {}), ...extraEnv },
+      env: { ...process.env, ...(ENGINE_BIN ? { IMPECCABLE_BIN: ENGINE_BIN } : {}), ...extraEnv,
+        TMPDIR: '/tmp', XDG_CONFIG_HOME: '/tmp/config', XDG_CACHE_HOME: '/tmp/cache' },
     });
     let stdout = '';
     let stderr = '';
@@ -281,7 +289,7 @@ export function makeTools(workspace, extraEnv = {}, simulatedUser = {}, { contex
       },
     }),
     read: tool({
-      description: 'Read a file from the workspace. Path must be workspace-relative.',
+      description: 'Read text or view a PNG, JPEG, GIF, or WEBP image from the workspace. Path must be workspace-relative.',
       inputSchema: z.object({
         path: z.string().describe('Workspace-relative file path.'),
       }),
@@ -293,10 +301,15 @@ export function makeTools(workspace, extraEnv = {}, simulatedUser = {}, { contex
         if (!fs.existsSync(resolved)) return `File not found: ${p}`;
         const stat = fs.statSync(resolved);
         if (stat.isDirectory()) return `Path is a directory: ${p}. Use list instead.`;
-        const contents = fs.readFileSync(resolved, 'utf8');
+        const contents = /\.(png|jpe?g|gif|webp)$/i.test(p)
+          ? await imageSource(p, { root: workspace })
+          : fs.readFileSync(resolved, 'utf8');
         call.succeeded = true;
         return contents;
       },
+      toModelOutput: ({ output }) => typeof output === 'string'
+        ? { type: 'json', value: output }
+        : { type: 'content', value: [{ type: 'file', data: { type: 'data', data: output.data }, mediaType: output.media_type }] },
     }),
     write: tool({
       description: 'Write or overwrite a file in the workspace. Creates parent directories as needed.',
@@ -409,10 +422,10 @@ export async function runTurn({ workspace, model, userPrompt, priorMessages = []
       // Real client-side deadline on the provider call: without it a stalled
       // stream wedges the whole sweep with no tally.
       abortSignal: controller.signal,
-      // The Anthropic-compatible adapter does not recognize DeepSeek and
-      // otherwise caps each response at 4096 tokens, truncating valid tool
-      // continuations. Keep an explicit ceiling; length remains a test failure.
-      maxOutputTokens: model?.modelId?.startsWith('deepseek-') ? 16_384 : undefined,
+      // Compatible models need explicit budgets instead of the SDK's 4096 default.
+      // MiniMax exhausted 16k with finishReason=length before emitting an edit.
+      maxOutputTokens: model?.modelId?.startsWith('MiniMax-') ? 32_768
+        : model?.modelId?.startsWith('deepseek-') ? 16_384 : undefined,
       // Resolved from the model object so the 21 runTurn call sites stay
       // unchanged. Reasoning models run at the provider default otherwise,
       // which is not the tier this suite is meant to measure.
@@ -425,6 +438,8 @@ export async function runTurn({ workspace, model, userPrompt, priorMessages = []
     clearTimeout(timer);
   }
   const generatedResponseMessages = result.responseMessages ?? result.response?.messages ?? [];
+  trace.finishReason = result.finishReason;
+  trace.usage = result.usage;
   const responseMessages = [...messages, ...generatedResponseMessages];
   return {
     trace,
@@ -457,6 +472,8 @@ export function fileLoaded(trace, filename) {
 
 export function summarizeTrace(trace) {
   return {
+    finishReason: trace.finishReason,
+    usage: trace.usage,
     totalCalls: trace.toolCalls.length,
     byName: trace.toolCalls.reduce((acc, c) => ((acc[c.name] = (acc[c.name] ?? 0) + 1), acc), {}),
     bashCommands: trace.bashCommands,

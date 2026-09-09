@@ -54,11 +54,15 @@ const artifactRoot = createArtifactRoot();
 let playwright;
 let browser;
 
-if (!process.env.DEEPSEEK_API_KEY) {
-  throw new Error('DEEPSEEK_API_KEY is required. This Svelte adapter sweep must never fall back to fake/mock AI.');
+const provider = process.env.IMPECCABLE_E2E_LLM_PROVIDER || 'deepseek';
+const llmConfig = resolveLlmAgentConfig({ provider });
+// MiniMax's 32k thinking/output budget needs up to six minutes per attempt.
+const generationTimeoutMs = provider === 'minimax' ? 720_000 : 240_000;
+if (!llmConfig.apiKey) {
+  throw new Error(`${llmConfig.requiredEnv} is required. This Svelte adapter sweep must never fall back to fake/mock AI.`);
 }
 
-describe('Svelte live adapter DeepSeek browser sweep', () => {
+describe(`Svelte live adapter ${provider} browser sweep`, () => {
   before(async () => {
     playwright = await import('playwright');
     browser = await playwright.chromium.launch({ headless: true });
@@ -70,13 +74,11 @@ describe('Svelte live adapter DeepSeek browser sweep', () => {
 
   it('covers live chrome, replace, edit, annotations, insert, refresh recovery, accept/discard, and exit', async (t) => {
     const fixture = loadConsolidatedFixture();
-    const llmConfig = resolveLlmAgentConfig({ provider: 'deepseek' });
-    assert.equal(llmConfig.provider, 'deepseek');
     const agent = await createLlmAgent({
       config: llmConfig,
-      log: (m) => t.diagnostic('[deepseek] ' + m),
+      log: (m) => t.diagnostic(`[${provider}] ` + m),
     });
-    assert.ok(agent, 'DeepSeek agent must be available');
+    assert.ok(agent, 'LLM agent must be available');
 
     const session = await bootFixtureSession({
       name: FIXTURE_NAME,
@@ -198,7 +200,7 @@ async function runReplaceDiscardRecoveryFlow({ page, tmp, evidence }) {
 
   const sourceBefore = readFileSync(join(tmp, ROUTE_FILE), 'utf-8');
   await clickGo(page);
-  await waitForVisibleCycling(page, 3, { timeout: 240_000 });
+  await waitForVisibleCycling(page, 3, { timeout: generationTimeoutMs });
   const session = await currentSveltePreviewSession(page, tmp);
   assert.equal(session.previewMode, 'svelte-component');
   assert.match(session.previewFile, /^node_modules\/\.impeccable-live\/[^/]+\/manifest\.json$/);
@@ -277,7 +279,7 @@ async function runAnnotationGenerateFlow({ page, tmp, evidence }) {
   await drawAnnotationPinAndStroke(page, { comment: 'Make the page title easier to scan' });
   await selectAction(page, 'Polish');
   await clickGo(page);
-  await waitForCycling(page, 3, { timeout: 180_000 });
+  await waitForCycling(page, 3, { timeout: provider === 'minimax' ? generationTimeoutMs : 180_000 });
   const generateEvent = latestJournalEvent(tmp, (event) => event.type === 'generate' && event.screenshotPath);
   await assertAnnotationUploadEvent(generateEvent);
   assert.ok(existsSync(generateEvent.screenshotPath), 'annotation screenshot file exists');
@@ -293,7 +295,7 @@ async function runAcceptReplaceFlow({ page, tmp, evidence }) {
   await pickElement(page, "[data-testid='expense-row']", { resetPickMode: true });
   await selectAction(page, 'Polish');
   await clickGo(page);
-  await waitForVisibleCycling(page, 3, { timeout: 240_000 });
+  await waitForVisibleCycling(page, 3, { timeout: generationTimeoutMs });
   await cycleTo(page, 3);
   const session = await currentSveltePreviewSession(page, tmp);
   await evidence.capture('replace-before-accept');
@@ -322,7 +324,7 @@ async function runInsertFlowWithRecovery({ page, tmp, evidence }) {
   assert.equal(insertEvent.insert?.position, 'after');
   assert.match(insertEvent.insert?.anchor?.outerHTML || '', /empty-card/);
 
-  await waitForCycling(page, 3, { timeout: 240_000 });
+  await waitForCycling(page, 3, { timeout: generationTimeoutMs });
   await cycleTo(page, 2);
   await cycleTo(page, 3);
   await cycleTo(page, 2);

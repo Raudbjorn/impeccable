@@ -22,7 +22,7 @@ Core principles:
 2. Load the request's playbook: its Commands-table reference for an explicit/implied sub-command, or [new-work.md](reference/new-work.md) for a new surface or replacement visual world. Inspect target and incumbent visual truth before editing. When the app cannot run, start with committed visual-regression goldens or screenshot fixtures; verify target and freshness against current tokens, CSS, components, or assets, resolve conflicts, and compare theme/variant captures. <!-- rule:skill-setup-command-ref --> <!-- rule:skill-setup-read-project -->
 3. After resolving analysis and direction, read [craft-floor.md](reference/craft-floor.md) immediately before any UI edit, including small refinements. It carries the quality floor, the absolute bans, and the reflexes no detector catches. Do not load it for planning-only work. <!-- rule:skill-craft-floor-load -->
 
-**Launcher unavailable:** If refused, missing, or failed, **first send the user a message** that context loading did not run. Then read existing PRODUCT.md and DESIGN.md without inventing missing context, follow the applicable steps 2–3, and perform the requested work through permitted tools. Launcher failure alone does not block otherwise-permitted edits.
+**Launcher unavailable:** If refused, missing, or failed, **first send the user a message** that context loading did not run. Then read existing PRODUCT.md and DESIGN.md without inventing missing context and load the playbook (step 2). For planning-only work, deliver the plan without loading craft-floor.md or editing files. For edits, follow step 3 and finish them with permitted tools. Launcher failure does not block permitted edits.
 
 ## How to design
 
@@ -75,7 +75,7 @@ Routing: <!-- rule:skill-routing -->
 
 - **No argument:** read [routing.md](reference/routing.md) and present its context-aware menu; never auto-run a command.
 - **Explicit or clearly implied request to run a command:** load its reference (native variant on native platforms) and follow it. Ask once if two commands fit.
-- **Workflow or command-selection question:** read [Workflow questions](reference/routing.md#workflow-questions).
+- **Workflow or command-selection question:** read [Workflow questions](reference/routing.md#workflow-questions) before answering, including questions about where to start with Impeccable.
 - **Otherwise:** treat the request as general design work. Missing PRODUCT.md routes a new surface or replacement world through init, then new-work; a narrow refinement of existing code proceeds on the incumbent implementation as `impeccable context` directs, offering init afterward rather than blocking on it.
 - `teach` aliases `init`. `craft` is a deprecated alias for ordinary new-work and adds nothing. `shape` owns task discovery, then enters new-work only for visual-world and surface-concept decisions.
 

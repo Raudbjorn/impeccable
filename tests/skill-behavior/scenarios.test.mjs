@@ -149,7 +149,7 @@ for (const modelId of resolveModelList()) {
   const provider = detectProvider(modelId);
   const keyPresent = hasKey(provider);
 
-  describe(`skill behavior :: ${modelId}`, () => {
+  describe(`skill behavior :: ${modelId}`, { concurrency: 2 }, () => {
     if (!keyPresent) {
       it(`skipped — ${PROVIDERS[provider].envKey} is unset`, { skip: true }, () => {});
       return;
@@ -159,12 +159,12 @@ for (const modelId of resolveModelList()) {
       return;
     }
     const model = getModel(modelId);
-    // Gemini Flash tends to inspect one file at a time, while the production
+    // Gemini Flash and MiniMax tend to inspect one file at a time, while the production
     // Anthropic/OpenAI models batch setup reads and then begin implementation.
     // Keep the latter tightly bounded so this routing suite does not turn into
-    // a page-generation benchmark, but leave Gemini enough room to reach the
+    // a page-generation benchmark, but leave those models enough room to reach the
     // same required reference.
-    const setupMaxSteps = provider === 'google' ? 6 : 3;
+    const setupMaxSteps = ['google', 'minimax'].includes(provider) ? 6 : 3;
 
     it('scenario 1: no PRODUCT.md / DESIGN.md', async () => {
       const workspace = prepareWorkspace({ files: {} });
@@ -818,7 +818,9 @@ for (const modelId of resolveModelList()) {
         files: {
           'PRODUCT.md': PRODUCT_MD_SAMPLE_DIWALI,
           'DESIGN.md': DESIGN_MD_SAMPLE_DIWALI,
-          'index.html': MINIMAL_LANDING_HTML,
+          'index.html': `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Third Street Sweets</title>
+<style>body{color:#8C1D18;background:#fff8ed;font-family:serif;max-width:65ch;margin:4rem auto;padding:0 1.5rem}a{background:#E8871E;color:#8C1D18;padding:2px 4px}</style></head>
+<body><h1>Third Street Sweets</h1><p>Family-run for forty years. Ladoo and barfi made for the neighborhood's Diwali tables.</p><a href="tel:+12125550123">Call to order your sweets</a></body></html>`,
         },
       });
       try {
