@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 export function engineTarget() {
-  const platform = { darwin: 'darwin', linux: 'linux', win32: 'windows' }[os.platform()] || 'unknown';
+  const platform = os.platform();
   const arch = { arm64: 'arm64', x64: 'x64' }[os.arch()] || 'unknown';
   return `${platform}-${arch}`;
 }
@@ -24,7 +24,7 @@ export function findEngineBinary() {
   const fromEnv = process.env.IMPECCABLE_BIN;
   if (fromEnv && fs.existsSync(fromEnv)) return path.resolve(fromEnv);
   const target = engineTarget();
-  const exe = target.startsWith('windows-') ? 'impeccable.exe' : 'impeccable';
+  const exe = 'impeccable';
   const candidates = [
     path.join(REPO_ROOT, 'skill', 'scripts', 'bin', target, exe),
     path.join(REPO_ROOT, 'target', 'release', exe),

@@ -1,10 +1,4 @@
-//! String-level guards over the two launchers (`skill/scripts/impeccable`,
-//! `skill/scripts/impeccable.cmd`). The .cmd cannot be executed here (no Windows),
-//! so this pins the shapes a dry parse depends on: asset/URL construction in
-//! both launchers agrees with `engine_binary::asset_url`, the .cmd contains
-//! no multi-line parenthesized blocks (the parse-time `%var%` expansion bug
-//! that made its download path dead code), both launchers carry the
-//! engine-probe handshake, and the .cmd verifies downloads via certutil.
+//! Linux launcher contracts: asset naming, verified downloads, and engine discovery.
 
 use impeccable_skills::engine_binary::{asset_url, DEFAULT_DOWNLOAD_BASE};
 
@@ -25,10 +19,6 @@ fn sh_launcher_asset_naming_matches_engine() {
     assert!(sh.contains(&format!("IMPECCABLE_DOWNLOAD_BASE:-{DEFAULT_DOWNLOAD_BASE}")));
     assert!(sh.contains(r#"asset="impeccable-$os-$arch""#));
     assert!(sh.contains(r#"url="$base/engine-v$version/$asset""#));
-    // Windows-on-ARM fallback, same naming the engine computes.
-    let win_x64 = asset_url(DEFAULT_DOWNLOAD_BASE, "V", "windows", "x64");
-    assert!(win_x64.ends_with("/engine-vV/impeccable-windows-x64.exe"));
-    assert!(sh.contains(r#"url="$base/engine-v$version/impeccable-windows-x64.exe""#));
     // The PATH and unversioned home candidates are probed; trusted paths are not.
     assert!(sh.contains("engine-probe"));
     assert!(sh.contains(r#"probe_ok "$home_bin""#));
@@ -39,57 +29,18 @@ fn sh_launcher_asset_naming_matches_engine() {
 }
 
 #[test]
-fn cmd_launcher_asset_naming_matches_engine() {
-    let cmd = launcher_file("impeccable.cmd");
-    assert!(cmd.contains(DEFAULT_DOWNLOAD_BASE));
-    // URL construction: expanded on straight-line statements, no blocks.
-    assert!(cmd.contains(r#"set "asset=impeccable-windows-%arch%.exe""#));
-    assert!(cmd.contains(r#"set "url=%IMPECCABLE_DOWNLOAD_BASE%/engine-v%version%/%asset%""#));
-    // arm64 falls back to the x64 asset (Windows on ARM runs x64 binaries).
-    assert!(cmd.contains(r#"set "asset=impeccable-windows-x64.exe""#));
-    assert!(cmd.contains(r#"if /I "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "arch=arm64""#));
-    // sha256 verification via certutil against the sidecar.
-    assert!(cmd.contains("certutil -hashfile"));
-    assert!(cmd.contains(".sha256"));
-    // engine-probe handshake for PATH / unversioned home candidates.
-    assert!(cmd.contains("engine-probe"));
-    assert!(cmd.contains(r#"findstr /b /c:"impeccable-engine""#));
-    assert!(!cmd.contains("npm i -g"));
-}
-
-#[test]
-fn cmd_launcher_has_no_multiline_parenthesized_blocks() {
-    // cmd.exe expands %var% inside a parenthesized block at parse time, so a
-    // `set` + read-back inside one block silently reads the pre-block value
-    // (rollout review S3: the download path could never fire). The launcher
-    // is written as straight-line goto flow; keep it that way.
-    let cmd = launcher_file("impeccable.cmd");
-    for (i, line) in cmd.lines().enumerate() {
-        assert!(
-            !line.trim_end().ends_with('('),
-            "impeccable.cmd line {}: opens a multi-line parenthesized block: {line}",
-            i + 1
-        );
-    }
-}
-
-#[test]
 fn launchers_fail_closed_on_missing_checksum() {
     // Triage C1: a freshly downloaded binary runs only after verifying
     // against its .sha256 sidecar. A sidecar that cannot be fetched, or a
     // machine with no sha256 tool, refuses the download instead of running
     // an unverified binary; a mismatch stays fatal.
     let sh = launcher_file("impeccable");
-    let cmd = launcher_file("impeccable.cmd");
     assert!(sh.contains("refusing the unverified download"));
     assert!(sh.contains(r#"if [ -z "$expected" ] || [ -z "$actual" ]; then"#));
     // wget-only environments fetch and require the sidecar too.
     assert!(sh.contains(r#"wget -q -O "$tmp.sha256" "$url.sha256""#));
-    assert!(cmd.contains("refusing the unverified download"));
-    assert!(cmd.contains("goto verify_refuse"));
     // The old lenient path (missing sidecar -> place the binary) is gone.
-    assert!(!cmd.contains(":have_sidecar"));
-    for text in [&sh, &cmd] {
+    for text in [&sh] {
         assert!(text.contains("checksum mismatch downloading"));
     }
 }
@@ -97,14 +48,13 @@ fn launchers_fail_closed_on_missing_checksum() {
 #[test]
 fn launchers_reference_the_same_release_channel() {
     let sh = launcher_file("impeccable");
-    let cmd = launcher_file("impeccable.cmd");
-    for text in [&sh, &cmd] {
+    for text in [&sh] {
         assert!(text.contains("https://github.com/Raudbjorn/impeccable/releases"));
     }
     // Spot-check the engine's own URL builder against the launcher template.
     assert_eq!(
-        asset_url(DEFAULT_DOWNLOAD_BASE, "1.2.3", "darwin", "arm64"),
-        format!("{DEFAULT_DOWNLOAD_BASE}/engine-v1.2.3/impeccable-darwin-arm64")
+        asset_url(DEFAULT_DOWNLOAD_BASE, "1.2.3", "linux", "arm64"),
+        format!("{DEFAULT_DOWNLOAD_BASE}/engine-v1.2.3/impeccable-linux-arm64")
     );
 }
 

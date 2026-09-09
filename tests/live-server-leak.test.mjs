@@ -30,11 +30,6 @@ import {
 } from '../scripts/lib/live-server-processes.mjs';
 import { ENGINE_MISSING_MESSAGE, engineTarget, findEngineBinary } from './lib/engine-bin.mjs';
 
-// The reaper is a POSIX mechanism (a detached process holding a pipe, killed by
-// signal). armLiveServerReaper() does not arm it on Windows, so the guarantee it
-// pins is not one Windows makes yet.
-const WINDOWS = process.platform === 'win32';
-
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const PORT = 8591;
 // A second port so the stop guard never collides with the reaper guard.
@@ -128,9 +123,7 @@ function startVictim(cwd) {
 
 describe('live server leak guard', () => {
   it('kills the engine live server when the test process is SIGKILLed', {
-    skip: WINDOWS
-      ? 'the reaper is POSIX-only; armLiveServerReaper() does not arm it on win32'
-      : NO_ENGINE,
+    skip: NO_ENGINE,
   }, async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'impeccable-leak-'));
     let victim;
@@ -263,7 +256,7 @@ describe('envLineHasEntry', () => {
     try {
       // Windows refuses a directory symlink without Developer Mode; a junction
       // is the equivalent it does allow. Same call shape as concept-seed's.
-      symlinkSync(real, link, process.platform === 'win32' ? 'junction' : 'dir');
+      symlinkSync(real, link, 'dir');
       assert.equal(repoMarker(link), repoMarker(real));
       assert.equal(repoMarker(`${link}/`), repoMarker(real));
     } finally {

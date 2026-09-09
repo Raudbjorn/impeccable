@@ -8,7 +8,7 @@
 //! writes the launcher form `[ ! -f "<skill>/scripts/impeccable" ] ||
 //! "<skill>/scripts/impeccable" hook` (`hook-before-edit` for Cursor), the
 //! shape the public build's `transformers/hooks.js` puts in the bundle; the
-//! Codex `commandWindows` sibling runs `impeccable.cmd` behind `if exist`.
+//! Linux installs omit legacy Windows hook commands.
 //! `impeccable hooks on` (`impeccable_hook::admin`) writes the same launcher
 //! invocation for a project install (without the existence guard). Recognition of an
 //! Impeccable-owned entry (either the JS `.mjs` generation or the launcher
@@ -131,10 +131,6 @@ pub fn json_string(value: &str) -> String {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QuotedPath {
     pub posix: String,
-    /// Double-quoted (cmd.exe treats `'` as literal, issue #533).
-    pub win32: String,
-    /// The `.cmd` shim, double-quoted, for Codex's `commandWindows`.
-    pub win32_cmd: String,
 }
 
 /// JS: the `quotedPath` computed in rewriteHookCommandsForSkillRoot: the
@@ -146,32 +142,14 @@ pub fn quoted_launcher_path(skill_root: &str, provider: &str, absolute: bool) ->
     let path = if absolute { abs } else { launcher_rel_path(provider) };
     Some(QuotedPath {
         posix: if absolute { sh_single_quote(&path) } else { json_string(&path) },
-        win32: json_string(&path),
-        win32_cmd: json_string(&format!("{path}.cmd")),
     })
 }
 
-/// JS: guardHookCommand(quotedPath, provider), launcher edition, in the
-/// shape the public build's `transformers/hooks.js` `guardedLauncher` emits:
-/// `[ ! -f X ] || X <verb>` (not `|| true`, so the launcher's exit code, and
-/// Claude's exit-2 blocking signal, still reach the agent). `.agents` (Codex)
-/// keeps the POSIX form unconditionally: its Windows consumers read the
-/// `commandWindows` sibling instead. Other providers installed on Windows keep
-/// the double-quoted path (cmd.exe treats `'` as literal, issue #533); the JS
-/// `node -e` existence wrapper has no launcher equivalent, so the POSIX guard
-/// stands there too (Claude Code on Windows runs hooks through Git Bash).
-pub fn hook_command(quoted: &QuotedPath, provider: &str, win32: bool) -> String {
+/// Guard the Linux launcher without swallowing its exit code.
+pub fn hook_command(quoted: &QuotedPath, provider: &str) -> String {
     let verb = hook_verb(provider);
-    let q = if provider != ".agents" && win32 { &quoted.win32 } else { &quoted.posix };
+    let q = &quoted.posix;
     format!("[ ! -f {q} ] || {q} {verb}")
-}
-
-/// JS: windowsHookCommand(quotedPath), launcher edition (`transformers/hooks.js`
-/// `windowsLauncherCommand`): the `.cmd` shim behind a cmd.exe `if exist`
-/// guard; `exit /b` forwards the launcher's errorlevel.
-pub fn windows_hook_command(quoted: &QuotedPath, provider: &str) -> String {
-    let q = &quoted.win32_cmd;
-    format!("if exist {q} ({q} {} & exit /b)", hook_verb(provider))
 }
 
 /// JS: rewriteHookCommandsForSkillRoot(value, provider, {skillRoot, absolute})
@@ -179,19 +157,10 @@ pub fn rewrite_hook_commands_for_skill_root(value: &Value, provider: &str, skill
     let Some(quoted) = quoted_launcher_path(skill_root, provider, absolute) else {
         return value.clone();
     };
-    rewrite_value(value, provider, &quoted, cfg!(windows))
+    rewrite_value(value, provider, &quoted)
 }
 
-/// `rewrite_hook_commands_for_skill_root` with the platform made explicit
-/// (tests drive the Windows form from any host).
-pub fn rewrite_hook_commands_for_platform(value: &Value, provider: &str, skill_root: &str, absolute: bool, win32: bool) -> Value {
-    let Some(quoted) = quoted_launcher_path(skill_root, provider, absolute) else {
-        return value.clone();
-    };
-    rewrite_value(value, provider, &quoted, win32)
-}
-
-fn rewrite_value(value: &Value, provider: &str, quoted: &QuotedPath, win32: bool) -> Value {
+fn rewrite_value(value: &Value, provider: &str, quoted: &QuotedPath) -> Value {
     match value {
         Value::String(_) => {
             // JS: the string arm goes through valueHasImpeccableHookMarker,
@@ -199,21 +168,16 @@ fn rewrite_value(value: &Value, provider: &str, quoted: &QuotedPath, win32: bool
             if !value_has_impeccable_hook_marker(value) {
                 return value.clone();
             }
-            Value::String(hook_command(quoted, provider, win32))
+            Value::String(hook_command(quoted, provider))
         }
-        Value::Array(items) => Value::Array(items.iter().map(|v| rewrite_value(v, provider, quoted, win32)).collect()),
+        Value::Array(items) => Value::Array(items.iter().map(|v| rewrite_value(v, provider, quoted)).collect()),
         Value::Object(map) => {
             let mut next = Map::new();
             for (k, v) in map {
-                next.insert(k.clone(), rewrite_value(v, provider, quoted, win32));
+                if k == "commandWindows" && value_has_impeccable_hook_marker(v) { continue; }
+                next.insert(k.clone(), rewrite_value(v, provider, quoted));
             }
-            if provider == ".agents" {
-                if let Some(cmd @ Value::String(_)) = map.get("command") {
-                    if value_has_impeccable_hook_marker(cmd) {
-                        next.insert("commandWindows".to_string(), Value::String(windows_hook_command(quoted, provider)));
-                    }
-                }
-            }
+
             Value::Object(next)
         }
         _ => value.clone(),
@@ -468,7 +432,7 @@ pub fn copy_provider_hooks(sys: &crate::providers::Sys, bundle_dir: &str, root: 
                 };
                 if skills_dir != jsp::join(&[root, provider, "skills"]) {
                     let launcher = jsp::join(&[&skills_dir, "impeccable/scripts/impeccable"]);
-                    let declaration = format!("const HOOK_SCRIPT = {} + (process.platform === \"win32\" ? \".cmd\" : \"\");", json_string(&launcher));
+                    let declaration = format!("const HOOK_SCRIPT = {};", json_string(&launcher));
                     module = module.lines().map(|line| {
                         if line.starts_with("const HOOK_SCRIPT =") { declaration.as_str() } else { line }
                     }).collect::<Vec<_>>().join("\n") + "\n";

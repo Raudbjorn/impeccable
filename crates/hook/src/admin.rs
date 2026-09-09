@@ -54,19 +54,6 @@ fn command_hook(command: &str, timeout: i64, status: &str) -> Value {
     ])
 }
 
-/// A command hook with the `commandWindows` sibling Codex 0.146.0+ selects
-/// on Windows (`command_windows.unwrap_or(command)`), pointing at the
-/// launcher's `.cmd` shim so the same `.codex/hooks.json` runs on every OS.
-fn command_hook_with_windows(command: &str, windows: &str, timeout: i64, status: &str) -> Value {
-    obj(vec![
-        ("type", Value::from("command")),
-        ("command", Value::from(command)),
-        ("commandWindows", Value::from(windows)),
-        ("timeout", Value::from(timeout)),
-        ("statusMessage", Value::from(status)),
-    ])
-}
-
 /// JS: stopManifestEntry(command)
 fn stop_manifest_entry(command: &str) -> Value {
     obj(vec![(
@@ -79,24 +66,13 @@ fn stop_manifest_entry(command: &str) -> Value {
     )])
 }
 
-fn stop_manifest_entry_with_windows(command: &str, windows: &str) -> Value {
-    obj(vec![(
-        "hooks",
-        Value::Array(vec![command_hook_with_windows(
-            command,
-            windows,
-            STOP_TIMEOUT_SECONDS,
-            STOP_STATUS_MESSAGE,
-        )]),
-    )])
-}
+
 
 /// The launcher paths the manifests invoke, per harness. Project-relative
 /// (or `${CLAUDE_PROJECT_DIR}` / repo-root anchored) so a committed manifest
 /// resolves on every teammate's checkout.
 const CLAUDE_HOOK_COMMAND: &str = "\"${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/impeccable\" hook";
 const AGENTS_HOOK_COMMAND: &str = "\".agents/skills/impeccable/scripts/impeccable\" hook";
-const AGENTS_HOOK_COMMAND_WINDOWS: &str = "\".agents/skills/impeccable/scripts/impeccable.cmd\" hook";
 const CURSOR_HOOK_COMMAND: &str = "\".cursor/skills/impeccable/scripts/impeccable\" hook-before-edit";
 const GITHUB_HOOK_COMMAND: &str = "\"$(git rev-parse --show-toplevel)/.github/skills/impeccable/scripts/impeccable\" hook";
 
@@ -135,7 +111,6 @@ fn claude_manifest() -> Value {
 
 fn agents_manifest() -> Value {
     let cmd = AGENTS_HOOK_COMMAND;
-    let win = AGENTS_HOOK_COMMAND_WINDOWS;
     obj(vec![(
         "hooks",
         obj(vec![
@@ -145,11 +120,11 @@ fn agents_manifest() -> Value {
                     ("matcher", Value::from("Edit|Write|apply_patch")),
                     (
                         "hooks",
-                        Value::Array(vec![command_hook_with_windows(cmd, win, TIMEOUT_SECONDS, STATUS_MESSAGE)]),
+                        Value::Array(vec![command_hook(cmd, TIMEOUT_SECONDS, STATUS_MESSAGE)]),
                     ),
                 ])]),
             ),
-            ("Stop", Value::Array(vec![stop_manifest_entry_with_windows(cmd, win)])),
+            ("Stop", Value::Array(vec![stop_manifest_entry(cmd)])),
         ]),
     )])
 }

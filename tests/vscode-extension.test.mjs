@@ -62,7 +62,7 @@ describe('VS Code skill extension', () => {
     assert.throws(() => rewriteVSCodeMarkdown('changed Setup', { isSkillEntrypoint: true }), /rewrite drift/);
   });
 
-  it('runs the relocated launcher with spaces without changing project cwd or skill root', { skip: process.platform === 'win32' }, () => {
+  it('runs the relocated launcher with spaces without changing project cwd or skill root', () => {
     const installed = path.join(scratch, 'extension cache with spaces', 'skills', 'impeccable');
     fs.cpSync(path.join(extension, 'skills/impeccable'), installed, { recursive: true });
     const project = path.join(scratch, 'user project');

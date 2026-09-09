@@ -38,14 +38,8 @@ dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 : "${IMPECCABLE_SELF:=$0}"
 export IMPECCABLE_SKILL_DIR IMPECCABLE_SELF
 
-if [ -n "${IMPECCABLE_BIN:-}" ] && [ -x "${IMPECCABLE_BIN}" ]; then
-  exec "${IMPECCABLE_BIN}" "$@"
-fi
-
 case "$(uname -s 2>/dev/null || echo unknown)" in
-  Darwin) os=darwin ;;
   Linux) os=linux ;;
-  MINGW*|MSYS*|CYGWIN*|Windows_NT) os=windows ;;
   *) os=unknown ;;
 esac
 case "$(uname -m 2>/dev/null || echo unknown)" in
@@ -54,8 +48,16 @@ case "$(uname -m 2>/dev/null || echo unknown)" in
   *) arch=unknown ;;
 esac
 
+if [ "$os" != linux ] || [ "$arch" = unknown ]; then
+  echo "impeccable: unsupported platform $os-$arch; supported: linux-x64, linux-arm64." >&2
+  exit 127
+fi
+
+if [ -n "${IMPECCABLE_BIN:-}" ] && [ -x "${IMPECCABLE_BIN}" ]; then
+  exec "${IMPECCABLE_BIN}" "$@"
+fi
+
 bin="$dir/bin/$os-$arch/impeccable"
-[ "$os" = windows ] && bin="$bin.exe"
 
 if [ -x "$bin" ]; then
   exec "$bin" "$@"
@@ -64,11 +66,7 @@ if [ -f "$bin" ]; then
   # Lost the executable bit in transit (zip extraction, some copiers).
   chmod +x "$bin" 2>/dev/null && exec "$bin" "$@"
 fi
-# On Windows (an MSYS/Git Bash shell) the cached names carry .exe so this
-# launcher and impeccable.cmd share one cache.
-exe=""
-[ "$os" = windows ] && exe=".exe"
-home_bin="${HOME:-/nonexistent}/.impeccable/bin/impeccable$exe"
+home_bin="${HOME:-/nonexistent}/.impeccable/bin/impeccable"
 if [ -z "$probing" ] && [ -x "$home_bin" ] && probe_ok "$home_bin"; then
   exec "$home_bin" "$@"
 fi
@@ -76,7 +74,7 @@ fi
 version=""
 [ -f "$dir/VERSION" ] && version=$(tr -d '[:space:]' < "$dir/VERSION")
 cache_root="${IMPECCABLE_HOME:-${HOME:-/nonexistent}/.impeccable}"
-cached="$cache_root/bin/$version/impeccable$exe"
+cached="$cache_root/bin/$version/impeccable"
 if [ -n "$version" ] && [ -x "$cached" ]; then
   exec "$cached" "$@"
 fi
@@ -116,17 +114,12 @@ fi
 if [ -n "$version" ] && [ "$os" != unknown ] && [ "$arch" != unknown ]; then
   base="${IMPECCABLE_DOWNLOAD_BASE:-https://github.com/Raudbjorn/impeccable/releases/download}"
   asset="impeccable-$os-$arch"
-  [ "$os" = windows ] && asset="$asset.exe"
   url="$base/engine-v$version/$asset"
   tmp="$cache_root/bin/$version/.impeccable.part.$$"
   mkdir -p "$cache_root/bin/$version" 2>/dev/null
   fetched=0
   if fetch_url "$url"; then
     fetched=1
-  elif [ "$os" = windows ] && [ "$arch" = arm64 ]; then
-    # Windows on ARM runs x64 binaries; fall back when no arm64 asset exists.
-    url="$base/engine-v$version/impeccable-windows-x64.exe"
-    fetch_url "$url" && fetched=1
   fi
   if [ "$fetched" = 1 ]; then
     check_download
@@ -183,5 +176,5 @@ if [ -n "$version" ] && [ "$os" != unknown ] && [ "$arch" != unknown ]; then
 fi
 
 echo "impeccable: no engine binary for $os-$arch found (looked in $bin, $cached, PATH)." >&2
-echo "Download impeccable-$os-$arch from https://github.com/Raudbjorn/impeccable/releases (tag engine-v$version) into $cache_root/bin/$version/impeccable$exe (then chmod +x), or set IMPECCABLE_BIN to a preinstalled engine binary. Docs: https://impeccable.style" >&2
+echo "Download impeccable-$os-$arch from https://github.com/Raudbjorn/impeccable/releases (tag engine-v$version) into $cache_root/bin/$version/impeccable (then chmod +x), or set IMPECCABLE_BIN to a preinstalled engine binary. Docs: https://impeccable.style" >&2
 exit 127

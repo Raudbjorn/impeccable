@@ -13,7 +13,7 @@ describe('static HTML in standalone installs', { skip: engine ? false : ENGINE_M
     it(`detects external CSS from ${layout} without Node dependencies`, () => {
       const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-native-install-'));
       try {
-        const bin = path.join(tmp, layout, process.platform === 'win32' ? 'impeccable.exe' : 'impeccable');
+        const bin = path.join(tmp, layout, 'impeccable');
         fs.mkdirSync(path.dirname(bin), { recursive: true });
         fs.copyFileSync(engine, bin);
         fs.chmodSync(bin, 0o755);

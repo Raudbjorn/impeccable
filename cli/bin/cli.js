@@ -12,17 +12,17 @@ import path from 'node:path';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../../package.json');
-const OS = { darwin: 'darwin', linux: 'linux', win32: 'windows' }[process.platform] || process.platform;
+const OS = process.platform;
 const ARCH = { arm64: 'arm64', x64: 'x64' }[process.arch] || process.arch;
 const TARGET = `${OS}-${ARCH}`;
-const EXE = OS === 'windows' ? 'impeccable.exe' : 'impeccable';
+const EXE = 'impeccable';
 const PLATFORM_PKG = `@impeccable/cli-${TARGET}`;
 // The engine version travels as the pinned optionalDependency range.
 const VERSION = String(pkg.optionalDependencies?.[PLATFORM_PKG] || Object.values(pkg.optionalDependencies || {})[0] || '').replace(/^[^\d]*/, '');
 const CACHE_ROOT = process.env.IMPECCABLE_HOME || path.join(os.homedir(), '.impeccable');
 const CACHED = path.join(CACHE_ROOT, 'bin', VERSION, EXE);
 const BASE = (process.env.IMPECCABLE_DOWNLOAD_BASE || 'https://github.com/Raudbjorn/impeccable/releases/download').replace(/\/$/, '');
-const URL = `${BASE}/engine-v${VERSION}/impeccable-${TARGET}${OS === 'windows' ? '.exe' : ''}`;
+const URL = `${BASE}/engine-v${VERSION}/impeccable-${TARGET}`;
 
 function exists(p) { try { return !!p && fs.statSync(p).isFile(); } catch { return false; } }
 function fromPackage() {
@@ -74,6 +74,11 @@ const argv = process.argv.slice(2);
 if (argv[0] === '--version' || argv[0] === '-v') {
   process.stdout.write(`${pkg.version}\n`);
   process.exit(0);
+}
+
+if (OS !== 'linux' || !['x64', 'arm64'].includes(ARCH)) {
+  process.stderr.write(`impeccable: unsupported platform ${TARGET}; supported: linux-x64, linux-arm64.\n`);
+  process.exit(127);
 }
 
 const bin = await locate();

@@ -550,7 +550,7 @@ mod tests {
         // Paths in the platform's own form: the resolver joins with Node's
         // `path` semantics for the host, so a POSIX root would never match the
         // file set on Windows.
-        let root = if cfg!(windows) { "C:\\p" } else { "/p" };
+        let root = "/p";
         let a = jsp::join(&[root, "a.tsx"]);
         let b_index = jsp::join(&[root, "b", "index.css"]);
         let files = vec![a.clone(), b_index.clone()];

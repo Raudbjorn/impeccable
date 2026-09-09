@@ -599,9 +599,9 @@ for (const modelId of resolveModelList()) {
       }
     });
 
-    it('scenario 14: native iOS project (context loads ios.md)', async () => {
-      // PRODUCT.md sets `## Platform` to `ios`. impeccable context now reads and emits
-      // reference/ios.md itself, so native guidance enters the conversation
+    it('scenario 14: native Android project (context loads android.md)', async () => {
+      // PRODUCT.md sets `## Platform` to `android`. impeccable context now reads and emits
+      // reference/android.md itself, so native guidance enters the conversation
       // without relying on a second model-directed file read.
       const workspace = prepareWorkspace({
         files: { 'PRODUCT.md': PRODUCT_MD_SAMPLE_ANDROID, 'TideDetailScreen.kt': MINIMAL_ANDROID_SOURCE },
@@ -613,7 +613,7 @@ for (const modelId of resolveModelList()) {
           userPrompt: '/impeccable craft a tide detail screen for the project in this workspace',
           maxSteps: provider === 'google' ? 8 : 6,
         });
-        logTrace('S14', 'native-ios', modelId, trace, { textSample: text.slice(0, 400) });
+        logTrace('S14', 'native-android', modelId, trace, { textSample: text.slice(0, 400) });
         const loadCalls = bashCommandsMatching(trace, 'impeccable context');
         assert.ok(
           loadCalls.length >= 1,
@@ -622,8 +622,8 @@ for (const modelId of resolveModelList()) {
         );
         // Proof the native reference itself entered the agent's view.
         assert.ok(
-          trace.bashOutputs.some((o) => /# NATIVE PLATFORM REFERENCE: IOS \(reference\/ios\.md\)/.test(o)),
-          `impeccable context should have emitted reference/ios.md content (platform is ios).\n` +
+          trace.bashOutputs.some((o) => /# NATIVE PLATFORM REFERENCE: ANDROID \(reference\/android\.md\)/.test(o)),
+          `impeccable context should have emitted reference/android.md content (platform is android).\n` +
             `bashOutputs: ${JSON.stringify(trace.bashOutputs, null, 2)}`,
         );
       } finally {
@@ -831,8 +831,8 @@ for (const modelId of resolveModelList()) {
         });
         logTrace('S20', 'cultural-palette-override', modelId, trace, { textSample: text.slice(0, 400) });
         assert.ok(
-          bashCommandsMatching(trace, 'context.mjs').length >= 1,
-          `expected agent to run context.mjs at least once.\n` +
+          bashCommandsMatching(trace, 'impeccable context').length >= 1,
+          `expected agent to run impeccable context at least once.\n` +
             `Trace: ${JSON.stringify(summarizeTrace(trace), null, 2)}`,
         );
         assert.ok(

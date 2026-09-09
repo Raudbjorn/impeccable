@@ -179,36 +179,6 @@ jobs:
       - name: Test
         run: cargo test --workspace
 
-  # The engine ships a windows-x64 binary (release-engine.yml), so the
-  # workspace has to build and pass its own tests there. Tests that need a
-  # browser or the oracle skip when those are absent.
-  rust-windows:
-    runs-on: windows-latest
-    needs: changes
-    if: needs.changes.outputs.rust == 'true'
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install the pinned toolchain
-        run: rustup show
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - run: cargo build --workspace --all-targets
-      - run: cargo test --workspace --no-fail-fast
-
-  launcher-windows:
-    runs-on: windows-latest
-    needs: changes
-    if: needs.changes.outputs.core == 'true'
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Setup Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-      - name: Exercise Windows launcher downloads and verification
-        run: node --test tests/launcher-download.test.mjs
-
   # Behavior gate: replays the tests/oracle/ goldens against a release build
   # of the engine from THIS checkout (so a PR is judged on its own source,
   # not on the last published binary). Without this job the oracle only ever
