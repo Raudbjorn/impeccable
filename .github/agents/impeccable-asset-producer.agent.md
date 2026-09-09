@@ -35,4 +35,4 @@ Do not redesign. Do not add objects, restyle, or reinterpret; the comp was appro
 
 ## Output Contract
 
-Return one line per raster region: `<id> <plate path> <WxH> <score%|unscored> <accepted|needs_parent_review|blocked> <one-line note or ->`. Then `blockers` (missing spec, missing comp, no image capability, exhausted key) and `assumptions`, each global and minimal. Nothing else: no summary, no praise, no implementation advice. The parent runs `impeccable build-phase advance` to verify the plates against the same spec; a visual acceptance does not override a failing gate.
+Return one line per raster region: `<id> <plate path> <WxH> <score%|unscored> <accepted|needs_parent_review|blocked> <one-line note or ->`. Then `blockers` (missing spec, missing comp, no image capability, exhausted key) and `assumptions`, each global and minimal. Nothing else: no summary, no praise, no implementation advice. The parent runs `impeccable build-phase advance` to verify the plates against the same spec; your line and its line must agree, and a visual acceptance does not override a failing gate.

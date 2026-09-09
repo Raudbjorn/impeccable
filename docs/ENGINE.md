@@ -16,7 +16,7 @@ part of the engine is fetched at build time.
 
 ```
 Cargo.toml              the workspace (crates/*), release profile
-rust-toolchain.toml     the native toolchain channel
+rust-toolchain.toml     the channel plus the wasm32 target
 ENGINE_VERSION          which engine release the launcher / npm shim download
 .cargo/config.toml      the `cargo xtask` alias
 browser-bundle/         the page JS the in-page bundle is built from
@@ -99,9 +99,8 @@ stale, which is the CI staleness gate. The build is deterministic: same
 sources, same bytes.
 
 `wasm-pack` is the one extra tool this needs (`cargo install wasm-pack
---locked`) plus the `wasm32-unknown-unknown` target. Install that target for
-bundle/extension builds with `rustup target add wasm32-unknown-unknown`;
-native builds do not require it. `IMPECCABLE_BUNDLE_SKIP_WASM_PACK=1` reuses
+--locked`) plus the `wasm32-unknown-unknown` target, which
+`rust-toolchain.toml` requests. `IMPECCABLE_BUNDLE_SKIP_WASM_PACK=1` reuses
 whatever is already in `target/wasm-bundle/`, for iterating on the page JS
 alone. `IMPECCABLE_EXTENSION_SKIP_BUNDLE=1` lets `bun run build:extension`
 skip the bundle step when `extension/detector/` is already complete, for CI

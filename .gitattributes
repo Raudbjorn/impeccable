@@ -35,7 +35,6 @@ tests/oracle/** -text
 plugin/** generated
 .claude/settings.json generated
 .codex/hooks.json generated
-.github/hooks/impeccable.json generated
 .omp/hooks/post/impeccable.js generated
 .opencode/commands/impeccable.md generated
 # The compiled detector bundle embeds WASM; regenerate it with cargo xtask

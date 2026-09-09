@@ -306,6 +306,12 @@ export const SUITES = {
       {
         runner: 'node',
         timeoutMs: 900000,
+        // Overall wall-clock safety cap for the whole sweep: if a provider
+        // call wedges past every inner guard (the harness's 840s per-turn
+        // AbortSignal and the 900s per-test timeout), the runner SIGKILLs the
+        // process group so the sweep still ends with a per-provider tally
+        // instead of hanging overnight. Sized well above a healthy two-provider
+        // sweep; override with IMPECCABLE_TEST_WALL_CLOCK_MS to scope it down.
         wallClockMs: 3_600_000,
         files: ['tests/skill-workflow/full-build.test.mjs'],
       },

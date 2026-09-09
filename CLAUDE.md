@@ -91,7 +91,11 @@ As of v4 the repo holds only the open-source product layer: the skill, CLI, exte
 
 Consequences here:
 
--fewer
+- `impeccable concept-seed` has no local catalog. It resolves data via `IMPECCABLE_CATALOG_DIR` (private repo, evals, tests), then the roll API at impeccable.style, then a degraded promotion-only seed. Oracle cases run against `tests/fixtures/concept-catalog/`.
+- The choice-ping telemetry (`--chosen`) is permanently disabled on this fork (`concept_seed::telemetry_disabled` always returns `true`); it never fires regardless of `DO_NOT_TRACK` or `IMPECCABLE_NO_TELEMETRY`.
+- Site copy, changelog, theme, and count validation for site pages happen in impeccable-site; this repo's `validateProse` scans only the READMEs.
+- The release script reads the changelog from `../impeccable-site/site/pages/changelog.astro` when releasing from here.
+- Never add catalog data files back to this repo; the catalog is the paid-service moat.
 
 ## Prose: read docs/STYLE.md before writing user-facing copy
 
