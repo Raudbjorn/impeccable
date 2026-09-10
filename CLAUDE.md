@@ -86,12 +86,12 @@ Impeccable writes files into user projects, so a released version has to cope wi
 
 ## Repo split: public product vs private service (impeccable-site)
 
-As of v4 the repo holds only the open-source product layer: the skill, CLI, extension, their tests, and the build that generates provider outputs. We're localising  the concept/composition catalogs and reviews, the world-card image pipeline and R2 publish, the Cloudflare Pages Functions (including `/api/roll` and `/api/chosen`), and `docs/WORLD-CATALOG-AUTHORING.md`.
+As of v4 the repo holds only the open-source product layer: the skill, CLI, extension, their tests, and the build that generates provider outputs. We're localising the concept/composition catalogs and reviews, the world-card image pipeline and R2 publish, the Cloudflare Pages Functions (including `/api/roll` and `/api/chosen`), and `docs/WORLD-CATALOG-AUTHORING.md`.
 
+Current behavior:
 
-Consequences here:
-
--fewer
+- `impeccable concept-seed` uses configured local retrieval or catalog data when available; the legacy catalog path can still fall back to the roll API. Oracle cases use `tests/fixtures/concept-catalog/`.
+- Choice-ping telemetry (`--chosen`) is disabled. Local retrieval feedback remains enabled.
 
 ## Prose: read docs/STYLE.md before writing user-facing copy
 

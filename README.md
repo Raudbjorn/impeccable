@@ -391,10 +391,15 @@ Full detector docs: [impeccable.style/docs/detector](https://impeccable.style/do
 ## Supported Tools
 
 - [Claude Code](https://claude.ai/code)
+- [GitHub Copilot](https://github.com/features/copilot)
+- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
 - [Gemini CLI](https://github.com/google-gemini/gemini-cli)
 - [Codex CLI](https://github.com/openai/codex)
 - [OpenCode](https://opencode.ai)
+- [Pi](https://pi.dev)
 - [Kiro](https://kiro.dev)
+- [Mistral Vibe](https://docs.mistral.ai/vibe/code/overview)
+- [Veto](https://github.com/oleg-koval/veto)
 - [Google Antigravity](https://antigravity.google)
 - [oh-my-pi](https://omp.sh)
 
