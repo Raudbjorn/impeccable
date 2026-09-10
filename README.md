@@ -107,7 +107,7 @@ From the root of your project, run:
 npx impeccable install
 ```
 
-This shows the harness folders it detected (for example `~/.claude`, `~/.codex`, `~/.veto`, or project-local `.gemini`), lets you keep the detected set or customize providers, then asks whether to install into the current project or globally. Use `--providers=claude,codex,gemini,veto` and `--scope=project|global` to skip those choices in scripts. On Claude Code, Codex, and GitHub Copilot, it also installs the provider-native hook manifest for the current project. Veto receives the packaged skill under `~/.veto/skills/` and does not run native Impeccable edit hooks. Works with Claude Code, Gemini CLI, Codex CLI, Veto, and every other supported tool. Reload your harness afterward.
+This shows the harness folders it detected (for example `~/.claude`, `~/.codex`, `~/.veto`, or project-local `.gemini`), lets you keep the detected set or customize providers, then asks whether to install into the current project or globally. Use `--providers=claude,codex,gemini,veto` and `--scope=project|global` to skip those choices in scripts. On Claude Code and Codex, it also installs the provider-native hook manifest for the current project. Veto receives the packaged skill under `~/.veto/skills/` and does not run native Impeccable edit hooks. Works with Claude Code, Gemini CLI, Codex CLI, Veto, and every other supported tool. Reload your harness afterward.
 
 To refresh an existing install, run:
 
@@ -320,12 +320,11 @@ If an ephemeral file (a screenshot, `config.local.json`) was committed before yo
 
 ## Design hook
 
-On Claude Code, GitHub Copilot, and Codex, `npx impeccable install` and `npx impeccable update` install a provider-native hook manifest along with the skill payload. The hook runs the Impeccable design detector on direct UI file edits and surfaces findings back into the agent flow, and runs a deeper pass on Stop where supported.
+On Claude Code and Codex, `npx impeccable install` and `npx impeccable update` install a provider-native hook manifest along with the skill payload. The hook runs the Impeccable design detector on direct UI file edits and surfaces findings back into the agent flow, and runs a deeper pass on Stop where supported. This fork does not generate a GitHub Copilot hook manifest (`.github/hooks/impeccable.json`); the skill payload still installs under `.github/skills/` for manual use.
 
 Installed hook surfaces:
 
 - Claude Code: `.claude/settings.local.json` (gitignored, machine-local) runs `${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/impeccable hook`. A hook moved into the shared `settings.json` is honored in place.
-- GitHub Copilot: `.github/hooks/impeccable.json` (committed, shared by the Copilot CLI and the cloud agent) runs `.github/skills/impeccable/scripts/impeccable hook`. The Copilot CLI activates it once the file is on the repository's default branch and the folder is trusted.
 - Codex: `.codex/hooks.json` runs `.agents/skills/impeccable/scripts/impeccable hook`, with a `commandWindows` sibling that calls `impeccable.cmd` for cmd.exe.
 
 Every command goes through the launcher shipped in the skill's `scripts/` directory (`impeccable`, or `impeccable.cmd` on Windows), guarded so a missing launcher is a silent no-op. The launcher runs the engine binary that ships next to it, or downloads the pinned version once into `~/.impeccable/bin/`. No Node or other runtime is required for the hook or the skill.
