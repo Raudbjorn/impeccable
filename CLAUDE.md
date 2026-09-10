@@ -90,8 +90,11 @@ As of v4 the repo holds only the open-source product layer: the skill, CLI, exte
 
 Current behavior:
 
-- `impeccable concept-seed` uses configured local retrieval or catalog data when available; the legacy catalog path can still fall back to the roll API. Oracle cases use `tests/fixtures/concept-catalog/`.
-- Choice-ping telemetry (`--chosen`) is disabled. Local retrieval feedback remains enabled.
+- `impeccable concept-seed` uses configured local retrieval or catalog data when available; the legacy catalog path can still fall back to the roll API at impeccable.style, then a degraded promotion-only seed. Oracle cases run against `tests/fixtures/concept-catalog/`.
+- The choice-ping telemetry (`--chosen`) is permanently disabled on this fork (`concept_seed::telemetry_disabled` always returns `true`, `ping_chosen` always returns `false`); it never fires regardless of `DO_NOT_TRACK` or `IMPECCABLE_NO_TELEMETRY`.
+- Site copy, changelog, theme, and count validation for site pages happen in impeccable-site; this repo's `validateProse` scans only the READMEs.
+- The release script reads the changelog from `../impeccable-site/site/pages/changelog.astro` when releasing from here.
+- Never add catalog data files back to this repo; the catalog is the paid-service moat.
 
 ## Prose: read docs/STYLE.md before writing user-facing copy
 

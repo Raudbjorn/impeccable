@@ -1254,6 +1254,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn question_page_rejects_http_errors_before_confirming_a_choice() {
+        let rejection = PAGE.find("if (!response.ok)").expect("HTTP rejection guard");
+        assert!(rejection < PAGE.find("Choice recorded.").unwrap());
+        assert!(PAGE.contains("out of date"));
+    }
+
+    #[test]
     fn question_page_uses_system_fonts_and_inline_branding() {
         assert!(!PAGE.contains("fonts.googleapis.com"));
         assert!(!PAGE.contains("fonts.gstatic.com"));

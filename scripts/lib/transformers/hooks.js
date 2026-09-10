@@ -73,11 +73,9 @@ const CODEX_PLUGIN_SCRIPTS = '${PLUGIN_ROOT}/skills/impeccable/scripts';
 // so each generated manifest points at its own payload rather than a hardcoded
 // `.agents`; otherwise the guarded hook silently no-ops on `.codex` installs.
 const codexProjectScripts = (skillDir) => `${skillDir}/skills/impeccable/scripts`;
-const CURSOR_SCRIPTS = '.cursor/skills/impeccable/scripts';
 const GITHUB_PROJECT_SCRIPTS = '$(git rev-parse --show-toplevel)/.github/skills/impeccable/scripts';
 // Grok project hooks are relative to the git/workspace root. Claude tool names
 // in the matcher (Edit|Write|MultiEdit) alias to Grok's search_replace family.
-const GROK_PROJECT_SCRIPTS = '.grok/skills/impeccable/scripts';
 
 function buildClaudeCompatibleHooks(matcher, scriptsDir) {
   const command = guardedLauncher(launcherIn(scriptsDir));

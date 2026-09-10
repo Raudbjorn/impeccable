@@ -97,6 +97,21 @@ fn telemetry_disabled() -> bool {
     true
 }
 
+#[test]
+fn choice_telemetry_is_always_disabled() {
+    for value in [None, Some(""), Some("0"), Some("1")] {
+        let mut env = Env::new();
+        if let Some(value) = value {
+            env.insert("IMPECCABLE_NO_TELEMETRY".into(), value.into());
+            env.insert("DO_NOT_TRACK".into(), value.into());
+        }
+        assert!(telemetry_disabled());
+        let mut budget = ApiBudget::new(&env);
+        assert!(!ping_chosen(&env, &mut budget, Some("card"), Some("key"), Some("surface"), None, Some("challenger"), None));
+        assert!(budget.deadline.is_none());
+    }
+}
+
 /// Choice telemetry is disabled in this distribution.
 fn ping_chosen(_env: &Env, _budget: &mut ApiBudget, _chosen_id: Option<&str>, _key: Option<&str>, _scope: Option<&str>, _mode: Option<&str>, _kind: Option<&str>, _register: Option<&str>) -> bool {
     false

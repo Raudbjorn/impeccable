@@ -16,6 +16,52 @@ fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../comp/tests/fixtures")
 }
 
+#[test]
+fn usage_and_recovery_commands_use_the_engine() {
+    use impeccable_common::Io;
+    use impeccable_comp_verbs::font_match;
+
+    let (mut io, output) = Io::captured("", fixtures(), Default::default());
+    assert_eq!(comp_spec::run(&[], &mut io), 0);
+    assert_eq!(comp_spec::run(&["--unknown".into()], &mut io), 1);
+    assert_eq!(comp_diff::run(&[], &mut io), 1);
+    assert_eq!(font_match::run(&[], &mut io, &mut font_match::NoRenderer), 1);
+    assert_eq!(font_match::run(&["--measure".into(), "title".into()], &mut io, &mut font_match::NoRenderer), 1);
+    let stdout = String::from_utf8(output.stdout.borrow().clone()).unwrap();
+    let stderr = String::from_utf8(output.stderr.borrow().clone()).unwrap();
+    assert!(stdout.contains("usage: impeccable comp-spec"));
+    for command in ["comp-spec", "comp-diff", "font-match"] {
+        assert!(stderr.contains(&format!("usage: impeccable {command}")), "{stderr}");
+    }
+    assert!(stderr.contains("run impeccable comp-spec first"));
+    assert!(!stdout.contains(".mjs"));
+    assert!(!stderr.contains(".mjs"));
+}
+
+#[test]
+fn transparent_plate_prompt_preserves_paint_and_reference_spacing() {
+    let dir = std::env::temp_dir().join(format!("impeccable-alpha-prompt-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("spec.json"), json!({"regions": [{"id": "boat", "kind": "plate", "note": "White sails and three hull holes"}]}).to_string()).unwrap();
+    let (mut io, output) = impeccable_common::Io::captured("", dir.clone(), Default::default());
+    let args = [
+        "--spec",
+        "spec.json",
+        "--plate-prompt",
+        "boat",
+        "--background",
+        "transparent",
+    ]
+    .map(String::from);
+    assert_eq!(comp_spec::run(&args, &mut io), 0);
+    let prompt = String::from_utf8(output.stdout.borrow().clone()).unwrap();
+    std::fs::remove_dir_all(dir).unwrap();
+    assert!(prompt.contains("transparent alpha"), "{prompt}");
+    assert!(prompt.contains("white"));
+    assert!(prompt.contains("margins"));
+    assert!(!prompt.contains("edge to edge"));
+}
+
 fn load(name: &str) -> Image {
     let buf = std::fs::read(fixtures().join(name)).unwrap();
     png_io::decode_png(&buf).unwrap().image

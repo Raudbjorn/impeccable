@@ -30,9 +30,39 @@ static LAUNCHER_HOOK_MARKER: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r#"skills/impeccable/scripts/impeccable(?:\.cmd|\.exe)?["']?\s+hook(?:-before-edit|-probe|-after-edit|-stop)?(?:\s|$|["'&|;)])"#).unwrap()
 });
 
+/// User-scope Windows commands embed a JSON-quoted path whose backslashes are
+/// doubled in the command string (#784). #604's single `\`→`/` replace is not
+/// enough: `\\` becomes `//`, which breaks `skills/impeccable` matching.
+/// A leading `//` after a quote (or at the start of the string) is a UNC
+/// prefix and stays two slashes, so doctor still probes `//server/share/...`.
+fn normalize_hook_separators(command: &str) -> String {
+    let mut out = String::with_capacity(command.len());
+    let mut chars = command.chars().peekable();
+    let mut prev: Option<char> = None;
+    while let Some(ch) = chars.next() {
+        if ch != '\\' && ch != '/' {
+            out.push(ch);
+            prev = Some(ch);
+            continue;
+        }
+        let mut n = 1usize;
+        while matches!(chars.peek(), Some('\\' | '/')) {
+            chars.next();
+            n += 1;
+        }
+        out.push('/');
+        if n >= 2 && matches!(prev, None | Some('"' | '\'')) {
+            out.push('/');
+        }
+        prev = Some('/');
+    }
+    out
+}
+
 /// True when `command` invokes an Impeccable hook in either generation's spelling.
 pub fn is_impeccable_hook_command(command: &str) -> bool {
-    LEGACY_HOOK_SCRIPT_MARKERS.iter().any(|m| command.contains(m)) || LAUNCHER_HOOK_MARKER.is_match(command)
+    let command = normalize_hook_separators(command);
+    LEGACY_HOOK_SCRIPT_MARKERS.iter().any(|m| command.contains(m)) || LAUNCHER_HOOK_MARKER.is_match(&command)
 }
 
 /// True when `command` invokes an Impeccable hook in the launcher generation
@@ -40,7 +70,7 @@ pub fn is_impeccable_hook_command(command: &str) -> bool {
 /// one: install/update use this to decide which manifests still need
 /// migrating to the launcher form.
 pub fn is_launcher_hook_command(command: &str) -> bool {
-    LAUNCHER_HOOK_MARKER.is_match(command)
+    LAUNCHER_HOOK_MARKER.is_match(&normalize_hook_separators(command))
 }
 
 /// The launcher-era markers `context` and `doctor` treat as the design hook
@@ -54,9 +84,10 @@ static LAUNCHER_DESIGN_HOOK: Lazy<Regex> = Lazy::new(|| {
 /// `hook-before-edit`) in either spelling; the JS `context.mjs` scan and
 /// `staleness-deep` HOOK_SCRIPT_MARKERS both meant exactly these two.
 pub fn is_design_hook_command(command: &str) -> bool {
+    let command = normalize_hook_separators(command);
     command.contains("skills/impeccable/scripts/hook.mjs")
         || command.contains("skills/impeccable/scripts/hook-before-edit.mjs")
-        || LAUNCHER_DESIGN_HOOK.is_match(command)
+        || LAUNCHER_DESIGN_HOOK.is_match(&command)
 }
 
 /// True when `command` runs the design hook (`hook` / `hook-before-edit`) in
@@ -66,7 +97,7 @@ pub fn is_design_hook_command(command: &str) -> bool {
 /// so the hook is dead and `MANUAL_DETECTOR_REQUIRED` must fire until an
 /// install/update repairs it.
 pub fn is_launcher_design_hook_command(command: &str) -> bool {
-    LAUNCHER_DESIGN_HOOK.is_match(command)
+    LAUNCHER_DESIGN_HOOK.is_match(&normalize_hook_separators(command))
 }
 
 /// The shell token that names the hook program inside `command`, for
@@ -74,7 +105,11 @@ pub fn is_launcher_design_hook_command(command: &str) -> bool {
 /// path in the binary form. `None` when the command carries no marker or
 /// the token cannot be isolated (a `'\''` escape sequence, for instance).
 pub fn hook_program_token(command: &str) -> Option<String> {
-    if !is_design_hook_command(command) {
+    if command.contains("'\\''") {
+        return None;
+    }
+    let command = normalize_hook_separators(command);
+    if !is_design_hook_command(&command) {
         return None;
     }
     static QUOTED: Lazy<Regex> = Lazy::new(|| {
@@ -86,16 +121,13 @@ pub fn hook_program_token(command: &str) -> Option<String> {
     static BARE: Lazy<Regex> = Lazy::new(|| {
         Regex::new(r#"([^\s"'|&;()]*skills/impeccable/scripts/(?:hook(?:-before-edit)?\.mjs|impeccable(?:\.cmd|\.exe)?))"#).unwrap()
     });
-    if let Some(m) = QUOTED.captures(command) {
+    if let Some(m) = QUOTED.captures(&command) {
         return Some(m[1].to_string());
     }
-    if command.contains("'\\''") {
-        return None;
-    }
-    if let Some(m) = SINGLE.captures(command) {
+    if let Some(m) = SINGLE.captures(&command) {
         return Some(m[1].to_string());
     }
-    BARE.captures(command).map(|m| m[1].to_string())
+    BARE.captures(&command).map(|m| m[1].to_string())
 }
 
 #[cfg(test)]
@@ -182,5 +214,46 @@ mod tests {
         );
         assert_eq!(hook_program_token("'/x/it'\\''s/.claude/skills/impeccable/scripts/impeccable' hook"), None);
         assert_eq!(hook_program_token("echo hi"), None);
+    }
+
+    #[test]
+    fn recognizes_json_escaped_windows_launcher_path() {
+        let launcher = r"C:\Users\alice\.claude\skills\impeccable\scripts\impeccable";
+        let quoted = serde_json::to_string(launcher).unwrap();
+        let cmd = format!("[ ! -f {quoted} ] || {quoted} hook");
+        assert!(is_impeccable_hook_command(&cmd), "{cmd}");
+        assert!(is_launcher_hook_command(&cmd), "{cmd}");
+        assert!(is_design_hook_command(&cmd), "{cmd}");
+        assert_eq!(
+            hook_program_token(&cmd).as_deref(),
+            Some("C:/Users/alice/.claude/skills/impeccable/scripts/impeccable")
+        );
+    }
+
+    #[test]
+    fn recognizes_single_backslash_windows_path() {
+        let cmd = r#"[ ! -f "C:\Users\alice\.claude\skills\impeccable\scripts\impeccable" ] || "C:\Users\alice\.claude\skills\impeccable\scripts\impeccable" hook"#;
+        assert!(is_impeccable_hook_command(cmd), "{cmd}");
+        assert!(is_launcher_hook_command(cmd), "{cmd}");
+        assert!(is_design_hook_command(cmd), "{cmd}");
+    }
+
+    #[test]
+    fn preserves_unc_prefix_in_program_token() {
+        let launcher = r"\\server\share\.claude\skills\impeccable\scripts\impeccable";
+        let quoted = serde_json::to_string(launcher).unwrap();
+        let json_escaped = format!("[ ! -f {quoted} ] || {quoted} hook");
+        assert!(is_impeccable_hook_command(&json_escaped), "{json_escaped}");
+        assert_eq!(
+            hook_program_token(&json_escaped).as_deref(),
+            Some("//server/share/.claude/skills/impeccable/scripts/impeccable")
+        );
+
+        let single = r#"[ ! -f "\\server\share\.claude\skills\impeccable\scripts\impeccable" ] || "\\server\share\.claude\skills\impeccable\scripts\impeccable" hook"#;
+        assert!(is_impeccable_hook_command(single), "{single}");
+        assert_eq!(
+            hook_program_token(single).as_deref(),
+            Some("//server/share/.claude/skills/impeccable/scripts/impeccable")
+        );
     }
 }

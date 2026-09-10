@@ -789,9 +789,9 @@ async function build() {
     if (fs.existsSync(pluginSkillsDir)) fs.rmSync(pluginSkillsDir, { recursive: true });
     if (fs.existsSync(pluginAgentsDir)) fs.rmSync(pluginAgentsDir, { recursive: true });
     if (fs.existsSync(pluginHooksDir)) fs.rmSync(pluginHooksDir, { recursive: true });
-    // Clean up the short-lived mixed-provider subtree from early OpenAI plugin
-    // development. The canonical Codex preview now lives in dist/openai/.
-    for (const staleRel of ['.codex-plugin', 'assets']) {
+    // Clean up removed Grok packaging and the early mixed-provider OpenAI
+    // subtree. The canonical Codex preview now lives in dist/openai/.
+    for (const staleRel of ['.codex-plugin', '.grok-plugin', 'assets']) {
       const stalePath = path.join(pluginRoot, staleRel);
       if (fs.existsSync(stalePath)) fs.rmSync(stalePath, { recursive: true });
     }

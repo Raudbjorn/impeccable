@@ -107,7 +107,7 @@ From the root of your project, run:
 npx impeccable install
 ```
 
-This shows the harness folders it detected (for example `~/.claude`, `~/.codex`, `~/.veto`, or project-local `.gemini`), lets you keep the detected set or customize providers, then asks whether to install into the current project or globally. Use `--providers=claude,codex,gemini,veto` and `--scope=project|global` to skip those choices in scripts. On Claude Code, Codex, and GitHub Copilot, it also installs the provider-native hook manifest for the current project. Veto receives the packaged skill under `~/.veto/skills/` and does not run native Impeccable edit hooks. Works with Claude Code, Gemini CLI, Codex CLI, Veto, and every other supported tool. Reload your harness afterward.
+This shows the harness folders it detected (for example `~/.claude`, `~/.codex`, `~/.veto`, or project-local `.gemini`), lets you keep the detected set or customize providers, then asks whether to install into the current project or globally. Use `--providers=claude,codex,gemini,veto` and `--scope=project|global` to skip those choices in scripts. On Claude Code and Codex, it also installs the provider-native hook manifest for the current project. Veto receives the packaged skill under `~/.veto/skills/` and does not run native Impeccable edit hooks. Works with Claude Code, Gemini CLI, Codex CLI, Veto, and every other supported tool. Reload your harness afterward.
 
 To refresh an existing install, run:
 
@@ -140,6 +140,16 @@ npx impeccable link --source=.impeccable --providers=claude,gemini
 ```
 
 ### Option 3: Plugin install
+
+**GitHub Copilot in VS Code:**
+
+Install [Impeccable from the Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=renaissance-geek.impeccable), or run:
+
+```bash
+code --install-extension renaissance-geek.impeccable
+```
+
+Requires VS Code 1.109.3+, Copilot Chat access, and a trusted local workspace. Open Chat in Agent mode and try `/impeccable polish`. This skill-only extension does not install automatic hooks; avoid a duplicate Impeccable skill in the same workspace/profile. See [VS Code distribution details](docs/VSCODE-EXTENSION.md).
 
 **Claude Code:**
 ```bash
@@ -310,12 +320,11 @@ If an ephemeral file (a screenshot, `config.local.json`) was committed before yo
 
 ## Design hook
 
-On Claude Code, GitHub Copilot, and Codex, `npx impeccable install` and `npx impeccable update` install a provider-native hook manifest along with the skill payload. The hook runs the Impeccable design detector on direct UI file edits and surfaces findings back into the agent flow, and runs a deeper pass on Stop where supported.
+On Claude Code and Codex, `npx impeccable install` and `npx impeccable update` install a provider-native hook manifest along with the skill payload. The hook runs the Impeccable design detector on direct UI file edits and surfaces findings back into the agent flow, and runs a deeper pass on Stop where supported. This fork does not generate a GitHub Copilot hook manifest (`.github/hooks/impeccable.json`); the skill payload still installs under `.github/skills/` for manual use.
 
 Installed hook surfaces:
 
 - Claude Code: `.claude/settings.local.json` (gitignored, machine-local) runs `${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/impeccable hook`. A hook moved into the shared `settings.json` is honored in place.
-- GitHub Copilot: `.github/hooks/impeccable.json` (committed, shared by the Copilot CLI and the cloud agent) runs `.github/skills/impeccable/scripts/impeccable hook`. The Copilot CLI activates it once the file is on the repository's default branch and the folder is trusted.
 - Codex: `.codex/hooks.json` runs `.agents/skills/impeccable/scripts/impeccable hook`, with a `commandWindows` sibling that calls `impeccable.cmd` for cmd.exe.
 
 Every command goes through the launcher shipped in the skill's `scripts/` directory (`impeccable`, or `impeccable.cmd` on Windows), guarded so a missing launcher is a silent no-op. The launcher runs the engine binary that ships next to it, or downloads the pinned version once into `~/.impeccable/bin/`. No Node or other runtime is required for the hook or the skill.
@@ -379,9 +388,6 @@ npx impeccable ignores add-value overused-font Inter --reason "Brand font"
 The detector catches 62 deterministic issues across AI slop (side-tab borders, purple gradients, bounce easing, dark glows) and general design quality (line length, cramped padding, small touch targets, skipped headings, and more).
 
 Human-readable findings are diagnostics written to stderr, so redirect them with `2> findings.txt`. Use `--json` for machine-readable results on stdout. Exit `0` means the scan completed without primary findings, exit `2` means it completed with primary findings, and exit `1` means at least one requested target could not be scanned; operational failure takes precedence for a partial multi-target scan. URL scans inspect the rendered DOM, computed layout, and accessible linked stylesheets; browser security still prevents reading cross-origin CSS without CORS. A clean detector run is evidence, not proof of visual or accessibility quality: it does not replace inspecting the rendered experience across relevant viewports.
-
-Human-readable findings are diagnostics written to stderr, so redirect them with `2> findings.txt`. Use `--json` for machine-readable results on stdout. Exit `0` means the scan completed without primary findings, exit `2` means it completed with primary findings, and exit `1` means at least one requested target could not be scanned; operational failure takes precedence for a partial multi-target scan. URL scans inspect the rendered DOM, computed layout, and accessible linked stylesheets; browser security still prevents reading cross-origin CSS without CORS. A clean detector run is evidence, not proof of visual or accessibility quality: it does not replace inspecting the rendered experience across relevant viewports.
-
 By default, `detect` respects the same `.impeccable/config.json` and `.impeccable/config.local.json` detector config as the design hook: `detector.ignoreRules`, `detector.ignoreFiles`, `detector.ignoreValues`, and `detector.designSystem.enabled`. Hook lifecycle settings such as `hook.enabled` only affect automatic hook execution.
 
 For a waiver that should travel with one file instead of the repo config, add an inline comment in the file: `<!-- impeccable-disable overused-font: exported brand doc -->`. The marker works in any comment syntax, scopes to the whole file (or one line with `impeccable-disable-line` / `impeccable-disable-next-line`), and is bypassed by `--no-inline-ignores` or `--no-config`.

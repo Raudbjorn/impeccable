@@ -83,9 +83,8 @@ export const PROVIDERS = {
     // The degraded/ fallbacks still ship for Copilot surfaces where the model
     // fails to delegate; the .agent.md files are the real subagent path.
     agentFormat: 'copilot-agent-md',
-    emitHooks: 'github',
-    // GitHub Copilot discovers repo-level hooks under `.github/hooks/*.json`.
-    hooksManifestRel: 'hooks/impeccable.json',
+    // This fork does not emit .github/hooks/impeccable.json: it carries no
+    // .github/workflows/ either, and no automatic GitHub-triggered hook.
   },
   kiro: {
     provider: 'kiro',

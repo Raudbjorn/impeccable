@@ -1,6 +1,43 @@
+# Keep text consistent across platforms without converting binary files.
+* text=auto eol=lf
+
+# Larger markers distinguish Git conflicts from examples embedded in skills.
+*.md conflict-marker-size=32
+*.rs diff=rust
+
 # The oracle replays goldens recorded from a POSIX checkout, and a finding's
 # snippet carries the fixture's own bytes, so these files have to arrive with
 # LF on every platform. `-text` disables end-of-line conversion outright, which
 # is also safe for any binary that lands under these trees.
 tests/fixtures/** -text
 tests/oracle/** -text
+
+# Generated provider files are text: allow ordinary diffs and three-way merges
+# instead of forcing a binary conflict whenever both branches change a file.
+# After merging sources, run bun run build:release and stage the regenerated
+# output. Attributes cannot resolve semantic conflicts or delete/modify pairs.
+[attr]generated linguist-generated=true
+.claude/skills/impeccable/** generated
+.gemini/skills/impeccable/** generated
+.dsh/skills/impeccable/** generated
+.agents/skills/impeccable/** generated
+.github/skills/impeccable/** generated
+.kiro/skills/impeccable/** generated
+.opencode/skills/impeccable/** generated
+.pi/skills/impeccable/** generated
+.vibe/skills/impeccable/** generated
+.veto/skills/impeccable/** generated
+.agent/skills/impeccable/** generated
+.omp/skills/impeccable/** generated
+.claude/agents/** generated
+.github/agents/** generated
+.omp/agents/** generated
+plugin/** generated
+.claude/settings.json generated
+.codex/hooks.json generated
+.omp/hooks/post/impeccable.js generated
+.opencode/commands/impeccable.md generated
+# The compiled detector bundle embeds WASM; regenerate it with cargo xtask
+# bundle rather than merging its payload. Registry JSON remains mergeable text.
+crates/live/assets/detect-antipatterns-browser.js generated -diff merge=binary
+crates/live/assets/antipatterns.json generated

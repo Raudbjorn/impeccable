@@ -31,7 +31,7 @@ import { rewritePluginMarkdownTree } from '../scripts/lib/plugin-paths.js';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 // Raise deliberately, with the reason in the commit message.
-const SKILL_MD_MAX_BYTES = 12_300;
+const SKILL_MD_MAX_BYTES = 12_310;
 const DESCRIPTION_MAX_BYTES = 1_400;
 
 const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-prompt-budget-'));

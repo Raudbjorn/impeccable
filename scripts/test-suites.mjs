@@ -8,6 +8,7 @@ export const OPT_IN_SUITES = [
   'live-e2e-accept-cleanup',
   'new-work-e2e',
   'skill-behavior',
+  'skill-workflow',
   'live-svelte-adapter-deepseek',
 ];
 
@@ -16,12 +17,8 @@ const COMMON_INFRA_PATTERNS = [
   /^bun\.lock$/,
   /^scripts\/run-tests\.mjs$/,
   /^scripts\/test-suites\.mjs$/,
-  /^scripts\/ci-test-plan\.mjs$/,
   /^scripts\/lib\/(live-server-processes|process-group|test-orphan-reaper)\.mjs$/,
   /^tests\/lib\/live-servers\.mjs$/,
-  /^scripts\/lib\/(live-server-processes|process-group|test-orphan-reaper)\.mjs$/,
-  /^tests\/lib\/live-servers\.mjs$/,
-  /^\.github\/workflows\/ci\.yml$/,
 ];
 
 export const SUITES = {
@@ -34,7 +31,6 @@ export const SUITES = {
       /^ENGINE_VERSION$/,
       /^README(\.npm)?\.md$/,
       /^vscode\//,
-      /^\.github\/workflows\/release-engine\.yml$/,
       /^cli\/bin\//,
       /^cli\/engine\/registry\//,
     ],
@@ -53,8 +49,6 @@ export const SUITES = {
           'tests/validate-plugin-versions.test.js',
           'tests/validate-plugin-manifest.test.js',
           'tests/plugin-paths.test.js',
-          'tests/release-engine-workflow.test.js',
-          'tests/workflow-security.test.js',
           'tests/check-generated.test.js',
         ],
       },
@@ -68,14 +62,12 @@ export const SUITES = {
         // is safe.
         timeoutMs: 180000,
         files: [
-          'tests/ci-test-plan.test.mjs',
           'tests/cli-shim.test.mjs',
           'tests/launcher-download.test.mjs',
           'tests/publish-platform-packages.test.mjs',
           'tests/hook-build.test.mjs',
           'tests/openai-plugin.test.mjs',
           'tests/vscode-extension.test.mjs',
-          'tests/github-issue-gate.test.mjs',
           'tests/design-context-export.test.mjs',
           'tests/design-context-import.test.mjs',
           'tests/design-context-portability.test.mjs',
@@ -279,26 +271,41 @@ export const SUITES = {
     ],
   },
   'skill-behavior': {
-    description: 'LLM-backed skill setup behavior scenarios.',
+    description: 'LLM-backed protocol checkpoints, not full builds.',
     optIn: true,
     triggers: [
       ...COMMON_INFRA_PATTERNS,
       /^skill\/SKILL\.src\.md$/,
-      /^skill\/reference\/(init|document|brand|product|shape|craft|audit|polish|live|routing)\.md$/,
+      /^skill\/reference\//,
       /^ENGINE_VERSION$/,
       /^tests\/skill-behavior\//,
     ],
+    commands: [{
+      runner: 'node',
+      timeoutMs: 240000,
+      wallClockMs: 1_800_000,
+      files: ['tests/skill-behavior/scenarios.test.mjs'],
+    }],
+  },
+  'skill-workflow': {
+    description: 'Explicitly opt-in completed workflows with a preflighted browser.',
+    optIn: true,
+    needsPlaywright: true,
+    triggers: [
+      ...COMMON_INFRA_PATTERNS,
+      /^skill\//,
+      /^ENGINE_VERSION$/,
+      /^tests\/skill-workflow\//,
+      /^tests\/skill-behavior\//,
+    ],
     commands: [
+      { runner: 'node', files: ['tests/skill-workflow-browser.test.mjs'] },
+      {
+        runner: 'node', timeoutMs: 240000, wallClockMs: 600000,
+        files: ['tests/skill-workflow/finish-handoff.test.mjs'],
+      },
       {
         runner: 'node',
-        // 300000 was too low to measure what these scenarios assert. The
-        // workflow-contract turns run 20+ steps against a frontier model, and
-        // the *correct* path is the slow one: a run that stops to put the
-        // concept to the user before building was measured at 579s, while the
-        // runs that skipped that checkpoint and failed the assertion finished
-        // in 130-200s. At a 300s cap the thorough path is killed and the hasty
-        // path is graded, so the cap was selecting for the behavior the suite
-        // exists to forbid.
         timeoutMs: 900000,
         // Overall wall-clock safety cap for the whole sweep: if a provider
         // call wedges past every inner guard (the harness's 840s per-turn
@@ -307,10 +314,7 @@ export const SUITES = {
         // instead of hanging overnight. Sized well above a healthy two-provider
         // sweep; override with IMPECCABLE_TEST_WALL_CLOCK_MS to scope it down.
         wallClockMs: 3_600_000,
-        files: [
-          'tests/skill-behavior/scenarios.test.mjs',
-          'tests/skill-behavior/workflow-contract.test.mjs',
-        ],
+        files: ['tests/skill-workflow/full-build.test.mjs'],
       },
     ],
   },

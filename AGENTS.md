@@ -26,8 +26,7 @@ Run `bun run build` after changing anything in `skill/`, transformer code, or us
 
 The root harness folders (`.agents/skills/`, `.claude/skills/`, `.cursor/skills/`, `.dsh/skills/`, `.gemini/skills/`, `.github/skills/`, `.grok/skills/`, `.hermes/skills/`, `.kiro/skills/`, `.opencode/skills/`, `.pi/skills/`, `.qoder/skills/`, `.rovodev/skills/`, `.trae*/skills/`, `.vibe/skills/`) and `plugin/` stay tracked so `main` remains installable for direct GitHub, `npx skills`, and submodule users. They are still generated artifacts.
 
-Normal development should be source-first: stage changes in `crates/`, `browser-bundle/`, `skill/`, `scripts/`, `cli/`, `extension/`, and `tests/`; leave generated harness churn unstaged unless the user asked for it. After source changes land on `main`, `.github/workflows/sync-generated-output.yml` runs `bun run build:release` and commits generated provider output directly back to `main`. Treat generated harness diffs as release artifacts and keep them out of feature PRs unless they are the point of the PR. The two tracked engine assets under `crates/live/assets/` follow the rule-change workflow below instead.
-
+Normal development should be source-first: stage changes in `crates/`, `browser-bundle/`, `skill/`, `scripts/`, `cli/`, `extension/`, and `tests/`; leave generated harness churn unstaged unless the user asked for it. This fork carries no `.github/workflows/`, so nothing auto-syncs generated provider output after a merge; run `bun run build:release` by hand and commit the result when tracked output needs refreshing. Treat generated harness diffs as release artifacts and keep them out of feature PRs unless they are the point of the PR. The two tracked engine assets under `crates/live/assets/` follow the rule-change workflow below instead.
 
 ## Coding Style & Naming Conventions
 

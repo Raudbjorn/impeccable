@@ -629,7 +629,6 @@ describe('generated hook artifacts in repo', { skip: SYNCED ? false : 'generated
   for (const rel of [
     '.claude/settings.json',
     '.codex/hooks.json',
-    '.github/hooks/impeccable.json',
   ]) {
     it(`${rel} exists and is valid JSON`, () => {
       const abs = path.join(REPO_ROOT, rel);
@@ -641,7 +640,6 @@ describe('generated hook artifacts in repo', { skip: SYNCED ? false : 'generated
   it('root hook manifests exactly match the hook builders', () => {
     assert.deepEqual(readJson('.claude/settings.json'), buildClaudeSettingsManifest());
     assert.deepEqual(readJson('.codex/hooks.json'), buildCodexHooksManifest());
-    assert.deepEqual(readJson('.github/hooks/impeccable.json'), buildGitHubHooksManifest());
   });
 
   it('Claude project settings reference the launcher in .claude/skills', () => {
@@ -675,16 +673,6 @@ describe('generated hook artifacts in repo', { skip: SYNCED ? false : 'generated
     assert.ok(fs.existsSync(path.join(REPO_ROOT, '.agents/skills/impeccable/scripts')));
   });
 
-  it('GitHub Copilot repo hooks reference the launcher in the .github skill payload', () => {
-    const manifest = readJson('.github/hooks/impeccable.json');
-    const entry = manifest.hooks.postToolUse[0];
-
-    assert.equal(entry.matcher, 'edit|create|apply_patch');
-    expectCommand(entry.bash, '.github/skills/impeccable/scripts');
-    assert.ok(fs.existsSync(path.join(REPO_ROOT, '.github/skills/impeccable/SKILL.md')));
-    assert.ok(fs.existsSync(path.join(REPO_ROOT, '.github/skills/impeccable/scripts')));
-  });
-
   it('does not generate probe scripts into provider skill payloads', () => {
     for (const providerDir of ['.claude', '.agents', 'plugin']) {
       const probe = path.join(REPO_ROOT, providerDir, 'skills', 'impeccable', 'scripts', 'hook-probe.mjs');
@@ -692,11 +680,17 @@ describe('generated hook artifacts in repo', { skip: SYNCED ? false : 'generated
     }
   });
 
-  it('does not generate stale Codex hook packaging artifacts', () => {
+  it('does not regenerate pruned providers or stale plugin artifacts', () => {
     for (const rel of [
       '.claude/hooks/hooks.json',
       '.agents/hooks',
       '.agents/plugins/marketplace.json',
+      ...['.cursor', '.grok', '.hermes', '.qoder', '.rovodev', '.trae', '.trae-cn']
+        .map((provider) => `${provider}/skills/impeccable`),
+      '.cursor-plugin',
+      'cursor-plugin',
+      '.github/hooks',
+      'plugin/.grok-plugin',
       'plugin/.codex-plugin',
       'plugin/assets',
       'plugin-codex',
