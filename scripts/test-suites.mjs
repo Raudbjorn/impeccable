@@ -17,12 +17,8 @@ const COMMON_INFRA_PATTERNS = [
   /^bun\.lock$/,
   /^scripts\/run-tests\.mjs$/,
   /^scripts\/test-suites\.mjs$/,
-  /^scripts\/ci-test-plan\.mjs$/,
   /^scripts\/lib\/(live-server-processes|process-group|test-orphan-reaper)\.mjs$/,
   /^tests\/lib\/live-servers\.mjs$/,
-  /^scripts\/lib\/(live-server-processes|process-group|test-orphan-reaper)\.mjs$/,
-  /^tests\/lib\/live-servers\.mjs$/,
-  /^\.github\/workflows\/ci\.yml$/,
 ];
 
 export const SUITES = {
@@ -35,8 +31,8 @@ export const SUITES = {
       /^ENGINE_VERSION$/,
       /^README(\.npm)?\.md$/,
       /^vscode\//,
-      /^\.github\/workflows\/release-engine\.yml$/,
       /^cli\/bin\//,
+      /^cli\/engine\/registry\//,
     ],
     commands: [
       {
@@ -53,8 +49,7 @@ export const SUITES = {
           'tests/validate-plugin-versions.test.js',
           'tests/validate-plugin-manifest.test.js',
           'tests/plugin-paths.test.js',
-          'tests/release-engine-workflow.test.js',
-          'tests/workflow-security.test.js',
+          'tests/check-generated.test.js',
         ],
       },
       {
@@ -67,15 +62,22 @@ export const SUITES = {
         // is safe.
         timeoutMs: 180000,
         files: [
-          'tests/ci-test-plan.test.mjs',
           'tests/cli-shim.test.mjs',
           'tests/launcher-download.test.mjs',
           'tests/publish-platform-packages.test.mjs',
-          'tests/github-sheriff.test.mjs',
           'tests/hook-build.test.mjs',
           'tests/openai-plugin.test.mjs',
-          'tests/cursor-plugin.test.mjs',
           'tests/vscode-extension.test.mjs',
+          'tests/design-context-export.test.mjs',
+          'tests/design-context-import.test.mjs',
+          'tests/design-context-portability.test.mjs',
+          'tests/score-evidence.test.mjs',
+          'tests/compose.test.mjs',
+          'tests/visual-cues.test.mjs',
+          'tests/image-analyze.test.mjs',
+          'tests/omp-hook-module.test.mjs',
+          'tests/omp-plugin-layout.test.mjs',
+          'tests/prompt-budget.test.mjs',
           'tests/process-group.test.mjs',
           'tests/release.test.mjs',
           'tests/bundle-signing.test.mjs',
@@ -129,7 +131,7 @@ export const SUITES = {
     commands: [
       {
         runner: 'node',
-        files: ['tests/extension-build.test.mjs'],
+        files: ['tests/extension-build.test.mjs', 'tests/detect-static-html-skill-install.test.mjs'],
       },
     ],
   },
@@ -191,6 +193,7 @@ export const SUITES = {
       /^skill\/agents\//,
       /^scripts\/build\.js$/,
       /^scripts\/lib\/validate-plugin-manifest\.js$/,
+      /^scripts\/lib\/plugin-paths\.js$/,
       /^tests\/plugin-e2e\.test\.mjs$/,
     ],
     commands: [
@@ -304,13 +307,19 @@ export const SUITES = {
       {
         runner: 'node',
         timeoutMs: 900000,
+        // Overall wall-clock safety cap for the whole sweep: if a provider
+        // call wedges past every inner guard (the harness's 840s per-turn
+        // AbortSignal and the 900s per-test timeout), the runner SIGKILLs the
+        // process group so the sweep still ends with a per-provider tally
+        // instead of hanging overnight. Sized well above a healthy two-provider
+        // sweep; override with IMPECCABLE_TEST_WALL_CLOCK_MS to scope it down.
         wallClockMs: 3_600_000,
         files: ['tests/skill-workflow/full-build.test.mjs'],
       },
     ],
   },
   'live-svelte-adapter-deepseek': {
-    description: 'DeepSeek-backed Svelte adapter browser sweep.',
+    description: 'Provider-backed Svelte adapter browser sweep (DeepSeek by default).',
     optIn: true,
     needsPlaywright: true,
     triggers: [

@@ -137,6 +137,24 @@ function buildClaudeAgent(agent, body) {
   return `${generateYamlFrontmatter(frontmatter)}\n${body.trim()}\n`;
 }
 
+// oh-my-pi task agents are markdown with frontmatter, discovered from
+// `.omp/agents/*.md` (project) and `~/.omp/agent/agents/*.md` (user). Only
+// `name` and `description` are portable, plus `autoloadSkills`: oh-my-pi
+// injects the named skills into the spawned agent before its first prompt,
+// which is the documented answer to a subagent that would otherwise start
+// without the skill that defines its job. `tools` is omitted deliberately --
+// oh-my-pi's tool vocabulary differs from ours, and omitting it grants the
+// default set rather than an intersection we cannot verify.
+function buildOmpAgent(agent, body) {
+  const frontmatter = {
+    name: agent.name,
+    description: agent.description,
+    autoloadSkills: ['impeccable'],
+  };
+
+  return `${generateYamlFrontmatter(frontmatter)}\n${body.trim()}\n`;
+}
+
 // GitHub Copilot custom agents are markdown files named `<name>.agent.md`
 // (project scope: `.github/agents/`; user scope: `~/.copilot/agents/`). Only
 // the portable frontmatter fields are emitted: `name` and `description`.
@@ -149,30 +167,6 @@ function buildCopilotAgent(agent, body) {
     name: agent.name,
     description: agent.description,
   };
-
-  return `${generateYamlFrontmatter(frontmatter)}\n${body.trim()}\n`;
-}
-
-// Cursor subagents are plain markdown files with YAML frontmatter (project
-// scope: `.cursor/agents/`; user scope: `~/.cursor/agents/`). Fields: name,
-// description (drives auto-delegation), model (`inherit` maps directly to our
-// value), readonly, is_background. `readonly` is derived from the agent's own
-// tool list: a role that declares tools but neither Write nor Edit is a
-// reader, and Cursor can enforce that. effort/max-turns are skipped: Cursor's
-// effort option requires an explicit model id, incompatible with `inherit`.
-function buildCursorAgent(agent, body) {
-  const frontmatter = {
-    name: agent.name,
-    description: agent.description,
-    model: agent.model || 'inherit',
-  };
-
-  const tools = String(agent.tools || '').split(',').map(t => t.trim()).filter(Boolean);
-  if (tools.length > 0 && !tools.includes('Write') && !tools.includes('Edit')) {
-    frontmatter.readonly = true;
-  }
-  // The parent thread waits on each role's return; none of these run detached.
-  frontmatter.is_background = false;
 
   return `${generateYamlFrontmatter(frontmatter)}\n${body.trim()}\n`;
 }
@@ -208,17 +202,17 @@ function buildAgentFile(config, agent, body) {
     };
   }
 
+  if (config.agentFormat === 'omp-md') {
+    return {
+      filename: `${agent.name}.md`,
+      content: buildOmpAgent(agent, body),
+    };
+  }
+
   if (config.agentFormat === 'copilot-agent-md') {
     return {
       filename: `${agent.name}.agent.md`,
       content: buildCopilotAgent(agent, body),
-    };
-  }
-
-  if (config.agentFormat === 'cursor-md') {
-    return {
-      filename: `${agent.name}.md`,
-      content: buildCursorAgent(agent, body),
     };
   }
 
@@ -437,13 +431,14 @@ export function createTransformer(config) {
 
     // Emit the provider hook manifest when the provider opts in.
     // Claude Code uses `.claude/settings.json`, Codex uses project-local
-    // `.codex/hooks.json`, and Cursor uses `.cursor/hooks.json`.
+    // `.codex/hooks.json`.
     let hooksEmitted = false;
     if (config.emitHooks) {
       const manifest = hooksJsonFor(config.emitHooks, { configDir });
       if (manifest) {
         const hooksRel = config.hooksManifestRel || path.join('hooks', 'hooks.json');
-        writeFile(path.join(providerDir, configDir, hooksRel), JSON.stringify(manifest, null, 2) + '\n');
+        const content = manifest.isModule ? manifest.content : JSON.stringify(manifest, null, 2) + '\n';
+        writeFile(path.join(providerDir, configDir, hooksRel), content);
         hooksEmitted = true;
       }
     }

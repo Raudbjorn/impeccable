@@ -1,6 +1,6 @@
 # Impeccable CLI
 
-Detect UI anti-patterns and design quality issues from the command line, and install the Impeccable design skill into your AI coding harness. The detector scans HTML, CSS, JSX, TSX, Vue, and Svelte files for 61 deterministic rules, including AI-generated UI tells, accessibility violations, and general design quality problems.
+Detect UI anti-patterns and design quality issues from the command line, and install the Impeccable design skill into your AI coding harness. The detector scans HTML, CSS, JSX, TSX, Vue, and Svelte files for 62 deterministic rules, including AI-generated UI tells, accessibility violations, and general design quality problems.
 
 The npm package is a small launcher. It runs the `impeccable` engine binary for your platform, installed alongside it as an optional dependency (`@impeccable/cli-<os>-<arch>`), and falls back to a per-user cache or a one-time download when that package is missing.
 
@@ -57,7 +57,7 @@ npx impeccable detect --json src/
 
 **Quality**: tiny body text, cramped padding, long line lengths, small touch targets
 
-61 deterministic detector rules in total. See the full catalog at [impeccable.style/slop](https://impeccable.style/slop).
+62 deterministic detector rules in total. See the full catalog at [impeccable.style/slop](https://impeccable.style/slop).
 
 ## Exit Codes
 
@@ -87,8 +87,10 @@ Binary lookup order: `IMPECCABLE_BIN`, the platform package, `~/.impeccable/bin/
 
 ## Part of Impeccable
 
-This CLI is part of [Impeccable](https://impeccable.style), a cross-provider design skill pack for AI-powered development tools. The full suite includes 23 commands for Claude, Cursor, GitHub Copilot, Gemini, Codex, Hermes Agent, Veto, and more.
+This CLI is part of [Impeccable](https://impeccable.style), a cross-provider design skill pack for AI-powered development tools. The full suite includes 25 commands for Claude, GitHub Copilot, Gemini, Codex, Veto, and more.
 
 ## License
 
-[Apache 2.0](https://github.com/pbakaus/impeccable/blob/main/LICENSE)
+[Apache 2.0](https://github.com/Raudbjorn/impeccable/blob/main/LICENSE)
+
+Supported engine hosts: Linux x64 and arm64.

@@ -22,6 +22,10 @@ function template(target) {
 }
 
 describe('platform package templates', () => {
+  it('ships only Linux platform packages', () => {
+    assert.deepEqual(ENGINE_TARGETS, ['linux-x64', 'linux-arm64']);
+  });
+
   it('every target has a template whose bin points at bin/<binary> and whose name matches', () => {
     for (const target of ENGINE_TARGETS) {
       const stamped = stampTemplate(template(target), target, VERSION);
@@ -33,14 +37,14 @@ describe('platform package templates', () => {
   });
 
   it('refuses a template whose bin does not match the binary name', () => {
-    const bad = { ...template('darwin-arm64'), bin: { 'impeccable-darwin-arm64': 'bin/impeccable.exe' } };
-    assert.throws(() => stampTemplate(bad, 'darwin-arm64', VERSION), /must map its bin to bin\/impeccable /);
+    const bad = { ...template('linux-arm64'), bin: { 'impeccable-linux-arm64': 'bin/impeccable.exe' } };
+    assert.throws(() => stampTemplate(bad, 'linux-arm64', VERSION), /must map its bin to bin\/impeccable /);
   });
 
   it('stages package.json, an executable binary, and the LICENSE', () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'ipp-stage-'));
     try {
-      for (const target of ['linux-x64', 'windows-x64']) {
+      for (const target of ['linux-x64', 'linux-arm64']) {
         const dir = stagePackage({
           target,
           version: VERSION,
@@ -53,7 +57,7 @@ describe('platform package templates', () => {
         assert.equal(pkg.version, VERSION);
         const bin = path.join(dir, 'bin', binaryName(target));
         assert.equal(fs.readFileSync(bin, 'utf-8'), `binary for ${target}`);
-        if (process.platform !== 'win32') assert.equal(fs.statSync(bin).mode & 0o111, 0o111, 'binary is executable');
+        assert.equal(fs.statSync(bin).mode & 0o111, 0o111, 'binary is executable');
         assert.equal(fs.readFileSync(path.join(dir, 'LICENSE'), 'utf-8'), 'LICENSE TEXT');
       }
     } finally {
@@ -108,6 +112,6 @@ describe('release asset verification and registry probe', () => {
   it('reports a published version as published and a 404 as not', async () => {
     routes.set(`/${packageName('linux-x64').replace('/', '%2F')}/${VERSION}`, serve('{"version":"9.9.9"}'));
     assert.equal(await isPublished('linux-x64', VERSION, base), true);
-    assert.equal(await isPublished('darwin-x64', VERSION, base), false);
+    assert.equal(await isPublished('linux-arm64', VERSION, base), false);
   });
 });

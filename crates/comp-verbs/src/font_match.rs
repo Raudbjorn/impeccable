@@ -427,11 +427,11 @@ pub fn run(argv: &[String], io: &mut Io, renderer: &mut dyn FontRenderer) -> i32
     let rank_id = arg(argv, "rank");
     let id = measure_id.or(rank_id);
     let Some(id) = id else {
-        io.err("usage: font-match.mjs --measure <text-region-id> | --rank <text-region-id> [--candidates \"Family:700,Family2:400,...\"] [--text \"...\"] [--transform uppercase] [--category sans,serif,display,handwriting,mono]\n");
+        io.err("usage: impeccable font-match --measure <text-region-id> | --rank <text-region-id> [--candidates \"Family:700,Family2:400,...\"] [--text \"...\"] [--transform uppercase] [--category sans,serif,display,handwriting,mono]\n");
         return 1;
     };
     let Some(spec_val) = spec.as_mut() else {
-        io.err(&format!("font-match: no spec at {spec_path}; run comp-spec.mjs first\n"));
+        io.err(&format!("font-match: no spec at {spec_path}; run impeccable comp-spec first\n"));
         return 1;
     };
     let region = spec_val

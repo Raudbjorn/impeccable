@@ -35,8 +35,17 @@ pub fn finding(id: &str, artifact: &str, path: Option<String>, severity: &'stati
     Finding { id: id.to_string(), artifact: artifact.to_string(), path, severity, summary, fix }
 }
 
-const KNOWN_CONFIG_KEYS: [&str; 8] =
-    ["hook", "detector", "updateCheck", "stalenessCheck", "projectRoots", "buildPath", "$schema", "version"];
+const KNOWN_CONFIG_KEYS: [&str; 9] = [
+    "hook",
+    "detector",
+    "updateCheck",
+    "stalenessCheck",
+    "projectRoots",
+    "buildPath",
+    "retrieval",
+    "$schema",
+    "version",
+];
 const BUILD_PATH_VALUES: [&str; 2] = ["comp", "code"];
 const DIRECTION_WORK_PATHS: [&str; 2] = [".impeccable/surfaces", ".impeccable/mocks/decision"];
 const KNOWN_DETECTOR_KEYS: [&str; 5] = ["ignoreRules", "ignoreFiles", "ignoreValues", "designSystem", "extensions"];
@@ -471,6 +480,7 @@ pub struct BootExtras {
 /// grouped by artifact, so deeper reports (doctor) can interleave their own
 /// checks without rebuilding this policy (upstream 80997663).
 pub struct BootFindingGroups {
+    pub compose: Vec<Finding>,
     pub product: Vec<Finding>,
     pub native_platform: Vec<Finding>,
     pub design_sidecar: Vec<Finding>,
@@ -499,6 +509,7 @@ pub fn collect_boot_finding_groups(ctx: &Ctx, cwd: &str, extras: &BootExtras) ->
         },
         design_sidecar: check_design_sidecar(extras.abs_design_path.as_deref(), &extras.sidecar_candidates, &project_root),
         config: check_config(&project_root, Some(&ctx.repo_root)),
+        compose: crate::compose::assessment::drift(&project_root, false),
         build_path: check_build_path_unset(&project_root, Some(&ctx.repo_root), ctx.product.as_deref()),
         surface_briefs: check_surface_briefs(&ctx.surface_brief_candidates, &project_root),
         project_roots: match &extras.project_root_patterns {
@@ -516,6 +527,7 @@ pub fn collect_boot_findings(ctx: &Ctx, cwd: &str, extras: &BootExtras) -> Vec<F
     out.extend(groups.native_platform);
     out.extend(groups.design_sidecar);
     out.extend(groups.config);
+    out.extend(groups.compose);
     out.extend(groups.build_path);
     out.extend(groups.surface_briefs);
     out.extend(groups.project_roots);

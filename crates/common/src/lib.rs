@@ -73,17 +73,9 @@ impl Io {
         )
     }
 
-    /// `os.homedir()`: `$HOME` on posix; on Windows Node reads `USERPROFILE`
-    /// (a `HOME` left by an MSYS shell is only a fallback here).
+    /// `os.homedir()`: `$HOME` on Linux.
     pub fn home(&self) -> Option<PathBuf> {
-        let (first, second) = if cfg!(windows) {
-            ("USERPROFILE", "HOME")
-        } else {
-            ("HOME", "USERPROFILE")
-        };
-        self.env(first)
-            .or_else(|| self.env(second))
-            .map(PathBuf::from)
+        self.env("HOME").map(PathBuf::from)
     }
 
     pub fn out(&mut self, s: &str) {

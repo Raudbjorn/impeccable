@@ -8,7 +8,7 @@
 //! writes the launcher form `[ ! -f "<skill>/scripts/impeccable" ] ||
 //! "<skill>/scripts/impeccable" hook` (`hook-before-edit` for Cursor), the
 //! shape the public build's `transformers/hooks.js` puts in the bundle; the
-//! Codex `commandWindows` sibling runs `impeccable.cmd` behind `if exist`.
+//! Linux installs omit legacy Windows hook commands.
 //! `impeccable hooks on` (`impeccable_hook::admin`) writes the same launcher
 //! invocation for a project install (without the existence guard). Recognition of an
 //! Impeccable-owned entry (either the JS `.mjs` generation or the launcher
@@ -36,6 +36,7 @@ pub fn provider_hook_artifacts(provider: &str) -> &'static [HookArtifactSpec] {
         ".cursor" => &[HookArtifactSpec { source_provider: ".cursor", rel: "hooks.json", dest_provider: ".cursor", dest_rel: None }],
         ".agents" => &[HookArtifactSpec { source_provider: ".codex", rel: "hooks.json", dest_provider: ".codex", dest_rel: None }],
         ".github" => &[HookArtifactSpec { source_provider: ".github", rel: "hooks/impeccable.json", dest_provider: ".github", dest_rel: None }],
+        ".omp" => &[HookArtifactSpec { source_provider: ".omp", rel: "hooks/post/impeccable.js", dest_provider: ".omp", dest_rel: None }],
         ".grok" => &[HookArtifactSpec { source_provider: ".grok", rel: "hooks/impeccable.json", dest_provider: ".grok", dest_rel: None }],
         _ => &[],
     }
@@ -130,10 +131,6 @@ pub fn json_string(value: &str) -> String {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QuotedPath {
     pub posix: String,
-    /// Double-quoted (cmd.exe treats `'` as literal, issue #533).
-    pub win32: String,
-    /// The `.cmd` shim, double-quoted, for Codex's `commandWindows`.
-    pub win32_cmd: String,
 }
 
 /// JS: the `quotedPath` computed in rewriteHookCommandsForSkillRoot: the
@@ -145,32 +142,14 @@ pub fn quoted_launcher_path(skill_root: &str, provider: &str, absolute: bool) ->
     let path = if absolute { abs } else { launcher_rel_path(provider) };
     Some(QuotedPath {
         posix: if absolute { sh_single_quote(&path) } else { json_string(&path) },
-        win32: json_string(&path),
-        win32_cmd: json_string(&format!("{path}.cmd")),
     })
 }
 
-/// JS: guardHookCommand(quotedPath, provider), launcher edition, in the
-/// shape the public build's `transformers/hooks.js` `guardedLauncher` emits:
-/// `[ ! -f X ] || X <verb>` (not `|| true`, so the launcher's exit code, and
-/// Claude's exit-2 blocking signal, still reach the agent). `.agents` (Codex)
-/// keeps the POSIX form unconditionally: its Windows consumers read the
-/// `commandWindows` sibling instead. Other providers installed on Windows keep
-/// the double-quoted path (cmd.exe treats `'` as literal, issue #533); the JS
-/// `node -e` existence wrapper has no launcher equivalent, so the POSIX guard
-/// stands there too (Claude Code on Windows runs hooks through Git Bash).
-pub fn hook_command(quoted: &QuotedPath, provider: &str, win32: bool) -> String {
+/// Guard the Linux launcher without swallowing its exit code.
+pub fn hook_command(quoted: &QuotedPath, provider: &str) -> String {
     let verb = hook_verb(provider);
-    let q = if provider != ".agents" && win32 { &quoted.win32 } else { &quoted.posix };
+    let q = &quoted.posix;
     format!("[ ! -f {q} ] || {q} {verb}")
-}
-
-/// JS: windowsHookCommand(quotedPath), launcher edition (`transformers/hooks.js`
-/// `windowsLauncherCommand`): the `.cmd` shim behind a cmd.exe `if exist`
-/// guard; `exit /b` forwards the launcher's errorlevel.
-pub fn windows_hook_command(quoted: &QuotedPath, provider: &str) -> String {
-    let q = &quoted.win32_cmd;
-    format!("if exist {q} ({q} {} & exit /b)", hook_verb(provider))
 }
 
 /// JS: rewriteHookCommandsForSkillRoot(value, provider, {skillRoot, absolute})
@@ -178,19 +157,10 @@ pub fn rewrite_hook_commands_for_skill_root(value: &Value, provider: &str, skill
     let Some(quoted) = quoted_launcher_path(skill_root, provider, absolute) else {
         return value.clone();
     };
-    rewrite_value(value, provider, &quoted, cfg!(windows))
+    rewrite_value(value, provider, &quoted)
 }
 
-/// `rewrite_hook_commands_for_skill_root` with the platform made explicit
-/// (tests drive the Windows form from any host).
-pub fn rewrite_hook_commands_for_platform(value: &Value, provider: &str, skill_root: &str, absolute: bool, win32: bool) -> Value {
-    let Some(quoted) = quoted_launcher_path(skill_root, provider, absolute) else {
-        return value.clone();
-    };
-    rewrite_value(value, provider, &quoted, win32)
-}
-
-fn rewrite_value(value: &Value, provider: &str, quoted: &QuotedPath, win32: bool) -> Value {
+fn rewrite_value(value: &Value, provider: &str, quoted: &QuotedPath) -> Value {
     match value {
         Value::String(_) => {
             // JS: the string arm goes through valueHasImpeccableHookMarker,
@@ -198,21 +168,16 @@ fn rewrite_value(value: &Value, provider: &str, quoted: &QuotedPath, win32: bool
             if !value_has_impeccable_hook_marker(value) {
                 return value.clone();
             }
-            Value::String(hook_command(quoted, provider, win32))
+            Value::String(hook_command(quoted, provider))
         }
-        Value::Array(items) => Value::Array(items.iter().map(|v| rewrite_value(v, provider, quoted, win32)).collect()),
+        Value::Array(items) => Value::Array(items.iter().map(|v| rewrite_value(v, provider, quoted)).collect()),
         Value::Object(map) => {
             let mut next = Map::new();
             for (k, v) in map {
-                next.insert(k.clone(), rewrite_value(v, provider, quoted, win32));
+                if k == "commandWindows" && value_has_impeccable_hook_marker(v) { continue; }
+                next.insert(k.clone(), rewrite_value(v, provider, quoted));
             }
-            if provider == ".agents" {
-                if let Some(cmd @ Value::String(_)) = map.get("command") {
-                    if value_has_impeccable_hook_marker(cmd) {
-                        next.insert("commandWindows".to_string(), Value::String(windows_hook_command(quoted, provider)));
-                    }
-                }
-            }
+
             Value::Object(next)
         }
         _ => value.clone(),
@@ -262,6 +227,9 @@ pub fn file_has_impeccable_hook_marker(file: &str) -> bool {
         return false;
     }
     let Ok(text) = util::read_text(file) else { return false };
+    if file.ends_with("/hooks/post/impeccable.js") {
+        return text.contains("export default function impeccableHook(");
+    }
     let Ok(parsed) = serde_json::from_str::<Value>(&text) else { return false };
     let Value::Object(map) = parsed else { return false };
     match map.get("hooks") {
@@ -413,7 +381,13 @@ fn json_parse_message(e: &serde_json::Error) -> String {
 
 /// JS: copyProviderHooks(bundleDir, root, providers, {force, skillRoot}).
 /// Returns the providers whose manifest was written (deduplicated, in order).
-pub fn copy_provider_hooks(sys: &crate::providers::Sys, bundle_dir: &str, root: &str, providers: &[&'static str], force: bool, skill_root: Option<&str>) -> Result<Vec<&'static str>, String> {
+///
+/// `scope` is the scope the SKILL was installed at, which is what decides
+/// where its launcher sits: the skills dir is `<skill_root>/<provider>/skills`
+/// for a project install and `sys.user_provider_skills_dir` for a user one,
+/// and those differ for any provider carrying a home-dir override. Passing
+/// `None` reads as project scope.
+pub fn copy_provider_hooks(sys: &crate::providers::Sys, bundle_dir: &str, root: &str, providers: &[&'static str], force: bool, skill_root: Option<&str>, scope: Option<crate::providers::Scope>) -> Result<Vec<&'static str>, String> {
     let skill_root = skill_root.unwrap_or(root);
     let mut written: Vec<&'static str> = Vec::new();
     for provider in providers {
@@ -426,6 +400,41 @@ pub fn copy_provider_hooks(sys: &crate::providers::Sys, bundle_dir: &str, root: 
                     prune_impeccable_hook_from_manifest(&artifact.dest)?;
                     continue;
                 }
+            }
+            if *provider == ".omp" {
+                if util::exists(&artifact.dest) && !file_has_impeccable_hook_marker(&artifact.dest) {
+                    if !force {
+                        return Err(format!("Existing hook module is not Impeccable-owned: {}. Re-run with --force to replace it.", artifact.dest));
+                    }
+                    util::write_bytes(&format!("{}.bak", artifact.dest), &util::read_bytes(&artifact.dest)?)?;
+                }
+                let mut module = util::read_text(&artifact.src)?;
+                // The bundled module resolves its launcher relative to itself:
+                // `<root>/<provider>/hooks/post/../../skills/impeccable/...`.
+                // That is right exactly when the skill really sits at
+                // `<root>/<provider>/skills`, so compare against that rather
+                // than against `skill_root != root`. A global install has
+                // skill_root == root == home and still needs the rewrite,
+                // because oh-my-pi reads user skills from ~/.omp/agent/skills;
+                // `is_home_dir` would not do either, since a project install
+                // that happens to live in the home directory keeps its skills
+                // at `~/.omp/skills` and must stay relative.
+                let skills_dir = if scope == Some(crate::providers::Scope::User) {
+                    sys.user_provider_skills_dir(skill_root, provider)
+                } else {
+                    jsp::join(&[skill_root, provider, "skills"])
+                };
+                if skills_dir != jsp::join(&[root, provider, "skills"]) {
+                    let launcher = jsp::join(&[&skills_dir, "impeccable/scripts/impeccable"]);
+                    let declaration = format!("const HOOK_SCRIPT = {};", json_string(&launcher));
+                    module = module.lines().map(|line| {
+                        if line.starts_with("const HOOK_SCRIPT =") { declaration.as_str() } else { line }
+                    }).collect::<Vec<_>>().join("\n") + "\n";
+                }
+                util::mkdir_p(&jsp::dirname(&artifact.dest))?;
+                util::write_bytes(&artifact.dest, module.as_bytes())?;
+                written.push(provider);
+                continue;
             }
             let fresh_manifest = read_json_file(&artifact.src, "Bundled hook manifest")?;
             let absolute = skill_root != root || sys.is_home_dir(root);

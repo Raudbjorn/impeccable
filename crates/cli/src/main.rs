@@ -64,6 +64,7 @@ fn run(args: &[String], io: &mut Io) -> i32 {
         "signals" | "context-signals" => impeccable_context::run_signals(rest, io),
         "doctor" => impeccable_context::run_doctor(rest, io),
         "concept-seed" => impeccable_context::run_concept_seed(rest, io),
+        "compose" => impeccable_context::compose::run(rest, io),
         "generate-image" => impeccable_context::run_generate_image(rest, io),
         "serve-question" => impeccable_context::run_serve_question(rest, io),
         // comp-fidelity verbs (crates/comp-verbs over crates/comp)
@@ -108,7 +109,14 @@ fn run(args: &[String], io: &mut Io) -> i32 {
 
 /// The npm `impeccable` package version `cli.js --version` prints (its
 /// `package.json`), tracked separately from the crate version.
-pub const CLI_VERSION: &str = "4.0.0";
+pub const CLI_VERSION: &str = "4.1.0";
+
+#[test]
+fn cli_version_matches_npm_package() {
+    let package: serde_json::Value =
+        serde_json::from_str(include_str!("../../../package.json")).unwrap();
+    assert_eq!(CLI_VERSION, package["version"].as_str().unwrap());
+}
 
 /// The engines wired into `impeccable detect`: the static HTML engine
 /// (crates/html). The browser engine (crates/browser) plugs in here once it

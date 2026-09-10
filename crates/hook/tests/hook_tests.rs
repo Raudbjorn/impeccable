@@ -962,7 +962,7 @@ fn render_template_caps_and_footers() {
     assert_eq!(text.lines().filter(|l| l.starts_with("- L")).count(), 5);
     // The self-command is quoted in the host's shell form (#476 / #533):
     // single quotes under sh, double quotes on Windows.
-    let self_cmd = quote_command_arg("/opt/bin/impeccable", cfg!(windows));
+    let self_cmd = quote_command_arg("/opt/bin/impeccable");
     assert!(text.contains(&format!(
         "Run `{self_cmd} hooks ignore-value <rule> \"<value>\" --reason \"<who decided: evidence>\"`"
     )));
@@ -1051,7 +1051,7 @@ fn render_template_dedupes_descriptions_and_quotes_hints() {
     );
     assert!(hostile.contains(&format!(
         "ignore-value overused-font {}",
-        quote_command_arg("$(touch pwned)", cfg!(windows))
+        quote_command_arg("$(touch pwned)")
     )));
     let no_hint = {
         let mut x = f("side-tab", 1.0, "Side tab", "d", "s");
@@ -1061,16 +1061,11 @@ fn render_template_dedupes_descriptions_and_quotes_hints() {
     assert!(!no_hint.contains("ignore-value side-tab"));
     // platform quoting (#476 / #533)
     assert_eq!(
-        quote_command_arg("Space Grotesk Var", false),
+        quote_command_arg("Space Grotesk Var"),
         "'Space Grotesk Var'"
     );
-    assert_eq!(
-        quote_command_arg("Space Grotesk Var", true),
-        "\"Space Grotesk Var\""
-    );
-    assert_eq!(quote_command_arg("it's", false), "'it'\\''s'");
-    assert_eq!(quote_command_arg("a\"b\\c", true), "\"a\\\"b\\\\c\"");
-    assert_eq!(quote_command_arg("Inter", true), "Inter");
+    assert_eq!(quote_command_arg("it's"), "'it'\\''s'");
+    assert_eq!(quote_command_arg("Inter"), "Inter");
 }
 
 #[test]
@@ -1989,14 +1984,14 @@ fn admin_on_writes_launcher_manifests_for_every_harness() {
     let codex: Value = serde_json::from_str(&t.read(".codex/hooks.json")).unwrap();
     let entry = &codex["hooks"]["PostToolUse"][0]["hooks"][0];
     assert_eq!(entry["command"], json!("\".agents/skills/impeccable/scripts/impeccable\" hook"));
-    assert_eq!(entry["commandWindows"], json!("\".agents/skills/impeccable/scripts/impeccable.cmd\" hook"));
+    assert!(entry.get("commandWindows").is_none());
     assert_eq!(
         entry.as_object().unwrap().keys().cloned().collect::<Vec<_>>(),
-        vec!["type", "command", "commandWindows", "timeout", "statusMessage"]
+        vec!["type", "command", "timeout", "statusMessage"]
     );
     let stop = &codex["hooks"]["Stop"][0]["hooks"][0];
     assert_eq!(stop["command"], json!("\".agents/skills/impeccable/scripts/impeccable\" hook"));
-    assert_eq!(stop["commandWindows"], json!("\".agents/skills/impeccable/scripts/impeccable.cmd\" hook"));
+    assert!(stop.get("commandWindows").is_none());
     assert_eq!(stop["timeout"], json!(30));
 
     let cursor: Value = serde_json::from_str(&t.read(".cursor/hooks.json")).unwrap();
@@ -2056,10 +2051,7 @@ fn admin_on_repairs_legacy_mjs_manifests_to_the_launcher_form() {
     assert!(!codex.contains(".mjs"), "{codex}");
     let codex: Value = serde_json::from_str(&codex).unwrap();
     assert_eq!(codex["hooks"]["PostToolUse"].as_array().unwrap().len(), 1);
-    assert_eq!(
-        codex["hooks"]["PostToolUse"][0]["hooks"][0]["commandWindows"],
-        json!("\".agents/skills/impeccable/scripts/impeccable.cmd\" hook")
-    );
+    assert!(codex["hooks"]["PostToolUse"][0]["hooks"][0].get("commandWindows").is_none());
 
     // A launcher-form manifest written by another checkout is recognized as
     // ours too: shared settings carrying it make `on` prune the local file.
@@ -2198,4 +2190,49 @@ fn codex_stop_emits_decision_block() {
     assert_eq!(out["decision"], json!("block"));
     assert!(out["reason"].as_str().unwrap().contains("[side-tab]"));
     assert!(out.get("hookSpecificOutput").is_none());
+}
+
+#[test]
+fn omp_hook_lifecycle_and_reset_preserves_disabled_config_on_error() {
+    let t = Tmp::new();
+    let cwd = t.path();
+    let r = rt(&cwd);
+    t.write(".omp/skills/impeccable/SKILL.md", "---\nname: impeccable\n---\n");
+    let (_, err, code) = admin_run(&r, &["on"]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(t.read(".omp/hooks/post/impeccable.js"), impeccable_context::provider::OMP_HOOK_MODULE);
+    admin_run(&r, &["off"]);
+    let disabled = t.read(".impeccable/config.local.json");
+    t.write(".codex/hooks.json", "{invalid");
+    assert_eq!(admin_run(&r, &["reset"]).2, 1);
+    assert_eq!(t.read(".impeccable/config.local.json"), disabled);
+    t.write(".codex/hooks.json", "{}");
+    assert_eq!(admin_run(&r, &["reset"]).2, 0);
+    assert!(!t.exists(".omp/hooks/post/impeccable.js"));
+}
+
+#[test]
+fn reset_refuses_on_malformed_shared_manifest_and_preserves_config() {
+    // `file_has_impeccable_hook_marker` parses JSON and returns `false` when
+    // it can't, so a wired-but-corrupted `.claude/settings.json` used to read
+    // as "not wired" and let reset delete the disabling config out from under
+    // it: the hook re-armed with its kill switch gone. Reset must refuse
+    // instead, the same way it already refuses on a malformed `destRel`
+    // manifest.
+    let t = Tmp::new();
+    let cwd = t.path();
+    let r = rt(&cwd);
+    std::fs::create_dir_all(t.0.join(".claude/skills/impeccable")).unwrap();
+    let (_, err, code) = admin_run(&r, &["on"]);
+    assert_eq!(code, 0, "{err}");
+    let (_, err, code) = admin_run(&r, &["off"]);
+    assert_eq!(code, 0, "{err}");
+    let disabled = t.read(".impeccable/config.local.json");
+    t.write(
+        ".claude/settings.json",
+        r#"{"hooks":{"PostToolUse":[{"matcher":"Edit","hooks":[{"type":"command","command":"node \"${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/hook.mjs\""#,
+    );
+    let (_, err, code) = admin_run(&r, &["reset"]);
+    assert_eq!(code, 1, "{err}");
+    assert_eq!(t.read(".impeccable/config.local.json"), disabled);
 }

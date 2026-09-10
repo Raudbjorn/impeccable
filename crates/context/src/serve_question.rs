@@ -783,19 +783,8 @@ fn random_key() -> String {
     format!("{:08x}", (x & 0xffffffff) as u32)
 }
 
-pub fn open_system_browser(url: &str, env: &Env) -> bool {
-    let (cmd, args): (String, Vec<String>) = if cfg!(target_os = "macos") {
-        ("open".into(), vec![url.to_string()])
-    } else if cfg!(windows) {
-        let comspec = env.get("ComSpec").or_else(|| env.get("COMSPEC")).cloned().unwrap_or_else(|| "cmd.exe".into());
-        (comspec, vec!["/c".into(), "start".into(), String::new(), url.to_string()])
-    } else {
-        ("xdg-open".into(), vec![url.to_string()])
-    };
-    // JS (lib/open-system-browser.mjs): spawn(command, args, { stdio: 'ignore',
-    // detached: true }) + unref(). The Windows form is `cmd /c start "" <url>`
-    // exactly as the JS spawned it; the URL is a localhost one this process
-    // built, so cmd metacharacters are not a concern there.
+pub fn open_system_browser(url: &str, _env: &Env) -> bool {
+    let (cmd, args) = ("xdg-open", [url]);
     let mut c = std::process::Command::new(cmd);
     c.args(args).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
     impeccable_common::proc::detach(&mut c);
@@ -1263,6 +1252,13 @@ impl ServerState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn question_page_rejects_http_errors_before_confirming_a_choice() {
+        let rejection = PAGE.find("if (!response.ok)").expect("HTTP rejection guard");
+        assert!(rejection < PAGE.find("Choice recorded.").unwrap());
+        assert!(PAGE.contains("out of date"));
+    }
 
     #[test]
     fn question_page_uses_system_fonts_and_inline_branding() {

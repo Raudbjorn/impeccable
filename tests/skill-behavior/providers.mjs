@@ -45,12 +45,14 @@ export const PROVIDERS = {
   openai: { envKey: 'OPENAI_API_KEY', label: 'OpenAI' },
   google: { envKey: 'GOOGLE_CLOUD_API_KEY', label: 'Google' },
   deepseek: { envKey: 'DEEPSEEK_API_KEY', label: 'DeepSeek' },
+  minimax: { envKey: 'MINIMAX_API_KEY', label: 'MiniMax' },
 };
 
 export function detectProvider(modelId) {
   if (modelId.startsWith('claude-')) return 'anthropic';
   if (modelId.startsWith('gpt-')) return 'openai';
   if (modelId.startsWith('gemini-')) return 'google';
+  if (modelId.startsWith('MiniMax-')) return 'minimax';
   if (modelId.startsWith('deepseek-')) return 'deepseek';
   throw new Error(`Unsupported model id: "${modelId}"`);
 }
@@ -73,6 +75,13 @@ export function getModel(modelId) {
       process.env.GOOGLE_GENERATIVE_AI_API_KEY = process.env.GOOGLE_CLOUD_API_KEY;
     }
     return google(modelId);
+  }
+  if (provider === 'minimax') {
+    return createAnthropic({
+      baseURL: 'https://api.minimax.io/anthropic/v1',
+      apiKey: process.env.MINIMAX_API_KEY,
+      name: 'minimax.anthropic',
+    })(modelId);
   }
   if (provider === 'deepseek') {
     // DeepSeek's official Claude Code integration exposes an Anthropic-
@@ -105,6 +114,7 @@ export function getProviderOptions(modelId) {
     // module does not recognize is not an error; it just gets no options.
     return undefined;
   }
+  if (provider === 'minimax') return { anthropic: { thinking: { type: 'adaptive' } } };
   if (provider === 'openai') {
     const effort = process.env.IMPECCABLE_SKILL_BEHAVIOR_EFFORT || 'high';
     return { openai: { reasoningEffort: effort } };
@@ -127,7 +137,7 @@ export function getProviderOptions(modelId) {
  * its own floor:
  *   IMPECCABLE_SKILL_BEHAVIOR_MODELS=gpt-5.6-luna,deepseek-v4-flash
  */
-export const DEFAULT_MODELS = ['claude-sonnet-5', 'gpt-5.6-terra', 'gemini-3.7-flash'];
+export const DEFAULT_MODELS = ['claude-sonnet-5', 'gpt-5.6-terra', 'gemini-3.7-flash', 'MiniMax-M3'];
 
 export function resolveModelList() {
   const override = process.env.IMPECCABLE_SKILL_BEHAVIOR_MODELS;

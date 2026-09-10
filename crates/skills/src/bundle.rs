@@ -304,7 +304,7 @@ fn download_remote_bundle(
     keys: Result<TrustedKeys, String>,
 ) -> Result<String, String> {
     keys.and_then(|keys| download_and_extract_signed_bundle(sys, fetch, &keys))
-        .map_err(|e| format!("{}{e}. Nothing was installed; retry or update the CLI. If this persists, report it at https://github.com/pbakaus/impeccable/issues/479", bundle_signature::ERROR_PREFIX))
+        .map_err(|e| format!("{}{e}. Nothing was installed; retry or update the CLI. If this persists, report it at https://github.com/Raudbjorn/impeccable/issues/479", bundle_signature::ERROR_PREFIX))
 }
 
 fn download_and_extract_signed_bundle(
@@ -687,6 +687,14 @@ fn agent_artifact(provider: &str) -> Option<AgentArtifact> {
             user_dir: |home| jsp::join(&[home, ".cursor", "agents"]),
             user_shadows_project: false,
         }),
+        // oh-my-pi's user-scope skills live under ~/.omp/agent/skills (the
+        // same home-dir override providers.rs uses), so its agents follow
+        // the same `agent` segment: ~/.omp/agent/agents/.
+        ".omp" => Some(AgentArtifact {
+            ext: ".md",
+            user_dir: |home| jsp::join(&[home, ".omp", "agent", "agents"]),
+            user_shadows_project: false,
+        }),
         _ => None,
     }
 }
@@ -991,7 +999,7 @@ mod tests {
                 if requests > 1 { return Err("reached signature download".into()); }
                 Ok(FetchResponse {
                     status,
-                    location: Some("https://github.com/pbakaus/impeccable/releases/download/skill-v4.2.0/universal.zip".into()),
+                    location: Some("https://github.com/Raudbjorn/impeccable/releases/download/skill-v4.2.0/universal.zip".into()),
                     body: Box::new(std::io::empty()),
                 })
             };
@@ -1021,7 +1029,7 @@ mod tests {
             "schema": 1, "keyId": "test-only", "version": "4.2.0", "artifact": "universal.zip",
             "size": zip.len(), "sha256": digest, "signature": hex(key.sign(payload.as_bytes()).as_ref()),
         })).unwrap();
-        let release = "https://github.com/pbakaus/impeccable/releases/download/skill-v4.2.0/universal.zip";
+        let release = "https://github.com/Raudbjorn/impeccable/releases/download/skill-v4.2.0/universal.zip";
         for case in ["valid", "tampered", "missing", "oversized", "downgrade", "malformed-zip", "invalid-signature"] {
             let root = tmp_dir(case);
             let temp = format!("{root}/temp");
@@ -1072,5 +1080,41 @@ mod tests {
             assert_eq!(requested[1], format!("{release}.sig.json"));
             util::rm_rf(&root);
         }
+    }
+
+    #[test]
+    fn copy_provider_agents_covers_omp_project_and_user_scope() {
+        // Regression: agent_artifact() had no `.omp` arm, so `.omp` returned
+        // early and neither `.omp/agents/` nor `~/.omp/agent/agents/` ever
+        // got the shipped subagents through the normal install/update flow,
+        // even though the bundle carries them (agentFormat: 'omp-md').
+        let root = tmp_dir("omp-agents");
+        let home = format!("{root}/home");
+        let project = format!("{root}/project");
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::create_dir_all(&project).unwrap();
+        let bundle_dir = format!("{root}/bundle");
+        std::fs::create_dir_all(format!("{bundle_dir}/.omp/agents")).unwrap();
+        std::fs::write(format!("{bundle_dir}/.omp/agents/impeccable-asset-producer.md"), "agent body").unwrap();
+
+        let sys = Sys { env: util::Env::new(), cwd: project.clone(), home: home.clone() };
+
+        let project_results = copy_provider_agents(&sys, &bundle_dir, &project, &[".omp"], Some(Scope::Project)).unwrap();
+        assert_eq!(project_results.len(), 1);
+        assert_eq!(project_results[0].written, 1);
+        assert_eq!(
+            std::fs::read_to_string(format!("{project}/.omp/agents/impeccable-asset-producer.md")).unwrap(),
+            "agent body"
+        );
+
+        let user_results = copy_provider_agents(&sys, &bundle_dir, &home, &[".omp"], Some(Scope::User)).unwrap();
+        assert_eq!(user_results.len(), 1);
+        assert_eq!(user_results[0].written, 1);
+        assert_eq!(
+            std::fs::read_to_string(format!("{home}/.omp/agent/agents/impeccable-asset-producer.md")).unwrap(),
+            "agent body"
+        );
+
+        util::rm_rf(&root);
     }
 }

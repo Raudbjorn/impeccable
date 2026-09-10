@@ -1,0 +1,23 @@
+{
+  "steps": [
+    {
+      "stdout": "Design hook enabled for this project (wrote .impeccable/config.json). Recorded local hook consent in .impeccable/config.local.json. Installed or repaired hook manifests for: .claude, .cursor.\n",
+      "stderr": "",
+      "exit": 0,
+      "signal": null
+    },
+    {
+      "stdout": "Reset design hook config and cache (removed: .impeccable/config.json, .impeccable/config.local.json). Removed hook entries from: .claude, .cursor.\n",
+      "stderr": "",
+      "exit": 0,
+      "signal": null
+    },
+    {
+      "stdout": "Impeccable design hook\n  state:        enabled\n  shared file:  .impeccable/config.json (using defaults; file not present)\n  local file:   .impeccable/config.local.json (not present)\n  ignoreRules:  (none)\n  ignoreFiles:  (none)\n  ignoreValues: (none)\n  maxFindings:  5\n  maxChars:     8000\n  env override: unset\n  cache file:   .impeccable/hook.cache.json (not present)\n",
+      "stderr": "",
+      "exit": 0,
+      "signal": null
+    }
+  ],
+  "files": {}
+}

@@ -23,7 +23,7 @@ pub(crate) fn trusted_keys() -> Result<TrustedKeys, String> {
 
 pub(crate) fn release_version(location: &str) -> Result<String, String> {
     let version = location
-        .strip_prefix("https://github.com/pbakaus/impeccable/releases/download/skill-v")
+        .strip_prefix("https://github.com/Raudbjorn/impeccable/releases/download/skill-v")
         .and_then(|s| s.strip_suffix("/universal.zip"))
         .filter(|v| v.len() <= 128 && VERSION.is_match(v));
     version.map(str::to_string).ok_or_else(|| {
@@ -212,7 +212,7 @@ mod tests {
 
     #[test]
     fn release_location_is_exact_and_versioned() {
-        let prefix = "https://github.com/pbakaus/impeccable/releases/download/";
+        let prefix = "https://github.com/Raudbjorn/impeccable/releases/download/";
         assert_eq!(
             release_version(&format!("{prefix}skill-v4.2.0/universal.zip")).unwrap(),
             "4.2.0"
@@ -222,9 +222,9 @@ mod tests {
             format!("{prefix}skill-v4.2.0/universal.zip?key=x"),
             format!("{prefix}skill-v4.2.0/universal.zip#x"),
             format!("{prefix}skill-v04.2.0/universal.zip"),
-            "http://github.com/pbakaus/impeccable/releases/download/skill-v4.2.0/universal.zip".into(),
+            "http://github.com/Raudbjorn/impeccable/releases/download/skill-v4.2.0/universal.zip".into(),
             "https://github.com/attacker/impeccable/releases/download/skill-v4.2.0/universal.zip".into(),
-            "https://github.com.evil.test/pbakaus/impeccable/releases/download/skill-v4.2.0/universal.zip".into(),
+            "https://github.com.evil.test/Raudbjorn/impeccable/releases/download/skill-v4.2.0/universal.zip".into(),
         ] {
             assert!(release_version(&bad).is_err(), "{bad}");
         }

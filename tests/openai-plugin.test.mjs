@@ -29,7 +29,7 @@ describe('OpenAI plugin staging', () => {
         email: 'paul@example.com',
       },
       homepage: 'https://impeccable.style',
-      repository: 'https://github.com/pbakaus/impeccable',
+      repository: 'https://github.com/Raudbjorn/impeccable',
     }));
     write(root, 'scripts/lib/assets/plugin-icon.png', 'icon');
 

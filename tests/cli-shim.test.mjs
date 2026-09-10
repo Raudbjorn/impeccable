@@ -34,11 +34,11 @@ import { after, before, beforeEach, describe, it } from 'node:test';
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PKG_PATH = path.join(REPO, 'package.json');
 const VERSION = JSON.parse(fs.readFileSync(PKG_PATH, 'utf8'))
-  .optionalDependencies['@impeccable/cli-darwin-arm64'];
-const TARGET = `${{ darwin: 'darwin', linux: 'linux', win32: 'windows' }[process.platform] || process.platform}`
+  .optionalDependencies['@impeccable/cli-linux-arm64'];
+const TARGET = `${process.platform}`
   + `-${{ arm64: 'arm64', x64: 'x64' }[process.arch] || process.arch}`;
 const PLATFORM_PKG = `@impeccable/cli-${TARGET}`;
-const ASSET = `impeccable-${TARGET}${process.platform === 'win32' ? '.exe' : ''}`;
+const ASSET = `impeccable-${TARGET}`;
 const ASSET_PATH = `/engine-v${VERSION}/${ASSET}`;
 
 // A stand-in engine binary: a script that prints its argv so a successful
@@ -135,7 +135,7 @@ function cacheEntries(home) {
   return out;
 }
 
-describe('npm shim download verification', { skip: process.platform === 'win32' ? 'posix only' : false }, () => {
+describe('npm shim download verification', () => {
   it('caches and runs a download whose sidecar matches', async () => {
     sidecar = { status: 200, body: `${DIGEST}  ${ASSET}\n` };
     const res = await runShim(['hello']);

@@ -40,7 +40,7 @@ it('prepares real browser captures, interactions, and multimodal image results o
     assert.ok(browser.blockedRequests.some((url) => url.includes('example.invalid')));
     await assert.rejects(tools.browser_snapshot.execute({ path: '../outside.html', viewport: 'mobile' }), /workspace/);
     await assert.rejects(tools.view_image.execute({ path: 'index.html' }), /PNG/);
-    fs.symlinkSync(os.tmpdir(), path.join(root, 'escape'));
+    fs.symlinkSync(os.tmpdir(), path.join(root, 'escape'), 'junction');
     const response = await fetch(`${browser.origin}/escape/`);
     assert.equal(response.status, 403);
   } finally {

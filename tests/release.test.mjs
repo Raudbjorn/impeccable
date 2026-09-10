@@ -96,7 +96,7 @@ describe('release.mjs guards', () => {
     write('package.json', JSON.stringify({
       name: 'impeccable',
       version: '9.9.9',
-      optionalDependencies: { '@impeccable/cli-darwin-arm64': '0.1.0', '@impeccable/cli-linux-x64': '0.1.0' },
+      optionalDependencies: { '@impeccable/cli-linux-arm64': '0.1.0', '@impeccable/cli-linux-x64': '0.1.0' },
     }));
     write('ENGINE_VERSION', '0.1.0\n');
     write('extension/manifest.json', JSON.stringify({ version: '2.0.0' }));
@@ -152,7 +152,7 @@ describe('release.mjs guards', () => {
     git(workDir, 'push', 'origin', 'main');
     const { code, stderr } = runRelease(workDir, 'engine');
     assert.notEqual(code, 0);
-    assert.match(stderr, /pins @impeccable\/cli-darwin-arm64@0\.1\.0.*expected 0\.2\.0/);
+    assert.match(stderr, /pins @impeccable\/cli-linux-arm64@0\.1\.0.*expected 0\.2\.0/);
   });
 
   it('engine: refuses when the tag already exists on origin', () => {
