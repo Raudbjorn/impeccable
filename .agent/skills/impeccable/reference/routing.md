@@ -2,7 +2,7 @@
 
 ## Workflow questions
 
-Give advice without executing commands; the menu below is only for bare invocations. Consult relevant command references as needed for prerequisites and scope. Link to the [docs](https://impeccable.style/docs/) for the broader workflow guide. If the user also requests execution, follow that request.
+Give advice without executing commands; the menu below is only for bare invocations. Before answering, use the file-reading tool to open the full playbook for **every command named in the user's question**. Resolve each `reference/<command>.md` path from the Commands table, read those files, then compare their prerequisites and scope. Link to the [docs](https://impeccable.style/docs/) for the broader workflow guide. If the user also requests execution, follow that request.
 
 ## No-argument routing: the context-aware menu
 

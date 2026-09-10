@@ -63,7 +63,7 @@ FEATURES
 
 The same 61 rules power the Impeccable CLI and the live design mode, built from one open-source rule engine.
 
-Open source at https://github.com/pbakaus/impeccable
+Open source at https://github.com/Raudbjorn/impeccable
 
 ## What's new (version notes for 1.4.0)
 

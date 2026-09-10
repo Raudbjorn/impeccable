@@ -82,7 +82,7 @@ pub fn automatic_hook_mode(ctx: &Ctx, cwd: &str, env: &Env, provider: &Provider)
         for root in hook_manifest_search_roots(ctx, cwd, env) {
             if hook_enabled_at(&root, env)
                 && safe_read(&jsp::join(&[&root, ".omp/hooks/post/impeccable.js"]))
-                    .is_some_and(|s| s.contains("export default function impeccableHook(") && s.contains("\"impeccable.cmd\""))
+                    .is_some_and(|s| s.contains("export default function impeccableHook(") && s.contains("\"impeccable\""))
             {
                 return "stop";
             }
@@ -222,7 +222,7 @@ fn append_detector_fallback(parts: &mut Vec<String>, ctx: &Ctx, cwd: &str, env: 
 
 /// `which <tool>` exit 0 (`where` on Windows).
 pub fn probe_image_tools(env: &Env) -> Vec<&'static str> {
-    let probe = if cfg!(windows) { "where" } else { "which" };
+    let probe = "which";
     ["cwebp", "sips", "magick", "ffmpeg"]
         .into_iter()
         .filter(|tool| {
@@ -231,7 +231,7 @@ pub fn probe_image_tools(env: &Env) -> Vec<&'static str> {
             if let Some(p) = env.get("PATH") {
                 cmd.env("PATH", p);
             }
-            impeccable_common::proc::hide_window(&mut cmd);
+
             cmd.status().map(|s| s.success()).unwrap_or(false)
         })
         .collect()

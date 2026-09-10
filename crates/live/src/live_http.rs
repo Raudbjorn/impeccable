@@ -984,7 +984,7 @@ mod tests {
         // margin; the bound stays far under the 60s read timeout a
         // deadline-less read would hold the ticket for, so the test still
         // distinguishes the fix from the regression.
-        let slack = if cfg!(windows) { deadline * 12 } else { deadline * 6 };
+        let slack = deadline * 6;
         ran_rx.recv_timeout(slack).expect(
             "later /events was wedged behind a silent connection past the read deadline",
         );

@@ -32,6 +32,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Anthropic from '@anthropic-ai/sdk';
+import { imageSource } from '../../../skill/scripts/image-analyze.mjs';
 import { applyManualEditBatchToSource, loadManualEditEventBatch } from '../agent.mjs';
 import { applySteerEdits } from '../agent.mjs';
 
@@ -68,6 +69,11 @@ const LLM_REQUEST_MAX_RETRIES = 1;
 const VARIANT_REQUEST_TIMEOUT_MS = 105_000;
 const MANUAL_EDIT_REQUEST_TIMEOUT_MS = 55_000;
 const MANUAL_EDIT_RESPONSE_MAX_ATTEMPTS = 3;
+
+function requestOptions(timeout, signal) {
+  const deadline = AbortSignal.timeout(timeout);
+  return { maxRetries: LLM_REQUEST_MAX_RETRIES, timeout, signal: signal ? AbortSignal.any([signal, deadline]) : deadline };
+}
 
 export const VARIANT_SYSTEM_INSTRUCTIONS = [
   'You are an automated subagent inside Impeccable\'s live-mode test harness.',
@@ -211,7 +217,7 @@ const STEER_SYSTEM_INSTRUCTIONS = [
 
 /**
  * @typedef {object} LlmAgentOptions
- * @property {'openai' | 'anthropic' | 'deepseek' | 'inception'=} provider Override IMPECCABLE_E2E_LLM_PROVIDER.
+ * @property {'openai' | 'anthropic' | 'deepseek' | 'inception' | 'minimax'=} provider Override IMPECCABLE_E2E_LLM_PROVIDER.
  * @property {string=} apiKey  Override the selected provider's API key env var.
  * @property {string=} model   Override the selected provider's default model.
  * @property {string=} baseURL Override the provider API base URL.
@@ -268,6 +274,16 @@ export function resolveLlmAgentConfig(opts = {}, env = process.env) {
     };
   }
 
+  if (provider === 'minimax') {
+    return {
+      provider,
+      model: opts.model || env.IMPECCABLE_E2E_LLM_MODEL || 'MiniMax-M3',
+      apiKey: opts.apiKey || env.MINIMAX_API_KEY,
+      requiredEnv: 'MINIMAX_API_KEY',
+      baseURL: opts.baseURL || env.MINIMAX_API_BASE_URL || 'https://api.minimax.io/anthropic',
+    };
+  }
+
   if (provider === 'deepseek') {
     return {
       provider,
@@ -310,10 +326,12 @@ function resolveProvider(opts, env) {
   // consulted here: a helper sitting on PATH should not silently take over a
   // run the caller did not ask for.
   if (env.INCEPTION_API_KEY) return 'inception';
+  if (env.MINIMAX_API_KEY) return 'minimax';
   return 'openai';
 }
 
 export function llmRequestSettings(provider) {
+  if (provider === 'minimax') return { thinking: { type: 'adaptive' } };
   // DeepSeek defaults to high-effort thinking, which can consume the entire
   // bounded response before emitting the JSON these edit tests exercise.
   // Low effort retains planning for the full live spec without inheriting
@@ -350,7 +368,7 @@ async function createOpenAiShim({ apiKey, baseURL, reasoningEffort, useChatCompl
   const provider = createOpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
   return {
     messages: {
-      async create({ model, system, messages, max_tokens }, { timeout } = {}) {
+      async create({ model, system, messages, max_tokens }, { timeout, signal } = {}) {
         const systemText = Array.isArray(system)
           ? system.map((block) => block?.text || '').filter(Boolean).join('\n\n')
           : String(system || '');
@@ -364,7 +382,7 @@ async function createOpenAiShim({ apiKey, baseURL, reasoningEffort, useChatCompl
           system: systemText,
           messages: messages.map((m) => ({ role: m.role, content: String(m.content) })),
           maxOutputTokens: max_tokens,
-          abortSignal: timeout ? AbortSignal.timeout(timeout) : undefined,
+          abortSignal: signal || (timeout ? AbortSignal.timeout(timeout) : undefined),
           providerOptions: { openai: { reasoningEffort } },
         });
         return {
@@ -397,6 +415,7 @@ export async function createLlmAgent(opts = {}) {
   }
 
   const { apiKey, baseURL, model, provider } = config;
+  const manualTimeout = provider === 'minimax' ? 90_000 : MANUAL_EDIT_REQUEST_TIMEOUT_MS;
 
   const liveMd = opts.includeLiveSpec === false ? null : await fs.readFile(LIVE_MD_PATH, 'utf-8');
   const client = provider === 'openai' || provider === 'inception'
@@ -422,6 +441,9 @@ export async function createLlmAgent(opts = {}) {
         '```',
       ].join('\n');
 
+      const screenshot = provider === 'minimax' && event.screenshotPath
+        ? await liveScreenshot(event.screenshotPath, context.tmp)
+        : null;
       let userMessage = baseUserMessage;
       for (let attempt = 0; attempt < MANUAL_EDIT_RESPONSE_MAX_ATTEMPTS; attempt += 1) {
         const lastAttempt = attempt + 1 >= MANUAL_EDIT_RESPONSE_MAX_ATTEMPTS;
@@ -432,20 +454,17 @@ export async function createLlmAgent(opts = {}) {
               ...llmRequestSettings(provider),
               model,
               temperature: 0,
-              max_tokens: 16000,
+              max_tokens: provider === 'minimax' ? 32_768 : 16000,
               // When present, live.md is the final cacheable stable prefix.
               // Benchmarks omit it so external payloads contain only the
               // synthetic element contract and per-run event.
               system: systemBlocks(VARIANT_SYSTEM_INSTRUCTIONS),
-              messages: [{ role: 'user', content: userMessage }],
+              messages: [{ role: 'user', content: screenshot ? [{ type: 'text', text: userMessage }, screenshot] : userMessage }],
             },
-            {
-              maxRetries: LLM_REQUEST_MAX_RETRIES,
-              timeout: VARIANT_REQUEST_TIMEOUT_MS,
-            },
+            requestOptions(provider === 'minimax' ? 360_000 : VARIANT_REQUEST_TIMEOUT_MS, context.signal),
           );
         } catch (err) {
-          if (lastAttempt) throw err;
+          if (lastAttempt || context.signal?.aborted) throw err;
           log(`variant request failed; retrying: ${err.message}`);
           userMessage = [
             baseUserMessage,
@@ -462,7 +481,7 @@ export async function createLlmAgent(opts = {}) {
         const inputTokens = response?.usage?.input_tokens ?? 0;
         const outputTokens = response?.usage?.output_tokens ?? 0;
         log(
-          `provider=${provider} model=${model} attempt=${attempt + 1} input=${inputTokens} output=${outputTokens} cache_read=${cacheRead} cache_write=${cacheWrite}`,
+          `provider=${provider} model=${model} attempt=${attempt + 1} input=${inputTokens} output=${outputTokens} stop=${response?.stop_reason} cache_read=${cacheRead} cache_write=${cacheWrite}`,
         );
         if (!response || !Array.isArray(response.content)) {
           if (lastAttempt) throw new Error('LLM agent: provider returned an empty variant response');
@@ -582,12 +601,10 @@ export async function createLlmAgent(opts = {}) {
               system: systemBlocks(MANUAL_EDIT_SYSTEM_INSTRUCTIONS),
               messages: [{ role: 'user', content: userMessage }],
             },
-            {
-              maxRetries: LLM_REQUEST_MAX_RETRIES,
-              timeout: MANUAL_EDIT_REQUEST_TIMEOUT_MS,
-            },
+            requestOptions(manualTimeout, context.signal),
           );
         } catch (err) {
+          if (context.signal?.aborted) throw err;
           if (attempt + 1 < MANUAL_EDIT_RESPONSE_MAX_ATTEMPTS) {
             log(`manual_apply request failed; retrying: ${err.message}`);
             userMessage = manualEditRetryMessage(baseUserMessage, [`provider request failed: ${err.message}`]);
@@ -601,7 +618,7 @@ export async function createLlmAgent(opts = {}) {
         const inputTokens = response?.usage?.input_tokens ?? 0;
         const outputTokens = response?.usage?.output_tokens ?? 0;
         log(
-          `manual_apply provider=${provider} model=${model} attempt=${attempt + 1} input=${inputTokens} output=${outputTokens} cache_read=${cacheRead} cache_write=${cacheWrite}`,
+          `manual_apply provider=${provider} model=${model} attempt=${attempt + 1} input=${inputTokens} output=${outputTokens} stop=${response?.stop_reason} cache_read=${cacheRead} cache_write=${cacheWrite}`,
         );
         if (!response || !Array.isArray(response.content)) {
           if (attempt + 1 < MANUAL_EDIT_RESPONSE_MAX_ATTEMPTS) {
@@ -710,10 +727,9 @@ export async function createLlmAgent(opts = {}) {
         max_tokens: 4096,
         system: systemBlocks(STEER_SYSTEM_INSTRUCTIONS),
         messages: [{ role: 'user', content: userMessage }],
-      }, provider === 'deepseek' ? {
-        maxRetries: LLM_REQUEST_MAX_RETRIES,
-        timeout: MANUAL_EDIT_REQUEST_TIMEOUT_MS,
-      } : {});
+      }, ['deepseek', 'minimax'].includes(provider)
+        ? requestOptions(manualTimeout, context.signal)
+        : { signal: context.signal });
 
       const cacheRead = response.usage?.cache_read_input_tokens ?? 0;
       const inputTokens = response.usage?.input_tokens ?? 0;
@@ -1757,4 +1773,9 @@ function findJsonValueEnd(text, start) {
   }
 
   return -1;
+}
+
+export async function liveScreenshot(file, root) {
+  if (!root) throw new Error('A live workspace is required for screenshots');
+  return { type: 'image', source: await imageSource(file, { root }) };
 }

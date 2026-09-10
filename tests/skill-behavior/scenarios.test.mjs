@@ -150,7 +150,7 @@ for (const modelId of resolveModelList()) {
   const provider = detectProvider(modelId);
   const keyPresent = hasKey(provider);
 
-  describe(`skill behavior :: ${modelId}`, () => {
+  describe(`skill behavior :: ${modelId}`, { concurrency: 2 }, () => {
     if (!keyPresent) {
       it(`skipped — ${PROVIDERS[provider].envKey} is unset`, { skip: true }, () => {});
       return;
@@ -160,8 +160,12 @@ for (const modelId of resolveModelList()) {
       return;
     }
     const model = getModel(modelId);
-    // Observe a routing decision, with room for setup reads but no full build.
-    const setupMaxSteps = 10;
+    // Gemini Flash and MiniMax tend to inspect one file at a time, while the production
+    // Anthropic/OpenAI models batch setup reads and then begin implementation.
+    // Keep the latter tightly bounded so this routing suite does not turn into
+    // a page-generation benchmark, but leave those models enough room to reach the
+    // same required reference.
+    const setupMaxSteps = ['google', 'minimax'].includes(provider) ? 6 : 3;
 
     it('scenario 1: no PRODUCT.md / DESIGN.md', async () => {
       const workspace = prepareWorkspace({ files: {} });
@@ -609,9 +613,9 @@ for (const modelId of resolveModelList()) {
       }
     });
 
-    it('scenario 14: native iOS project (context loads ios.md)', async () => {
-      // PRODUCT.md sets `## Platform` to `ios`. impeccable context now reads and emits
-      // reference/ios.md itself, so native guidance enters the conversation
+    it('scenario 14: native Android project (context loads android.md)', async () => {
+      // PRODUCT.md sets `## Platform` to `android`. impeccable context now reads and emits
+      // reference/android.md itself, so native guidance enters the conversation
       // without relying on a second model-directed file read.
       const workspace = prepareWorkspace({
         files: { 'PRODUCT.md': PRODUCT_MD_SAMPLE_ANDROID, 'TideDetailScreen.kt': MINIMAL_ANDROID_SOURCE },
@@ -624,7 +628,7 @@ for (const modelId of resolveModelList()) {
           userPrompt: '/impeccable craft a tide detail screen for the project in this workspace',
           maxSteps: provider === 'google' ? 8 : 6,
         });
-        logTrace('S14', 'native-ios', modelId, trace, { textSample: text.slice(0, 400) });
+        logTrace('S14', 'native-android', modelId, trace, { textSample: text.slice(0, 400) });
         const loadCalls = bashCommandsMatching(trace, 'impeccable context');
         assert.ok(
           loadCalls.length >= 1,
@@ -633,8 +637,8 @@ for (const modelId of resolveModelList()) {
         );
         // Proof the native reference itself entered the agent's view.
         assert.ok(
-          trace.bashOutputs.some((o) => /# NATIVE PLATFORM REFERENCE: IOS \(reference\/ios\.md\)/.test(o)),
-          `impeccable context should have emitted reference/ios.md content (platform is ios).\n` +
+          trace.bashOutputs.some((o) => /# NATIVE PLATFORM REFERENCE: ANDROID \(reference\/android\.md\)/.test(o)),
+          `impeccable context should have emitted reference/android.md content (platform is android).\n` +
             `bashOutputs: ${JSON.stringify(trace.bashOutputs, null, 2)}`,
         );
       } finally {
@@ -833,7 +837,9 @@ for (const modelId of resolveModelList()) {
         files: {
           'PRODUCT.md': PRODUCT_MD_SAMPLE_DIWALI,
           'DESIGN.md': DESIGN_MD_SAMPLE_DIWALI,
-          'index.html': MINIMAL_LANDING_HTML,
+          'index.html': `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Third Street Sweets</title>
+<style>body{color:#8C1D18;background:#fff8ed;font-family:serif;max-width:65ch;margin:4rem auto;padding:0 1.5rem}a{background:#E8871E;color:#8C1D18;padding:2px 4px}</style></head>
+<body><h1>Third Street Sweets</h1><p>Family-run for forty years. Ladoo and barfi made for the neighborhood's Diwali tables.</p><a href="tel:+12125550123">Call to order your sweets</a></body></html>`,
         },
       });
       try {
@@ -846,8 +852,8 @@ for (const modelId of resolveModelList()) {
         });
         logTrace('S20', 'cultural-palette-override', modelId, trace, { textSample: text.slice(0, 400) });
         assert.ok(
-          bashCommandsMatching(trace, 'context.mjs').length >= 1,
-          `expected agent to run context.mjs at least once.\n` +
+          bashCommandsMatching(trace, 'impeccable context').length >= 1,
+          `expected agent to run impeccable context at least once.\n` +
             `Trace: ${JSON.stringify(summarizeTrace(trace), null, 2)}`,
         );
         assert.ok(

@@ -250,7 +250,7 @@ function isProbablyText(buf) {
  * Returns { stdout, stderr, exit, signal, files } normalized.
  */
 /**
- * A case may declare `platforms: ['darwin', 'win32']` when its behavior is a
+ * A case may declare `platforms` when its behavior is a
  * property of the host (case-insensitive file systems, for example) rather
  * than of the implementation. Such a case runs only on those platforms; the
  * runner reports it as skipped elsewhere instead of failing.

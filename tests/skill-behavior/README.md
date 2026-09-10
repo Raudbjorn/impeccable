@@ -2,8 +2,8 @@
 
 LLM-backed scenarios that verify how the impeccable skill drives context,
 command-reference, new-work, and native-platform loading. Each scenario runs
-against the default Anthropic, OpenAI, and Google models. DeepSeek remains
-available through `IMPECCABLE_SKILL_BEHAVIOR_MODELS`.
+against the default Anthropic, OpenAI, Google, and MiniMax models. DeepSeek
+remains available through `IMPECCABLE_SKILL_BEHAVIOR_MODELS`.
 
 These are the tests you re-run when you refactor anything in SKILL.md's
 `## Setup` section. They fail when the agent stops following the loading
@@ -16,11 +16,18 @@ bun run test:skill-behavior
 IMPECCABLE_SKILL_BEHAVIOR_VERBOSE=1 bun run test:skill-behavior   # dump per-scenario traces
 IMPECCABLE_SKILL_BEHAVIOR_MODELS=claude-sonnet-5 bun run test:skill-behavior   # scope to one model
 IMPECCABLE_SKILL_BEHAVIOR_EFFORT=xhigh bun run test:skill-behavior             # OpenAI reasoning effort (default: high)
+export MINIMAX_API_KEY="$(minimax-api-key)"
+IMPECCABLE_SKILL_BEHAVIOR_MODELS=MiniMax-M3 bun run test:skill-behavior
 ```
 
 Requires `.env` at repo root with at least one of `ANTHROPIC_API_KEY`,
-`OPENAI_API_KEY`, `GOOGLE_CLOUD_API_KEY`, `DEEPSEEK_API_KEY`. Providers without a key are
+`OPENAI_API_KEY`, `GOOGLE_CLOUD_API_KEY`, `DEEPSEEK_API_KEY`, `MINIMAX_API_KEY`. Providers without a key are
 skipped, not failed.
+
+Shell tools require Linux with `bwrap` (Bubblewrap). Commands run with their own
+process namespace and temporary directory. Only the fixture workspace persists writes; browser configuration and caches use the private temporary directory.
+This prevents model-authored cleanup commands from killing other test browsers.
+The read tool delivers local images as image content for vision-capable models, including MiniMax.
 
 Also requires the engine binary (`bun run fetch:engine`, or `IMPECCABLE_BIN`).
 The staged skill dir ships the launcher (`scripts/impeccable`); the harness
@@ -316,8 +323,8 @@ results remain the completed measurements.
 | 11 | empty workspace; prompt is `/impeccable shape ...` | runs `impeccable context`; resolves `reference/init.md` before planning the surface |
 | 12 | empty workspace; prompt is natural-language build intent with no command word | runs `impeccable context`; resolves `reference/init.md` before implementation |
 | 13 | empty workspace; prompt is `/impeccable teach` | runs `impeccable context` and diverts into `reference/init.md` because `teach` aliases `init` |
-| 14 | PRODUCT.md with `## Platform: ios` (native iOS app); prompt is `/impeccable craft a tide detail screen` | `impeccable context` runs and emits the contents of `reference/ios.md` directly, placing native conventions in context without a second model-directed read |
-| 15 | same iOS fixture; prompt is `/impeccable audit` | agent loads `reference/audit.native.md` (the Commands-table native variant, routed instead of `audit.md`) |
+| 14 | PRODUCT.md with `## Platform: android` (native Android app); prompt is `/impeccable craft a tide detail screen` | `impeccable context` runs and emits the contents of `reference/android.md` directly, placing native conventions in context without a second model-directed read |
+| 15 | same Android fixture; prompt is `/impeccable audit` | agent loads `reference/audit.native.md` (the Commands-table native variant, routed instead of `audit.md`) |
 | 16 | existing surface, with and without PRODUCT.md; asks where to start | completes relevant advice without edits, interviews, critique archives, menu scans, or explicit invented refinement prerequisites; reference coverage is diagnostic |
 | 17 | existing surface; asks whether critique is required before polish | completes read-only advice distinguishing assessment from implementation and explaining critique is optional; reference coverage is diagnostic |
 | 18 | existing surface; explicitly requests polish followed by a next-command recommendation | loads `polish.md` rather than substituting workflow advice for the requested work |
@@ -655,3 +662,16 @@ loading the sub-command reference. Stronger SKILL.md wording (MUST,
 "non-optional", reordered earlier) didn't move it; this looks like a
 model-floor behavior rather than a skill ambiguity. Claude and Gemini
 honor the load.
+
+MiniMax uses the installed Anthropic-compatible provider with adaptive thinking and a 32,768-token output budget; a measured 16k response exhausted its budget before emitting the edit. `MiniMax-M3` joins the default lineup; missing keys still skip their provider. Its routing checks use the same six-step allowance as Gemini.
+
+For paid live checks with MiniMax:
+
+```sh
+export MINIMAX_API_KEY="$(minimax-api-key)"
+IMPECCABLE_E2E_AGENT=llm IMPECCABLE_E2E_LLM_PROVIDER=minimax bun run test:live-e2e
+IMPECCABLE_E2E_LLM_PROVIDER=minimax bun run test:live-e2e-accept-cleanup
+IMPECCABLE_E2E_LLM_PROVIDER=minimax bun run test:live-svelte-adapter-deepseek
+```
+
+The last command retains its existing name for compatibility; its provider is selectable. MiniMax receives annotated screenshots automatically as base64 image blocks. Unannotated requests remain text-only.

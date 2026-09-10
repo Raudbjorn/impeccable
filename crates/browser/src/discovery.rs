@@ -61,48 +61,7 @@ fn is_executable_file(path: &Path) -> bool {
 /// The per-OS candidate list, in priority order (Chrome, Chromium, Edge, Brave).
 pub fn standard_candidates(env: &HashMap<String, String>) -> Vec<PathBuf> {
     let mut out = Vec::new();
-    if cfg!(target_os = "macos") {
-        let bundles = [
-            "Google Chrome.app/Contents/MacOS/Google Chrome",
-            "Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
-            "Chromium.app/Contents/MacOS/Chromium",
-            "Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-            "Brave Browser.app/Contents/MacOS/Brave Browser",
-        ];
-        let mut roots = vec![PathBuf::from("/Applications")];
-        if let Some(home) = env.get("HOME") {
-            roots.push(Path::new(home).join("Applications"));
-        }
-        for bundle in bundles {
-            for root in &roots {
-                out.push(root.join(bundle));
-            }
-        }
-    } else if cfg!(target_os = "windows") {
-        let rel = [
-            "Google\\Chrome\\Application\\chrome.exe",
-            "Chromium\\Application\\chrome.exe",
-            "Microsoft\\Edge\\Application\\msedge.exe",
-            "BraveSoftware\\Brave-Browser\\Application\\brave.exe",
-        ];
-        let mut roots: Vec<PathBuf> = Vec::new();
-        for key in ["PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"] {
-            if let Some(v) = env.get(key) {
-                if !v.is_empty() {
-                    roots.push(PathBuf::from(v));
-                }
-            }
-        }
-        if roots.is_empty() {
-            roots.push(PathBuf::from("C:\\Program Files"));
-            roots.push(PathBuf::from("C:\\Program Files (x86)"));
-        }
-        for r in rel {
-            for root in &roots {
-                out.push(root.join(r));
-            }
-        }
-    } else {
+    {
         let names = [
             "google-chrome",
             "google-chrome-stable",

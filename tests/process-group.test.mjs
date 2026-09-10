@@ -20,7 +20,6 @@ import {
   trackChildExit,
 } from '../scripts/lib/process-group.mjs';
 
-const POSIX = process.platform !== 'win32';
 
 /** A child in its own process group that exits on SIGTERM, the ordinary case. */
 function spawnObedient() {
@@ -50,9 +49,7 @@ function isAlive(pid) {
 }
 
 describe('stopGroup', () => {
-  it('returns as soon as the child exits, not after the grace period', {
-    skip: POSIX ? false : 'process groups and SIGTERM are POSIX-only',
-  }, async () => {
+  it('returns as soon as the child exits, not after the grace period', async () => {
     const running = spawnObedient();
     const startedAt = Date.now();
     const outcome = await stopGroup(running, { graceMs: 5_000 });
@@ -65,9 +62,7 @@ describe('stopGroup', () => {
     assert.equal(running.hasExited, true);
   });
 
-  it('escalates to SIGKILL when the child ignores SIGTERM', {
-    skip: POSIX ? false : 'process groups and SIGTERM are POSIX-only',
-  }, async () => {
+  it('escalates to SIGKILL when the child ignores SIGTERM', async () => {
     const running = spawnStubborn();
     const { pid } = running.child;
     // Give the trap a moment to be installed, so the SIGTERM lands on a child
@@ -92,9 +87,7 @@ describe('stopGroup', () => {
 });
 
 describe('killGroupSync', () => {
-  it('ends a stubborn child without awaiting anything', {
-    skip: POSIX ? false : 'process groups and SIGTERM are POSIX-only',
-  }, async () => {
+  it('ends a stubborn child without awaiting anything', async () => {
     const running = spawnStubborn();
     const { pid } = running.child;
     await new Promise((r) => setTimeout(r, 250));
@@ -113,14 +106,13 @@ describe('killGroupSync', () => {
 });
 
 describe('createGroupShutdown', () => {
-  const posixOnly = { skip: POSIX ? false : 'process groups and SIGTERM are POSIX-only' };
 
   function spy() {
     const codes = [];
     return { codes, exit: (code) => codes.push(code) };
   }
 
-  it('a second signal kills the group instead of abandoning the escalation', posixOnly, async () => {
+  it('a second signal kills the group instead of abandoning the escalation', async () => {
     // The regression: the first handler used to clear the only reference to
     // the group before awaiting, so the second signal killed nothing and its
     // exit walked away from an escalation that was still in flight. Because
@@ -148,7 +140,7 @@ describe('createGroupShutdown', () => {
     await first;
   });
 
-  it('ends the group on the first signal when it exits promptly', posixOnly, async () => {
+  it('ends the group on the first signal when it exits promptly', async () => {
     const running = spawnObedient();
     const { pid } = running.child;
     const { codes, exit } = spy();
@@ -162,7 +154,7 @@ describe('createGroupShutdown', () => {
     assert.equal(isAlive(pid), false);
   });
 
-  it('onExit still reaches a group a shutdown is in the middle of stopping', posixOnly, async () => {
+  it('onExit still reaches a group a shutdown is in the middle of stopping', async () => {
     const running = spawnStubborn();
     const { pid } = running.child;
     await new Promise((r) => setTimeout(r, 250));
@@ -188,7 +180,7 @@ describe('createGroupShutdown', () => {
     assert.equal(shutdown.onExit(), false);
   });
 
-  it('reports that it is shutting down, so a normal exit is not misread', posixOnly, async () => {
+  it('reports that it is shutting down, so a normal exit is not misread', async () => {
     const running = spawnObedient();
     const shutdown = createGroupShutdown({ exit: () => {}, graceMs: 5_000 });
     shutdown.track(running);

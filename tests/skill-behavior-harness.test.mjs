@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { MockLanguageModelV3 } from 'ai/test';
-import { prepareWorkspace, cleanupWorkspace, makeTools, runTurn, fileLoaded, SKILL_BODY } from './skill-behavior/harness.mjs';
+import { prepareWorkspace, cleanupWorkspace, makeTools, runTurn, fileLoaded, SKILL_BODY, ENGINE_BIN } from './skill-behavior/harness.mjs';
 import { assertPlanningFallbackWarning, assertNewWorkLifecycle, assertWorkflowAdvice, assertCommandComparison, missingReferences } from './skill-behavior/assertions.mjs';
 import { CASE_STUDY_ANSWER } from './skill-behavior/fixtures.mjs';
 import { sourceHash as hashSources } from './skill-workflow/source-hash.mjs';
@@ -186,6 +186,42 @@ it('headless behavior shells disable unattended decision pages and omit provider
   }
 });
 
+it('image reads reach the model as image content rather than binary text', async () => {
+  const workspace = prepareWorkspace();
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1cAAAAASUVORK5CYII=';
+  try {
+    fs.writeFileSync(path.join(workspace, 'screen.png'), Buffer.from(png, 'base64'));
+    const { tools } = makeTools(workspace);
+    const output = await tools.read.execute({ path: 'screen.png' });
+    assert.deepEqual(tools.read.toModelOutput({ output }), {
+      type: 'content', value: [{ type: 'file', data: { type: 'data', data: png }, mediaType: 'image/png' }],
+    });
+    assert.deepEqual(tools.read.toModelOutput({ output: 'plain text' }), { type: 'json', value: 'plain text' });
+  } finally {
+    cleanupWorkspace(workspace);
+  }
+});
+
+it('model shell commands cannot see host processes or modify files outside the fixture', async () => {
+  const workspace = prepareWorkspace();
+  const outside = workspace + '-outside';
+  fs.writeFileSync(outside, 'unchanged');
+  try {
+    const { tools } = makeTools(workspace);
+    const result = await tools.bash.execute({ command: `test ! -e /proc/${process.pid} && printf inside > result.txt` });
+    assert.match(result, /^exit=0/);
+    assert.equal(fs.readFileSync(path.join(workspace, 'result.txt'), 'utf8'), 'inside');
+    const denied = await tools.bash.execute({ command: `printf changed > ../${path.basename(outside)}` });
+    assert.doesNotMatch(denied, /^exit=0/);
+    assert.equal(fs.readFileSync(outside, 'utf8'), 'unchanged');
+    assert.match(await tools.bash.execute({ command: 'test "$TMPDIR" = /tmp && mkdir -p "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"' }), /^exit=0/);
+    if (ENGINE_BIN) assert.match(await tools.bash.execute({ command: '"$IMPECCABLE_BIN" --version' }), /^exit=0/);
+  } finally {
+    cleanupWorkspace(workspace);
+    fs.rmSync(outside, { force: true });
+  }
+});
+
 it('planning fallback requires an assistant warning between the denial and context reads', () => {
   const call = { role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'context', toolName: 'bash', input: { command: '.claude/skills/impeccable/scripts/impeccable context' } }] };
   const denial = { role: 'tool', content: [{ type: 'tool-result', toolCallId: 'context', toolName: 'bash', output: { type: 'text', value: 'Error: Bash permission denied by the host. This command was not executed.' } }] };
@@ -204,10 +240,10 @@ it('planning fallback requires an assistant warning between the denial and conte
   }
 });
 
-it('DeepSeek gets an explicit output ceiling instead of the compatibility SDK default', async () => {
+it('Compatible providers get an explicit output ceiling instead of the compatibility SDK default', async () => {
   const workspace = prepareWorkspace();
   try {
-    for (const modelId of ['deepseek-v4-flash', 'claude-sonnet-5']) {
+    for (const modelId of ['deepseek-v4-flash', 'MiniMax-M3', 'claude-sonnet-5']) {
       const model = new MockLanguageModelV3({
         modelId,
         doGenerate: {
@@ -219,7 +255,7 @@ it('DeepSeek gets an explicit output ceiling instead of the compatibility SDK de
       });
       await runTurn({ workspace, model, userPrompt: 'Test the harness.', maxSteps: 1 });
       const request = model.doGenerateCalls[0];
-      assert.equal(request.maxOutputTokens, modelId.startsWith('deepseek-') ? 16_384 : undefined);
+      assert.equal(request.maxOutputTokens, modelId.startsWith('MiniMax-') ? 32_768 : modelId.startsWith('deepseek-') ? 16_384 : undefined);
       assert.ok(request.prompt.some((message) => message.role === 'system' && message.content === SKILL_BODY));
     }
   } finally {

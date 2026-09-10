@@ -376,7 +376,7 @@ Please audit {{target}} for technical quality. Ask {{model}} for help.`;
   });
 });
 
-// The skill's scripts dir ships the launcher, its Windows twin, the pinned
+// The skill's scripts dir ships the Linux launcher, the pinned
 // engine VERSION, the page JS, and command-metadata.json. Nothing else: the
 // verbs live in the engine binary the launcher runs, and platform binaries
 // (scripts/bin/) are fetched per machine, never read as source.
@@ -388,7 +388,7 @@ describe('skill scripts payload', () => {
 
   test('ships the launcher, VERSION, page JS, and command metadata', () => {
     for (const expected of [
-      'impeccable', 'impeccable.cmd', 'VERSION', 'command-metadata.json',
+      'impeccable', 'VERSION', 'command-metadata.json',
       'compose-export.mjs', 'compose-extract.py', 'compose-extract.py.lock',
       'live-browser.js', 'live-browser-dom.js', 'live-browser-session.js', 'modern-screenshot.umd.js',
     ]) {
@@ -401,7 +401,7 @@ describe('skill scripts payload', () => {
     const allowedNodeScripts = new Set([
       'design-context-export.mjs', 'design-context-import.mjs',
       'design-context/store.mjs', 'design-context/portability.mjs',
-      'visual-cues.mjs', 'image-gen.mjs', 'score-evidence.mjs', 'lib/png.mjs', 'compose-export.mjs',
+      'visual-cues.mjs', 'image-gen.mjs', 'image-analyze.mjs', 'score-evidence.mjs', 'lib/png.mjs', 'compose-export.mjs',
     ]);
     const stray = [...names].filter((n) =>
       (n.endsWith('.mjs') || n.startsWith('detector/') || n.startsWith('lib/')) && !allowedNodeScripts.has(n));

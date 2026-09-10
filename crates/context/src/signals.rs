@@ -58,7 +58,7 @@ fn latest_critique(cwd: &str, env: &Env) -> Value {
 pub fn git_run(args: &[&str], cwd: &str, trim: bool, timeout_ms: Option<u64>) -> Option<String> {
     let mut cmd = Command::new("git");
     cmd.args(args).current_dir(cwd).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
-    impeccable_common::proc::hide_window(&mut cmd);
+
     let mut child = cmd.spawn().ok()?;
     let out = if let Some(t) = timeout_ms {
         // Poll for completion up to the timeout, then kill (execFileSync timeout semantics).

@@ -93,7 +93,7 @@ fn fetch_roll(env: &Env, budget: &mut ApiBudget, scope: &str, key: &str, mode: O
     Some(roll)
 }
 
-fn telemetry_disabled(_env: &Env) -> bool {
+fn telemetry_disabled() -> bool {
     true
 }
 
@@ -105,16 +105,16 @@ fn choice_telemetry_is_always_disabled() {
             env.insert("IMPECCABLE_NO_TELEMETRY".into(), value.into());
             env.insert("DO_NOT_TRACK".into(), value.into());
         }
-        assert!(telemetry_disabled(&env));
+        assert!(telemetry_disabled());
         let mut budget = ApiBudget::new(&env);
         assert!(!ping_chosen(&env, &mut budget, Some("card"), Some("key"), Some("surface"), None, Some("challenger"), None));
         assert!(budget.deadline.is_none());
     }
 }
 
-/// JS: pingChosen
-fn ping_chosen(env: &Env, _budget: &mut ApiBudget, _chosen_id: Option<&str>, _key: Option<&str>, _scope: Option<&str>, _mode: Option<&str>, _kind: Option<&str>, _register: Option<&str>) -> bool {
-    !telemetry_disabled(env)
+/// Choice telemetry is disabled in this distribution.
+fn ping_chosen(_env: &Env, _budget: &mut ApiBudget, _chosen_id: Option<&str>, _key: Option<&str>, _scope: Option<&str>, _mode: Option<&str>, _kind: Option<&str>, _register: Option<&str>) -> bool {
+    false
 }
 
 fn vs(v: &Value, key: &str) -> String {
@@ -459,7 +459,7 @@ fn render_concept_seed(env: &Env, cwd: &str, budget: &mut ApiBudget, a: &SeedArg
     } else {
         String::new()
     };
-    let telemetry_block = if data.source == "api" {
+    let telemetry_block = if data.source == "api" && !telemetry_disabled() {
         fill(t::TELEMETRY_BLOCK, &common)
     } else if data.source == "retrieval" && !data.session.is_empty() {
         t::RETRIEVAL_BLOCK.replace("@@SESSION@@", &data.session)
@@ -761,6 +761,15 @@ mod retrieval_render_tests {
     fn render(env: Env, a: &SeedArgs) -> String {
         let mut budget = ApiBudget::new(&env);
         render_concept_seed(&env, ".", &mut budget, a).unwrap()
+    }
+
+    #[test]
+    fn telemetry_is_disabled_without_opt_out_flags() {
+        let env = Env::new();
+        assert!(telemetry_disabled());
+        let mut budget = ApiBudget::new(&env);
+        assert!(!ping_chosen(&env, &mut budget, Some("choice"), Some("key"), Some("direction"), None, Some("pick"), None));
+        assert!(budget.deadline.is_none(), "a disabled ping must not start a request");
     }
 
     #[test]

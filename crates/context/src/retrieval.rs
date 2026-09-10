@@ -102,7 +102,7 @@ pub fn call_retrieval(
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    impeccable_common::proc::hide_window(&mut cmd);
+
     let mut child = cmd
         .spawn()
         .map_err(|e| format!("Local retrieval could not start: {e}"))?;

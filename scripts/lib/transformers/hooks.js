@@ -38,7 +38,6 @@ const STOP_STATUS_MESSAGE = 'Design deep pass';
 // runs the platform binary next to it, or downloads it once; no runtime probe
 // is needed and there is no Node on the path to check.
 export const LAUNCHER_NAME = 'impeccable';
-export const LAUNCHER_NAME_WINDOWS = 'impeccable.cmd';
 
 // A hook manifest can be copied into a user-level settings file (issue #399:
 // user-level hooks fire in every project, where a project-relative path may
@@ -49,20 +48,12 @@ export const LAUNCHER_NAME_WINDOWS = 'impeccable.cmd';
 export const guardedLauncher = (launcherPath, verb = 'hook') =>
   `[ ! -f "${launcherPath}" ] || "${launcherPath}" ${verb}`;
 
-// cmd.exe form for harnesses that read a `commandWindows` sibling (Codex
-// 0.146.0+ selects it on Windows; issue #452). `exit /b` forwards the
-// launcher's errorlevel. Paths keep forward slashes; cmd.exe accepts them in
-// quoted paths and it is the form the CLI already writes.
-export const windowsLauncherCommand = (launcherCmdPath, verb = 'hook') =>
-  `if exist "${launcherCmdPath}" ("${launcherCmdPath}" ${verb} & exit /b)`;
-
-function stopEntry(command, commandWindows) {
+function stopEntry(command) {
   return {
     hooks: [
       {
         type: 'command',
         command,
-        ...(commandWindows ? { commandWindows } : {}),
         timeout: STOP_TIMEOUT_SECONDS,
         statusMessage: STOP_STATUS_MESSAGE,
       },
@@ -71,7 +62,6 @@ function stopEntry(command, commandWindows) {
 }
 
 const launcherIn = (scriptsDir) => `${scriptsDir}/${LAUNCHER_NAME}`;
-const launcherCmdIn = (scriptsDir) => `${scriptsDir}/${LAUNCHER_NAME_WINDOWS}`;
 
 const CLAUDE_PROJECT_SCRIPTS = '${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts';
 const CLAUDE_PLUGIN_SCRIPTS = '${CLAUDE_PLUGIN_ROOT}/skills/impeccable/scripts';
@@ -87,12 +77,8 @@ const GITHUB_PROJECT_SCRIPTS = '$(git rev-parse --show-toplevel)/.github/skills/
 // Grok project hooks are relative to the git/workspace root. Claude tool names
 // in the matcher (Edit|Write|MultiEdit) alias to Grok's search_replace family.
 
-// `windows: true` adds the `commandWindows` sibling; only Codex-shaped
-// consumers honor it, and an unknown key would fail Codex's strict parser if
-// it were the other way round, so it stays opt-in per manifest.
-function buildClaudeCompatibleHooks(matcher, scriptsDir, { windows = false } = {}) {
+function buildClaudeCompatibleHooks(matcher, scriptsDir) {
   const command = guardedLauncher(launcherIn(scriptsDir));
-  const commandWindows = windows ? windowsLauncherCommand(launcherCmdIn(scriptsDir)) : undefined;
   return {
     PostToolUse: [
       {
@@ -101,14 +87,13 @@ function buildClaudeCompatibleHooks(matcher, scriptsDir, { windows = false } = {
           {
             type: 'command',
             command,
-            ...(commandWindows ? { commandWindows } : {}),
             timeout: TIMEOUT_SECONDS,
             statusMessage: STATUS_MESSAGE,
           },
         ],
       },
     ],
-    Stop: [stopEntry(command, commandWindows)],
+    Stop: [stopEntry(command)],
   };
 }
 
@@ -136,7 +121,7 @@ export function buildClaudePluginHooksManifest() {
 // instead of relying on its Claude compatibility alias.
 export function buildCodexPluginHooksManifest() {
   return {
-    hooks: buildClaudeCompatibleHooks('Edit|Write|apply_patch', CODEX_PLUGIN_SCRIPTS, { windows: true }),
+    hooks: buildClaudeCompatibleHooks('Edit|Write|apply_patch', CODEX_PLUGIN_SCRIPTS),
   };
 }
 
@@ -145,7 +130,7 @@ export function buildCodexPluginHooksManifest() {
 // Codex provider, whose self-consistent bundle keeps the skill at `.codex/skills`.
 export function buildCodexHooksManifest(skillDir = '.codex') {
   return {
-    hooks: buildClaudeCompatibleHooks('Edit|Write|apply_patch', codexProjectScripts(skillDir), { windows: true }),
+    hooks: buildClaudeCompatibleHooks('Edit|Write|apply_patch', codexProjectScripts(skillDir)),
   };
 }
 
