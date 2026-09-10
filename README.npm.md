@@ -92,3 +92,5 @@ This CLI is part of [Impeccable](https://impeccable.style), a cross-provider des
 ## License
 
 [Apache 2.0](https://github.com/Raudbjorn/impeccable/blob/main/LICENSE)
+
+Supported engine hosts: Linux x64 and arm64.

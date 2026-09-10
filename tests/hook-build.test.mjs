@@ -45,12 +45,6 @@ function expectCommand(command, expectedScriptsDir, verb = 'hook') {
   assert.ok(!command.includes('.mjs'), `hook command still names a Node script: ${command}`);
 }
 
-function expectWindowsCommand(command, expectedScriptsDir, verb = 'hook') {
-  assert.equal(typeof command, 'string');
-  const launcher = `${expectedScriptsDir}/impeccable.cmd`;
-  assert.equal(command, `if exist "${launcher}" ("${launcher}" ${verb} & exit /b)`);
-}
-
 function manifestCommands(manifest) {
   const commands = [];
   const walk = (value) => {
@@ -66,10 +60,8 @@ function manifestCommands(manifest) {
 }
 
 describe('hook manifest builders', () => {
-  it('emits commandWindows only for Codex-shaped manifests', () => {
-    // Codex reads a `commandWindows` sibling; Claude, Cursor, Grok, and Copilot
-    // have no per-platform field, and an unknown key is a risk under a strict
-    // parser, so it stays off everywhere else.
+  it('emits only Linux launcher commands', () => {
+    // Every provider uses the Linux launcher.
     const withWindows = [buildCodexHooksManifest(), buildCodexPluginHooksManifest()];
     const without = [
       buildClaudeSettingsManifest(),
@@ -90,8 +82,7 @@ describe('hook manifest builders', () => {
     };
     for (const manifest of withWindows) {
       for (const entry of entries(manifest)) {
-        assert.equal(typeof entry.commandWindows, 'string', `missing commandWindows in ${JSON.stringify(entry)}`);
-        assert.ok(entry.commandWindows.includes('impeccable.cmd'));
+        assert.equal(entry.commandWindows, undefined);
       }
     }
     for (const manifest of without) {
@@ -153,10 +144,6 @@ describe('hook manifest builders', () => {
     assert.equal(stop.timeout, 30);
     expectCommand(stop.command, '.codex/skills/impeccable/scripts');
 
-    // Codex 0.146.0+ selects `commandWindows` on Windows (issue #452), where
-    // the POSIX guard is not a command; that form calls impeccable.cmd.
-    expectWindowsCommand(handler.commandWindows, '.codex/skills/impeccable/scripts');
-    expectWindowsCommand(stop.commandWindows, '.codex/skills/impeccable/scripts');
   });
 
   it('derives the Codex hook payload path from the install dir', () => {
@@ -215,7 +202,7 @@ describe('hook manifest builders', () => {
     assert.match(source, /export default function impeccableHook\(pi\)/);
     assert.match(source, /pi\.on\("tool_result"/);
     assert.match(source, /pi\.on\("session_stop"/);
-    assert.match(source, /"\.\.", "\.\.", "skills", "impeccable", "scripts", process.platform/);
+    assert.match(source, /"\.\.", "\.\.", "skills", "impeccable", "scripts", "impeccable"/);
     // Filters to the file-modifying tools; never fires on bash/read/etc.
     assert.match(source, /event\.toolName !== "edit" &&\s*\n\s*event\.toolName !== "write"/);
     // Shaped exactly like Claude Code's own PostToolUse/Stop JSON so
@@ -622,39 +609,6 @@ describe('hook manifest builders', () => {
     }
   });
 
-  it('emits Windows launcher commands only for Codex-shaped manifests', () => {
-    const withWindows = [buildCodexHooksManifest(), buildCodexPluginHooksManifest()];
-    const without = [buildClaudeSettingsManifest(), buildClaudePluginHooksManifest(), buildGitHubHooksManifest()];
-    const entries = (manifest) => {
-      const out = [];
-      const walk = (value) => {
-        if (Array.isArray(value)) { value.forEach(walk); return; }
-        if (value && typeof value === 'object') {
-          if (typeof value.command === 'string' || typeof value.bash === 'string') out.push(value);
-          Object.values(value).forEach(walk);
-        }
-      };
-      walk(manifest.hooks);
-      return out;
-    };
-    for (const manifest of withWindows) {
-      for (const entry of entries(manifest)) {
-        assert.equal(typeof entry.commandWindows, 'string', `missing commandWindows in ${JSON.stringify(entry)}`);
-        assert.ok(entry.commandWindows.includes('impeccable.cmd'));
-      }
-    }
-    for (const manifest of without) {
-      for (const entry of entries(manifest)) {
-        assert.equal(entry.commandWindows, undefined, `unexpected commandWindows in ${JSON.stringify(entry)}`);
-      }
-    }
-    for (const manifest of [...withWindows, ...without]) {
-      for (const command of manifestCommands(manifest)) {
-        assert.ok(!/node|systemMessage|node-unsupported/.test(command), `Node-era fragment in ${command}`);
-      }
-    }
-  });
-
   it('routes supported hook builders and leaves other providers alone', () => {
     assert.ok(hooksJsonFor('claude'));
     assert.ok(hooksJsonFor('codex'));
@@ -789,10 +743,7 @@ describe('generated hook artifacts in repo', { skip: SYNCED ? false : 'generated
       const abs = path.join(REPO_ROOT, scriptDir);
       const launcher = path.join(abs, 'impeccable');
       assert.ok(fs.existsSync(launcher), `launcher missing in ${scriptDir}`);
-      if (process.platform !== 'win32') {
-        assert.ok(fs.statSync(launcher).mode & 0o111, `launcher not executable in ${scriptDir}`);
-      }
-      assert.ok(fs.existsSync(path.join(abs, 'impeccable.cmd')), `impeccable.cmd missing in ${scriptDir}`);
+      assert.ok(fs.statSync(launcher).mode & 0o111, `launcher not executable in ${scriptDir}`);
       assert.ok(fs.existsSync(path.join(abs, 'VERSION')), `VERSION missing in ${scriptDir}`);
       assert.equal(fs.existsSync(path.join(abs, 'bin')), false, `${scriptDir} must stay launcher-only in git; binaries ship only in IMPECCABLE_BUNDLE_ENGINE=1 release zips`);
       const stray = fs.readdirSync(abs).filter((f) => ['hook.mjs', 'context.mjs', 'detect.mjs', 'detector'].includes(f));

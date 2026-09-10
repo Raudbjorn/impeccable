@@ -1,6 +1,6 @@
 //! After a skill directory is written, make it self-contained: when its
 //! `scripts/VERSION` names an engine release and no
-//! `scripts/bin/<os>-<arch>/impeccable[.exe]` is present, download that
+//! `scripts/bin/<os>-<arch>/impeccable` is present, download that
 //! release's binary for this platform from this repo's `engine-v<version>`
 //! GitHub Release (the same asset naming and `.sha256` sidecar the launcher
 //! uses) and set the executable bit. Not part of the JS; see the crate docs.
@@ -14,20 +14,13 @@ use crate::bundle::{download, hex};
 use crate::providers::Sys;
 use crate::util::{self, jsp};
 
-pub const DEFAULT_DOWNLOAD_BASE: &str = "https://github.com/pbakaus/impeccable/releases/download";
+pub const DEFAULT_DOWNLOAD_BASE: &str = "https://github.com/Raudbjorn/impeccable/releases/download";
 
-/// The `<os>-<arch>` tag the launcher computes (`darwin|linux|windows` x
+/// The `<os>-<arch>` tag the launcher computes (`linux` x
 /// `arm64|x64`); `None` on a platform without a release asset.
 pub fn platform_tag() -> Option<(&'static str, &'static str)> {
-    let os = if cfg!(target_os = "macos") {
-        "darwin"
-    } else if cfg!(target_os = "linux") {
-        "linux"
-    } else if cfg!(target_os = "windows") {
-        "windows"
-    } else {
-        return None;
-    };
+    if !cfg!(target_os = "linux") { return None; }
+    let os = "linux";
     let arch = if cfg!(target_arch = "aarch64") {
         "arm64"
     } else if cfg!(target_arch = "x86_64") {
@@ -40,7 +33,7 @@ pub fn platform_tag() -> Option<(&'static str, &'static str)> {
 
 /// Where the binary for `(os, arch)` lives inside a skill directory.
 pub fn binary_path(skill_dir: &str, os: &str, arch: &str) -> String {
-    let name = if os == "windows" { "impeccable.exe" } else { "impeccable" };
+    let name = "impeccable";
     jsp::join(&[skill_dir, "scripts", "bin", &format!("{os}-{arch}"), name])
 }
 
@@ -48,8 +41,7 @@ pub fn binary_path(skill_dir: &str, os: &str, arch: &str) -> String {
 /// tagged `engine-v<version>` because the repo also carries skill, CLI,
 /// extension and detector tags.
 pub fn asset_url(base: &str, version: &str, os: &str, arch: &str) -> String {
-    let ext = if os == "windows" { ".exe" } else { "" };
-    format!("{}/engine-v{version}/impeccable-{os}-{arch}{ext}", base.trim_end_matches('/'))
+    format!("{}/engine-v{version}/impeccable-{os}-{arch}", base.trim_end_matches('/'))
 }
 
 /// Fetch one release binary, verified against its `.sha256` sidecar. Fails
@@ -170,19 +162,14 @@ mod tests {
     #[test]
     fn asset_naming_matches_launcher() {
         assert_eq!(
-            asset_url(DEFAULT_DOWNLOAD_BASE, "1.2.3", "darwin", "arm64"),
-            "https://github.com/pbakaus/impeccable/releases/download/engine-v1.2.3/impeccable-darwin-arm64"
+            asset_url(DEFAULT_DOWNLOAD_BASE, "1.2.3", "linux", "arm64"),
+            "https://github.com/Raudbjorn/impeccable/releases/download/engine-v1.2.3/impeccable-linux-arm64"
         );
-        assert_eq!(asset_url("http://x/", "1", "windows", "x64"), "http://x/engine-v1/impeccable-windows-x64.exe");
         // The sibling binary path is joined with the host's path semantics
         // (backslashes on Windows); only the asset name is platform-keyed.
         assert_eq!(
             binary_path("/s", "linux", "x64"),
             jsp::join(&["/s", "scripts", "bin", "linux-x64", "impeccable"])
-        );
-        assert_eq!(
-            binary_path("/s", "windows", "arm64"),
-            jsp::join(&["/s", "scripts", "bin", "windows-arm64", "impeccable.exe"])
         );
     }
 }

@@ -210,7 +210,6 @@ function assertMarkerValue(value) {
 /** pid -> full command line, for every process this user can see. */
 function listCommands() {
   const map = new Map();
-  if (process.platform === 'win32') return map; // no supported sweep yet
   const res = spawnSync('ps', ['-A', '-ww', '-o', 'pid=,command='], { encoding: 'utf-8' });
   if (res.status !== 0 || !res.stdout) return map;
   for (const line of res.stdout.split('\n')) {

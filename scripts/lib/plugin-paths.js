@@ -110,8 +110,7 @@ export function rewritePluginMarkdown(content, { isSkillEntrypoint = true } = {}
     // carries natively (Setup step 1). Runs after the path replacement so
     // one pattern covers both origins; already-quoted forms don't match.
     .replace(/node (\$\{CLAUDE_SKILL_DIR\}|<skill-base-dir>)\/scripts\/([^\s`"]+)/g, 'node "$1/scripts/$2"')
-    // The engine launcher is the command itself (`${CLAUDE_SKILL_DIR}/scripts/impeccable <verb>`,
-    // or `impeccable.cmd` on a Windows shell without sh), so the launcher path
+    // The engine launcher is the command itself, so the launcher path
     // is what gets quoted; the verb and its arguments follow unquoted.
     .replace(
       /(?<!["\w/])(\$\{CLAUDE_SKILL_DIR\}|<skill-base-dir>)\/scripts\/impeccable(\.cmd)?(?=[\s`])/g,

@@ -6,7 +6,7 @@ Use this flow for a new surface or a replacement visual identity. PRODUCT.md own
 
 Read DESIGN.md, representative code, tokens, components, assets, and the interview record when Setup's `DESIGN_CONTEXT` directive reports one.
 
-- **Redesign:** preserve product truth, content, function, constraints, and explicit brand commitments; replace the old visual world rather than polishing it. The old look is evidence of what the subject is, not authority over what it becomes.
+- **Redesign:** preserve product truth, content, function, constraints, and explicit brand commitments; replace the old visual world rather than polishing it. The old look is evidence of what the subject is, not authority over what it becomes. Use the structured question tool to have the user choose the replacement world before writing DESIGN.md or editing the implementation.
 - **Established world:** inherit it. A missing DESIGN.md does not erase a coherent identity already in code; document that identity instead of inventing a replacement.
 - **Incomplete brand:** preserve confirmed assets and recognizable traits, then expand the system with the user for this surface.
 - **No visual authority:** create a new world with the user.

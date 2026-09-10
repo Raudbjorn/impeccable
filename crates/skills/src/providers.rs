@@ -920,8 +920,8 @@ mod tests {
 
         // Default global skills dir is ~/.dsh/skills; $DSH_HOME wins only
         // when it sits under home, like $HERMES_HOME for .hermes.
-        let cwd = if cfg!(windows) { r"C:\work" } else { "/work" };
-        let home = if cfg!(windows) { r"C:\Users\u" } else { "/home/u" };
+        let cwd = "/work";
+        let home = "/home/u";
         let default = jsp::join(&[home, ".dsh"]);
         let custom = jsp::join(&[home, "custom-dsh"]);
         let env = Env::new();
@@ -935,7 +935,7 @@ mod tests {
 
     #[test]
     fn dsh_home_respects_resolved_path_boundaries() {
-        let home = if cfg!(windows) { r"C:\Users\Test User" } else { "/home/Test User" };
+        let home = "/home/Test User";
         let cwd = jsp::join(&[home, "project"]);
         let default = jsp::join(&[home, ".dsh"]);
         for (value, expected) in [
@@ -949,24 +949,10 @@ mod tests {
             assert_eq!(dsh_global_home(&env, &cwd, home), expected, "DSH_HOME={value}");
         }
         // A drive/filesystem root has no extra separator to append.
-        let root = if cfg!(windows) { "C:\\" } else { "/" };
+        let root = "/";
         let child = jsp::join(&[root, "custom dsh"]);
         let env = Env::from([("DSH_HOME".into(), child.clone())]);
         assert_eq!(dsh_global_home(&env, root, root), child);
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn dsh_home_handles_windows_case_separators_and_devices() {
-        for (home, value, expected) in [
-            (r"C:\Users\Alice", "c:/users/alice/custom", r"c:\users\alice\custom"),
-            (r"C:\Users\Alice", r"D:\Users\Alice\custom", r"C:\Users\Alice\.dsh"),
-            (r"\\server\share\Alice", r"\\server\share\Alice\custom", r"\\server\share\Alice\custom"),
-            (r"\\server\share\Alice", r"\\server\other\Alice\custom", r"\\server\share\Alice\.dsh"),
-        ] {
-            let env = Env::from([("DSH_HOME".into(), value.into())]);
-            assert_eq!(dsh_global_home(&env, home, home), expected);
-        }
     }
 
     #[test]

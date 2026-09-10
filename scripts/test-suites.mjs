@@ -82,6 +82,7 @@ export const SUITES = {
           'tests/score-evidence.test.mjs',
           'tests/compose.test.mjs',
           'tests/visual-cues.test.mjs',
+          'tests/image-analyze.test.mjs',
           'tests/omp-hook-module.test.mjs',
           'tests/omp-plugin-layout.test.mjs',
           'tests/prompt-budget.test.mjs',
@@ -314,7 +315,7 @@ export const SUITES = {
     ],
   },
   'live-svelte-adapter-deepseek': {
-    description: 'DeepSeek-backed Svelte adapter browser sweep.',
+    description: 'Provider-backed Svelte adapter browser sweep (DeepSeek by default).',
     optIn: true,
     needsPlaywright: true,
     triggers: [

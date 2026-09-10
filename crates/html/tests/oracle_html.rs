@@ -69,11 +69,7 @@ fn fixture_for(golden_name: &str, fixtures: &Path) -> Option<PathBuf> {
 /// path, not the host's separator.
 fn mask_file(file: &str, root: &str, token: &str) -> String {
     let masked = file.replace(root, token);
-    if cfg!(windows) {
-        masked.replace('\\', "/")
-    } else {
-        masked
-    }
+    masked
 }
 
 #[test]

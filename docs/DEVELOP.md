@@ -224,6 +224,3 @@ impeccable/
 - Verify file naming matches provider requirements
 - Consult [HARNESSES.md](HARNESSES.md) for provider-specific details
 
-## Questions?
-
-Open an issue first. If a maintainer approves the direction, offer to follow up with a PR. Regular contributors `pbakaus` and `abdulwahabone` may open PRs directly.

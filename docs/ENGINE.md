@@ -1,7 +1,7 @@
 # The engine: the Rust runtime behind every skill verb
 
 Every command the skill text runs is `{{scripts_path}}/impeccable <verb>`. The
-launcher next to the skill (`skill/scripts/impeccable`, `impeccable.cmd`)
+launcher next to the skill (`skill/scripts/impeccable`)
 finds or downloads one static binary per platform and execs it. That binary
 is built from this repo's Cargo workspace. Core commands require no Node runtime. The fork's optional design-context import/export, evidence scoring, visual-cue, and image-gen helpers remain separate Node scripts under `skill/scripts/`; their references explicitly invoke `node`.
 
@@ -240,10 +240,10 @@ Two release kinds touch the runtime, in this order:
 
 1. **Engine** (`engine-v<ENGINE_VERSION>`): `bun run release:engine` verifies
    the version, the npm platform-package pins and a clean tree, then tags and
-   pushes; `.github/workflows/release-engine.yml` builds the five targets and
+   pushes; `.github/workflows/release-engine.yml` builds the two Linux targets and
    publishes the binaries with `.sha256` sidecars. The launcher, the npm shim
    and `impeccable install` download from
-   `github.com/pbakaus/impeccable/releases/download/engine-v<X>/`.
+   `github.com/Raudbjorn/impeccable/releases/download/engine-v<X>/`.
 2. **npm platform packages**, then the **skill** and **CLI** releases, which
    `scripts/check-engine-release.mjs` gates on the engine release.
 
@@ -252,5 +252,5 @@ binary, so `bun run release:ext` is exempt from that gate. It does need
 `bun run build:extension` (and therefore a Rust toolchain and `wasm-pack`)
 before the zip is attached.
 
-CI runs the workspace build and tests (`rust`, `rust-windows`) and replays the
+CI runs the workspace build and tests (`rust`) and replays the
 oracle against a release build from the checkout under test.

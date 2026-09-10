@@ -8,7 +8,7 @@ use crate::seed_text as t;
 use crate::target_args::TargetOptions;
 use crate::util::Env;
 use impeccable_common::Io;
-use serde_json::{Map, Value};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::time::{Duration, Instant};
 
@@ -93,64 +93,13 @@ fn fetch_roll(env: &Env, budget: &mut ApiBudget, scope: &str, key: &str, mode: O
     Some(roll)
 }
 
-fn telemetry_disabled(env: &Env) -> bool {
-    env.get("IMPECCABLE_NO_TELEMETRY").map(|v| !v.is_empty()).unwrap_or(false) || env.get("DO_NOT_TRACK").map(|v| !v.is_empty()).unwrap_or(false)
+fn telemetry_disabled() -> bool {
+    true
 }
 
-/// JS: pingChosen
-fn ping_chosen(env: &Env, budget: &mut ApiBudget, chosen_id: Option<&str>, key: Option<&str>, scope: Option<&str>, mode: Option<&str>, kind: Option<&str>, register: Option<&str>) -> bool {
-    if telemetry_disabled(env) {
-        return false;
-    }
-    let chosen_id = chosen_id.filter(|s| !s.is_empty());
-    let kind = kind.filter(|s| !s.is_empty());
-    let register = register.filter(|s| !s.is_empty());
-    if let Some(k) = kind {
-        if !["assigned", "pick", "challenger", "canon"].contains(&k) {
-            return false;
-        }
-    }
-    if let Some(r) = register {
-        if r != "safer" && r != "bolder" {
-            return false;
-        }
-    }
-    if chosen_id.is_none() && kind.is_none() {
-        return false;
-    }
-    if (kind == Some("challenger") || kind.is_none()) && chosen_id.is_none() {
-        return false;
-    }
-    let mut body = Map::new();
-    if let Some(c) = chosen_id {
-        body.insert("chosenId".into(), Value::String(c.to_string()));
-    }
-    // JSON.stringify omits undefined values
-    if let Some(k) = key {
-        body.insert("key".into(), Value::String(k.to_string()));
-    }
-    if let Some(s) = scope {
-        body.insert("scope".into(), Value::String(s.to_string()));
-    }
-    if let Some(m) = mode {
-        body.insert("mode".into(), Value::String(m.to_string()));
-    }
-    if let Some(k) = kind {
-        body.insert("kind".into(), Value::String(k.to_string()));
-    }
-    if let Some(r) = register {
-        body.insert("register".into(), Value::String(r.to_string()));
-    }
-    let remaining = budget.remaining();
-    if remaining.is_zero() {
-        return false;
-    }
-    let url = format!("{}/chosen", api_base(env));
-    agent(remaining)
-        .post(&url)
-        .set("Content-Type", "application/json")
-        .send_string(&serde_json::to_string(&Value::Object(body)).unwrap())
-        .is_ok()
+/// Choice telemetry is disabled in this distribution.
+fn ping_chosen(_env: &Env, _budget: &mut ApiBudget, _chosen_id: Option<&str>, _key: Option<&str>, _scope: Option<&str>, _mode: Option<&str>, _kind: Option<&str>, _register: Option<&str>) -> bool {
+    false
 }
 
 fn vs(v: &Value, key: &str) -> String {
@@ -495,7 +444,7 @@ fn render_concept_seed(env: &Env, cwd: &str, budget: &mut ApiBudget, a: &SeedArg
     } else {
         String::new()
     };
-    let telemetry_block = if data.source == "api" {
+    let telemetry_block = if data.source == "api" && !telemetry_disabled() {
         fill(t::TELEMETRY_BLOCK, &common)
     } else if data.source == "retrieval" && !data.session.is_empty() {
         t::RETRIEVAL_BLOCK.replace("@@SESSION@@", &data.session)
@@ -797,6 +746,15 @@ mod retrieval_render_tests {
     fn render(env: Env, a: &SeedArgs) -> String {
         let mut budget = ApiBudget::new(&env);
         render_concept_seed(&env, ".", &mut budget, a).unwrap()
+    }
+
+    #[test]
+    fn telemetry_is_disabled_without_opt_out_flags() {
+        let env = Env::new();
+        assert!(telemetry_disabled());
+        let mut budget = ApiBudget::new(&env);
+        assert!(!ping_chosen(&env, &mut budget, Some("choice"), Some("key"), Some("direction"), None, Some("pick"), None));
+        assert!(budget.deadline.is_none(), "a disabled ping must not start a request");
     }
 
     #[test]

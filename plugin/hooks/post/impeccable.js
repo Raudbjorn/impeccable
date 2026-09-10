@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-const HOOK_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "skills", "impeccable", "scripts", process.platform === "win32" ? "impeccable.cmd" : "impeccable");
+const HOOK_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "skills", "impeccable", "scripts", "impeccable");
 
 // Async (not spawnSync): a multi-file edit scans every touched path, and a
 // synchronous spawn per path serializes their timeouts, so N files could
@@ -30,7 +30,6 @@ function runHook(payload, timeoutMs, ctx) {
     let child;
     try {
       child = spawn(HOOK_SCRIPT, ["hook"], {
-        shell: process.platform === "win32",
         cwd: payload.cwd,
         stdio: ["pipe", "pipe", "pipe"],
       });

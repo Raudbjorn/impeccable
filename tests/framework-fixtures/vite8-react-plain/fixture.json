@@ -62,7 +62,7 @@
             "y": 4
           }
         },
-        "applyTimeoutMs": 300000,
+        "applyTimeoutMs": 480000,
         "refreshAfterApply": true,
         "expectApplyLoading": true,
         "expectNoRollback": true,

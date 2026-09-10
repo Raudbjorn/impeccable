@@ -19,7 +19,7 @@ fn claude_bundle_manifest() -> Value {
 }
 
 /// The launcher path a hook command points at, joined with the host's path
-/// semantics the way `rewrite_hook_commands_for_platform` joins it.
+/// semantics the way `rewrite_hook_commands_for_skill_root` joins it.
 fn skill_launcher(root: &str, provider: &str) -> String {
     jsp::join(&[root, provider, "skills", "impeccable", "scripts", "impeccable"])
 }
@@ -47,7 +47,7 @@ fn commands(v: &Value) -> Vec<String> {
 
 #[test]
 fn project_scope_keeps_claude_project_dir_token_and_guard() {
-    let out = rewrite_hook_commands_for_platform(&claude_bundle_manifest(), ".claude", "/proj", false, false);
+    let out = rewrite_hook_commands_for_skill_root(&claude_bundle_manifest(), ".claude", "/proj", false);
     let cmds = commands(&out);
     assert_eq!(cmds.len(), 2);
     for c in &cmds {
@@ -68,7 +68,7 @@ fn project_scope_keeps_claude_project_dir_token_and_guard() {
 #[test]
 fn absolute_path_is_single_quoted_and_inert_under_sh() {
     let root = "/tmp/imp-hook-$(touch pwned)-x";
-    let out = rewrite_hook_commands_for_platform(&claude_bundle_manifest(), ".claude", root, true, false);
+    let out = rewrite_hook_commands_for_skill_root(&claude_bundle_manifest(), ".claude", root, true);
     for c in commands(&out) {
         // The launcher path is joined with the host's path semantics, so the
         // expectation is joined the same way (backslashes on Windows).
@@ -94,47 +94,24 @@ fn absolute_path_is_single_quoted_and_inert_under_sh() {
 }
 
 #[test]
-fn windows_form_keeps_double_quoted_absolute_path() {
-    let root = "/home/u";
-    let out = rewrite_hook_commands_for_platform(&claude_bundle_manifest(), ".claude", root, true, true);
-    for c in commands(&out) {
-        let p = skill_launcher(root, ".claude");
-        // The Windows form is the JSON-quoted path, so a host path's
-        // backslashes arrive escaped inside the command string.
-        let q = serde_json::to_string(&p).unwrap();
-        assert_eq!(c, format!("command=[ ! -f {q} ] || {q} hook"));
-        assert!(!c.contains(&format!("'{p}")));
-    }
-}
-
-#[test]
-fn codex_gets_command_windows_sibling_pointing_at_cmd_shim() {
+fn codex_uses_linux_launcher() {
     let bundle = json!({
         "hooks": { "PostToolUse": [{ "matcher": "apply_patch", "hooks": [{ "type": "command", "command": "node \".codex/skills/impeccable/scripts/hook.mjs\"", "timeout": 5 }] }] }
     });
-    let out = rewrite_hook_commands_for_platform(&bundle, ".agents", "/proj", false, false);
+    let out = rewrite_hook_commands_for_skill_root(&bundle, ".agents", "/proj", false);
     let entry = &out["hooks"]["PostToolUse"][0]["hooks"][0];
     assert_eq!(
         entry["command"],
         "[ ! -f \".agents/skills/impeccable/scripts/impeccable\" ] || \".agents/skills/impeccable/scripts/impeccable\" hook"
     );
-    assert_eq!(
-        entry["commandWindows"],
-        "if exist \".agents/skills/impeccable/scripts/impeccable.cmd\" (\".agents/skills/impeccable/scripts/impeccable.cmd\" hook & exit /b)"
-    );
-    // JS key order: existing keys, then the appended commandWindows.
-    let keys: Vec<&String> = entry.as_object().unwrap().keys().collect();
-    assert_eq!(keys, ["type", "command", "timeout", "commandWindows"]);
-    // Windows host: Codex keeps the POSIX command; the sibling handles cmd.exe.
-    let win = rewrite_hook_commands_for_platform(&bundle, ".agents", "/proj", false, true);
-    assert_eq!(win["hooks"]["PostToolUse"][0]["hooks"][0]["command"], entry["command"]);
+    assert!(entry.get("commandWindows").is_none());
     assert!(value_has_impeccable_hook_marker(&out));
 }
 
 #[test]
 fn cursor_runs_hook_before_edit() {
     let bundle = json!({ "version": 1, "hooks": { "preToolUse": [{ "command": "node \".cursor/skills/impeccable/scripts/hook-before-edit.mjs\"", "timeout": 5 }] } });
-    let out = rewrite_hook_commands_for_platform(&bundle, ".cursor", "/proj", false, false);
+    let out = rewrite_hook_commands_for_skill_root(&bundle, ".cursor", "/proj", false);
     assert_eq!(
         out["hooks"]["preToolUse"][0]["command"],
         "[ ! -f \".cursor/skills/impeccable/scripts/impeccable\" ] || \".cursor/skills/impeccable/scripts/impeccable\" hook-before-edit"
@@ -147,18 +124,18 @@ fn github_manifests_pass_through_and_grok_is_rewritten() {
     // .github stays untouched: its committed manifest carries a portable
     // `$(git rev-parse ...)` command that must never become machine-local.
     let bundle = json!({ "version": 1, "hooks": { "postToolUse": [{ "type": "command", "bash": "[ ! -f \"$(git rev-parse --show-toplevel)/.github/skills/impeccable/scripts/impeccable\" ] || \"$(git rev-parse --show-toplevel)/.github/skills/impeccable/scripts/impeccable\" hook" }] } });
-    assert_eq!(rewrite_hook_commands_for_platform(&bundle, ".github", "/proj", true, false), bundle);
+    assert_eq!(rewrite_hook_commands_for_skill_root(&bundle, ".github", "/proj", true), bundle);
     assert!(value_has_impeccable_hook_marker(&bundle));
     // .grok is rewritten like the other command-hook providers (upstream
     // 49571365, #642): a global install must not leave the bundled
     // project-relative path behind.
     let grok = json!({ "hooks": { "PostToolUse": [{ "matcher": "Edit|Write|MultiEdit", "hooks": [{ "type": "command", "command": "node \".grok/skills/impeccable/scripts/hook.mjs\"" }] }] } });
-    let rel = rewrite_hook_commands_for_platform(&grok, ".grok", "/proj", false, false);
+    let rel = rewrite_hook_commands_for_skill_root(&grok, ".grok", "/proj", false);
     assert_eq!(
         rel["hooks"]["PostToolUse"][0]["hooks"][0]["command"],
         "[ ! -f \".grok/skills/impeccable/scripts/impeccable\" ] || \".grok/skills/impeccable/scripts/impeccable\" hook"
     );
-    let abs = rewrite_hook_commands_for_platform(&grok, ".grok", "/home/u", true, false);
+    let abs = rewrite_hook_commands_for_skill_root(&grok, ".grok", "/home/u", true);
     let p = skill_launcher("/home/u", ".grok");
     assert_eq!(
         abs["hooks"]["PostToolUse"][0]["hooks"][0]["command"],
@@ -181,7 +158,7 @@ fn merge_refreshes_ours_and_preserves_third_party_hooks() {
             "Stop": [{ "hooks": [{ "type": "command", "command": "\".claude/skills/impeccable/scripts/impeccable\" hook" }] }]
         }
     });
-    let fresh = rewrite_hook_commands_for_platform(&claude_bundle_manifest(), ".claude", "/proj", false, false);
+    let fresh = rewrite_hook_commands_for_skill_root(&claude_bundle_manifest(), ".claude", "/proj", false);
     let merged = merge_hook_manifests(&existing, &fresh);
     let keys: Vec<&String> = merged.as_object().unwrap().keys().collect();
     assert_eq!(keys, ["permissions", "description", "hooks"]);
@@ -356,4 +333,11 @@ fn hook_artifacts_map_providers_to_manifest_files() {
     assert_eq!(c[0].src, jsp::join(&["/b", ".codex", "hooks.json"]));
     assert_eq!(c[0].dest, jsp::join(&["/p", ".codex", "hooks.json"]));
     assert!(c[0].shared_dest.is_none());
+}
+
+#[test]
+fn linux_hooks_do_not_emit_windows_launcher() {
+    let bundle = serde_json::json!({"command": "skills/impeccable/scripts/impeccable hook"});
+    let out = rewrite_hook_commands_for_skill_root(&bundle, ".agents", "/proj", false);
+    assert!(out.get("commandWindows").is_none());
 }

@@ -304,7 +304,7 @@ fn download_remote_bundle(
     keys: Result<TrustedKeys, String>,
 ) -> Result<String, String> {
     keys.and_then(|keys| download_and_extract_signed_bundle(sys, fetch, &keys))
-        .map_err(|e| format!("{}{e}. Nothing was installed; retry or update the CLI. If this persists, report it at https://github.com/pbakaus/impeccable/issues/479", bundle_signature::ERROR_PREFIX))
+        .map_err(|e| format!("{}{e}. Nothing was installed; retry or update the CLI. If this persists, report it at https://github.com/Raudbjorn/impeccable/issues/479", bundle_signature::ERROR_PREFIX))
 }
 
 fn download_and_extract_signed_bundle(
@@ -999,7 +999,7 @@ mod tests {
                 if requests > 1 { return Err("reached signature download".into()); }
                 Ok(FetchResponse {
                     status,
-                    location: Some("https://github.com/pbakaus/impeccable/releases/download/skill-v4.2.0/universal.zip".into()),
+                    location: Some("https://github.com/Raudbjorn/impeccable/releases/download/skill-v4.2.0/universal.zip".into()),
                     body: Box::new(std::io::empty()),
                 })
             };
@@ -1029,7 +1029,7 @@ mod tests {
             "schema": 1, "keyId": "test-only", "version": "4.2.0", "artifact": "universal.zip",
             "size": zip.len(), "sha256": digest, "signature": hex(key.sign(payload.as_bytes()).as_ref()),
         })).unwrap();
-        let release = "https://github.com/pbakaus/impeccable/releases/download/skill-v4.2.0/universal.zip";
+        let release = "https://github.com/Raudbjorn/impeccable/releases/download/skill-v4.2.0/universal.zip";
         for case in ["valid", "tampered", "missing", "oversized", "downgrade", "malformed-zip", "invalid-signature"] {
             let root = tmp_dir(case);
             let temp = format!("{root}/temp");

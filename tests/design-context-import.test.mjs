@@ -163,7 +163,7 @@ describe('design-context-import.mjs already-has-a-context guard', () => {
 // always sits within its first few hundred bytes.
 describe('design-context-import.mjs DESIGN.md seed-marker probe hardening', () => {
   it('does not block indefinitely when DESIGN.md is a FIFO', () => {
-    if (process.platform === 'win32') return; // mkfifo is POSIX-only
+
     const cwd = makeCwd();
     const mkfifo = spawnSync('mkfifo', [path.join(cwd, 'DESIGN.md')]);
     if (mkfifo.error || mkfifo.status !== 0) return; // mkfifo unavailable in this environment
@@ -203,7 +203,7 @@ describe('design-context-import.mjs DESIGN.md seed-marker probe hardening', () =
 // own and can block or read unbounded data.
 describe('design-context-import.mjs bundle non-regular-file guard', () => {
   it('refuses a bundle path that is a FIFO instead of reading it', async () => {
-    if (process.platform === 'win32') return; // mkfifo is POSIX-only
+
     const cwd = makeCwd();
     const fifoPath = path.join(cwd, 'bundle.json');
     const mkfifo = spawnSync('mkfifo', [fifoPath]);

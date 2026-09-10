@@ -1850,6 +1850,7 @@ async function runManualEditStage(page, stage, { t, fixture, session, agentMode,
           timeout: agentMode === 'llm' ? 60_000 : 20_000,
         });
       } catch (err) {
+        if (process.env.IMPECCABLE_E2E_DEBUG) t.diagnostic(`Browser errors: ${JSON.stringify(session.consoleErrors)}`);
         if (edit.expectedSourceFile) {
           t.diagnostic(`--- source ${edit.expectedSourceFile} after visible-text failure ---`);
           t.diagnostic(readFileSync(join(tmp, edit.expectedSourceFile), 'utf-8'));

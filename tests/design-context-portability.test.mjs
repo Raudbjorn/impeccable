@@ -1065,7 +1065,7 @@ describe('DESIGN.md symlink handling', () => {
   // test above for why): run as a child process since the limit is set
   // per-process and Node has no API to lower its own after starting.
   it('cleans up a partial DESIGN.md when the write itself fails, so a retry does not see a permanent EEXIST', () => {
-    if (process.platform === 'win32') return; // ulimit -f is POSIX-only
+
     const cwd = mkdtempSync(path.join(sandboxRoot, 'design-context-designmd-efbig-'));
     const portabilityModuleUrl = pathToFileURL(path.resolve('skill/scripts/design-context/portability.mjs')).href;
     const scriptPath = path.join(cwd, 'probe.mjs');
@@ -1151,7 +1151,7 @@ describe('writeJsonAtomic', () => {
   // child process because the limit is set per-process and Node has no API
   // to lower its own after starting.
   it('cleans up its temp file when the write itself fails (EFBIG under ulimit -f), not only when rename() fails', async () => {
-    if (process.platform === 'win32') return; // ulimit -f is POSIX-only
+
     const dir = await mkdtemp(path.join(sandboxRoot, 'efbig-'));
     const storeModuleUrl = pathToFileURL(path.resolve('skill/scripts/design-context/store.mjs')).href;
     const scriptPath = path.join(dir, 'probe.mjs');

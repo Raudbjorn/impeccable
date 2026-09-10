@@ -15,29 +15,10 @@ pub fn homedir(env: &Env) -> String {
 }
 
 /// `os.tmpdir()`: `$TMPDIR || $TMP || $TEMP || '/tmp'`, one trailing slash
-/// stripped (Windows: `$TEMP || $TMP || <SystemRoot|windir>\temp`).
+/// stripped.
 pub fn tmpdir(env: &Env) -> String {
     let nonempty = |k: &str| env.get(k).filter(|v| !v.is_empty()).cloned();
-    if cfg!(windows) {
-        let mut dir = match nonempty("TEMP").or_else(|| nonempty("TMP")) {
-            Some(v) => v,
-            None => {
-                let root = nonempty("SystemRoot")
-                    .or_else(|| nonempty("windir"))
-                    .unwrap_or_default();
-                format!("{root}\\temp")
-            }
-        };
-        // Node trims one trailing separator unless it is a drive root (`C:\`).
-        if dir.len() > 1
-            && (dir.ends_with('\\') || dir.ends_with('/'))
-            && !dir.ends_with(":\\")
-            && !dir.ends_with(":/")
-        {
-            dir.pop();
-        }
-        return dir;
-    }
+
     let mut dir = nonempty("TMPDIR")
         .or_else(|| nonempty("TMP"))
         .or_else(|| nonempty("TEMP"))
@@ -240,10 +221,6 @@ pub fn symlink_dir(target: &str, path: &str) -> Result<(), String> {
     #[cfg(unix)]
     {
         std::os::unix::fs::symlink(target, path).map_err(|e| node_error("symlink", path, &e))
-    }
-    #[cfg(windows)]
-    {
-        std::os::windows::fs::symlink_dir(target, path).map_err(|e| node_error("symlink", path, &e))
     }
 }
 

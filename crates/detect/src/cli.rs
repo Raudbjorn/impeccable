@@ -347,7 +347,7 @@ fn file_url_to_local_path(url: &str) -> Option<String> {
             Some(i) => (&r[..i], &r[i..]),
             None => (r, ""),
         };
-        if !host.is_empty() && host != "localhost" && !cfg!(windows) {
+        if !host.is_empty() && host != "localhost" {
             return None;
         }
         p.to_string()
@@ -361,27 +361,7 @@ fn file_url_to_local_path(url: &str) -> Option<String> {
     if decoded.contains('\0') {
         return None;
     }
-    if cfg!(windows) {
-        // Node win32 fileURLToPath: `/C:/x` -> `C:\x` (drive letter required
-        // for a hostless URL; `file://host/share/x` -> `\\host\share\x`).
-        let mut host = String::new();
-        if let Some(r) = rest.strip_prefix("//") {
-            host = match r.find('/') {
-                Some(i) => r[..i].to_string(),
-                None => r.to_string(),
-            };
-        }
-        let win = decoded.replace('/', "\\");
-        if !host.is_empty() && host != "localhost" {
-            return Some(format!("\\\\{host}{win}"));
-        }
-        let b = win.as_bytes();
-        // Expect `\X:` after decoding.
-        if b.len() < 3 || b[0] != b'\\' || !b[1].is_ascii_alphabetic() || b[2] != b':' {
-            return None;
-        }
-        return Some(win[1..].to_string());
-    }
+
     Some(decoded)
 }
 

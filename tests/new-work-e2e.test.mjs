@@ -126,7 +126,7 @@ function spawnSyncGen(prompt, out, size = null) {
 }
 
 function spawnSyncEmbed(args) {
-  return spawnSync(process.execPath, [EMBED_PROMPT, ...args], { encoding: 'utf8' });
+  return spawnSync(ENGINE_BIN, ['embed-prompt', ...args], { encoding: 'utf8', env: engineEnv(ENGINE_BIN) });
 }
 
 // --------------------------------------------------------------------------

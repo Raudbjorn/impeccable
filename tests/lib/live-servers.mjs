@@ -57,7 +57,7 @@ export function armLiveServerReaper() {
   if (!process.env[REPO_ENV]) process.env[REPO_ENV] = repoMarker(REPO_ROOT);
   if (!process.env[REPO_PATH_ENV]) process.env[REPO_PATH_ENV] = REPO_ROOT;
 
-  if (process.platform !== 'win32' && process.env.IMPECCABLE_NO_TEST_REAPER !== '1') {
+  if (process.env.IMPECCABLE_NO_TEST_REAPER !== '1') {
     try {
       reaper = spawn(process.execPath, [REAPER, procId], {
         detached: true,
