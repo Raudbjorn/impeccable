@@ -6,6 +6,8 @@ The npm package is a small launcher. It runs the `impeccable` engine binary for 
 
 ## Quick Start
 
+To select this fork, use `npx --package=github:Raudbjorn/impeccable impeccable <command>` in place of `npx impeccable` in the examples below. The unqualified npm package still belongs to upstream.
+
 ```bash
 # Install skills into your AI harness (Claude, Cursor, Gemini, etc.)
 npx impeccable install
@@ -83,7 +85,7 @@ impeccable detect [options] [file-or-dir-or-url...]
 - For URL scans, an installed Chrome, Chromium, or Edge (set `IMPECCABLE_BROWSER` to point at one).
 - Behind a TLS-inspecting proxy, downloads trust your OS certificate store as well as the bundled Mozilla roots. Set `SSL_CERT_FILE` or `SSL_CERT_DIR` to use a specific CA bundle instead.
 
-Binary lookup order: `IMPECCABLE_BIN`, the platform package, `~/.impeccable/bin/<version>/`, then a download of the pinned version into that cache. Set `IMPECCABLE_BIN` to a local build to skip all of that.
+Binary lookup order: `IMPECCABLE_BIN`, a platform package matching the fork's repository and pinned engine version, `~/.impeccable/bin/<version>/`, then a download from the fork's GitHub Releases into that cache. Set `IMPECCABLE_BIN` to a local build to skip all of that.
 
 ## Part of Impeccable
 
@@ -93,4 +95,4 @@ This CLI is part of [Impeccable](https://impeccable.style), a cross-provider des
 
 [Apache 2.0](https://github.com/Raudbjorn/impeccable/blob/main/LICENSE)
 
-Supported engine hosts: Linux x64 and arm64.
+Supported engine host: Linux x64 (x86_64) only.

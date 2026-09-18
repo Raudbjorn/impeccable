@@ -19,7 +19,7 @@ fn sh_launcher_asset_naming_matches_engine() {
     assert!(sh.contains(&format!("IMPECCABLE_DOWNLOAD_BASE:-{DEFAULT_DOWNLOAD_BASE}")));
     assert!(sh.contains(r#"asset="impeccable-$os-$arch""#));
     assert!(sh.contains(r#"url="$base/engine-v$version/$asset""#));
-    // The PATH and unversioned home candidates are probed; trusted paths are not.
+    // Implicit sibling, PATH, and unversioned home candidates are probed.
     assert!(sh.contains("engine-probe"));
     assert!(sh.contains(r#"probe_ok "$home_bin""#));
     assert!(sh.contains("probe_ok impeccable"));
@@ -53,8 +53,8 @@ fn launchers_reference_the_same_release_channel() {
     }
     // Spot-check the engine's own URL builder against the launcher template.
     assert_eq!(
-        asset_url(DEFAULT_DOWNLOAD_BASE, "1.2.3", "linux", "arm64"),
-        format!("{DEFAULT_DOWNLOAD_BASE}/engine-v1.2.3/impeccable-linux-arm64")
+        asset_url(DEFAULT_DOWNLOAD_BASE, "1.2.3", "linux", "x64"),
+        format!("{DEFAULT_DOWNLOAD_BASE}/engine-v1.2.3/impeccable-linux-x64")
     );
 }
 

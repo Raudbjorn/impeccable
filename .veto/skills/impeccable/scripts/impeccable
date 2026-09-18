@@ -3,29 +3,26 @@
 #   <this dir>/bin/<os>-<arch>/impeccable
 # Order: $IMPECCABLE_BIN, the sibling binary, ~/.impeccable/bin/impeccable,
 # the version-pinned cache, then `impeccable` on PATH. Never needs Node.
-# The unversioned home binary and the PATH candidate are validated with the
-# engine-probe handshake first: the retired 3.x npm CLI also installed a bin
-# named `impeccable`, and exec'ing it would fail every verb with
-# "Unknown command". Trusted candidates (IMPECCABLE_BIN, the sibling binary,
-# the version-pinned cache) are exec'd without a probe: hooks run them on
-# every edit and must stay fast.
+# Sibling, unversioned home, and PATH binaries must answer engine-probe with
+# the pinned fork version. IMPECCABLE_BIN is an explicit override; the
+# version-pinned cache is trusted so hooks stay fast.
 set -eu
 
 # True when the candidate answers the engine handshake (prints
-# "impeccable-engine <version>", exit 0). Quiet and fast (<100ms).
+# "impeccable-engine <pinned version>", exit 0). Quiet and fast (<100ms).
 # IMPECCABLE_LAUNCHER_PROBE marks the child as a probe: a copy of this
 # launcher reached recursively (e.g. symlinked onto PATH as `impeccable`)
 # then skips its own probes and refuses to download, so probing stays cheap
 # and can never loop.
 probe_ok() {
-  case "$(IMPECCABLE_LAUNCHER_PROBE=1 "$1" engine-probe 2>/dev/null || true)" in
-    impeccable-engine*) return 0 ;;
-  esac
-  return 1
+  probe_output=$(IMPECCABLE_LAUNCHER_PROBE=1 "$1" engine-probe 2>/dev/null) || return 1
+  [ "$probe_output" = "impeccable-engine $version" ]
 }
 probing=${IMPECCABLE_LAUNCHER_PROBE:-}
 
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+version=""
+[ -f "$dir/VERSION" ] && version=$(tr -d '[:space:]' < "$dir/VERSION")
 
 # What the binary needs to know about its home: the skill directory (for
 # reference/*.md and command-metadata.json) and how to name itself in the
@@ -43,13 +40,12 @@ case "$(uname -s 2>/dev/null || echo unknown)" in
   *) os=unknown ;;
 esac
 case "$(uname -m 2>/dev/null || echo unknown)" in
-  arm64|aarch64) arch=arm64 ;;
   x86_64|amd64) arch=x64 ;;
   *) arch=unknown ;;
 esac
 
-if [ "$os" != linux ] || [ "$arch" = unknown ]; then
-  echo "impeccable: unsupported platform $os-$arch; supported: linux-x64, linux-arm64." >&2
+if [ "$os" != linux ] || [ "$arch" != x64 ]; then
+  echo "impeccable: unsupported platform $os-$arch; supported: linux-x64." >&2
   exit 127
 fi
 
@@ -59,20 +55,18 @@ fi
 
 bin="$dir/bin/$os-$arch/impeccable"
 
-if [ -x "$bin" ]; then
-  exec "$bin" "$@"
-fi
-if [ -f "$bin" ]; then
+if [ -f "$bin" ] && [ ! -x "$bin" ]; then
   # Lost the executable bit in transit (zip extraction, some copiers).
-  chmod +x "$bin" 2>/dev/null && exec "$bin" "$@"
+  chmod +x "$bin" 2>/dev/null || true
+fi
+if [ -x "$bin" ] && probe_ok "$bin"; then
+  exec "$bin" "$@"
 fi
 home_bin="${HOME:-/nonexistent}/.impeccable/bin/impeccable"
 if [ -z "$probing" ] && [ -x "$home_bin" ] && probe_ok "$home_bin"; then
   exec "$home_bin" "$@"
 fi
 # Version-pinned user cache, filled by the download below or by `impeccable update`.
-version=""
-[ -f "$dir/VERSION" ] && version=$(tr -d '[:space:]' < "$dir/VERSION")
 cache_root="${IMPECCABLE_HOME:-${HOME:-/nonexistent}/.impeccable}"
 cached="$cache_root/bin/$version/impeccable"
 if [ -n "$version" ] && [ -x "$cached" ]; then

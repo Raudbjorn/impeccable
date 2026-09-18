@@ -12,7 +12,8 @@ import {
   isPublished,
   packageName,
 } from '../scripts/publish-platform-packages.mjs';
-import { ENGINE_TARGETS, binaryName } from '../scripts/fetch-engine.mjs';
+import { ENGINE_TARGETS, binaryName, fetchEngine } from '../scripts/fetch-engine.mjs';
+import { checkEngineRelease } from '../scripts/check-engine-release.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const VERSION = '9.9.9';
@@ -22,8 +23,31 @@ function template(target) {
 }
 
 describe('platform package templates', () => {
-  it('ships only Linux platform packages', () => {
-    assert.deepEqual(ENGINE_TARGETS, ['linux-x64', 'linux-arm64']);
+  it('ships only the Linux x64 platform package', () => {
+    assert.deepEqual(ENGINE_TARGETS, ['linux-x64']);
+    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf-8'));
+    assert.deepEqual(Object.keys(pkg.optionalDependencies), ['@impeccable/cli-linux-x64']);
+    assert.equal(fs.existsSync(path.join(ROOT, 'cli/platform-packages/linux-arm64/package.json')), false);
+  });
+
+  it('requires the fork x64 binary and checksum without probing npm', async (t) => {
+    const urls = [];
+    let missingKind;
+    t.mock.method(globalThis, 'fetch', async (url) => {
+      urls.push(url);
+      const kind = url.endsWith('.sha256') ? 'checksum' : 'binary';
+      return new Response('', { status: kind === missingKind ? 404 : 200 });
+    });
+    assert.equal((await checkEngineRelease({ version: VERSION })).ok, true);
+    const asset = `https://github.com/Raudbjorn/impeccable/releases/download/engine-v${VERSION}/impeccable-linux-x64`;
+    assert.deepEqual(urls.sort(), [asset, `${asset}.sha256`]);
+    for (const kind of ['binary', 'checksum']) {
+      missingKind = kind;
+      const result = await checkEngineRelease({ version: VERSION });
+      assert.equal(result.ok, false);
+      assert.deepEqual(result.missing.map(asset => asset.kind), [kind]);
+    }
+    await assert.rejects(fetchEngine('linux-arm64', { version: VERSION }), /unsupported target linux-arm64/);
   });
 
   it('every target has a template whose bin points at bin/<binary> and whose name matches', () => {
@@ -37,14 +61,14 @@ describe('platform package templates', () => {
   });
 
   it('refuses a template whose bin does not match the binary name', () => {
-    const bad = { ...template('linux-arm64'), bin: { 'impeccable-linux-arm64': 'bin/impeccable.exe' } };
-    assert.throws(() => stampTemplate(bad, 'linux-arm64', VERSION), /must map its bin to bin\/impeccable /);
+    const bad = { ...template('linux-x64'), bin: { 'impeccable-linux-x64': 'bin/impeccable.exe' } };
+    assert.throws(() => stampTemplate(bad, 'linux-x64', VERSION), /must map its bin to bin\/impeccable /);
   });
 
   it('stages package.json, an executable binary, and the LICENSE', () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'ipp-stage-'));
     try {
-      for (const target of ['linux-x64', 'linux-arm64']) {
+      for (const target of ENGINE_TARGETS) {
         const dir = stagePackage({
           target,
           version: VERSION,
@@ -112,6 +136,6 @@ describe('release asset verification and registry probe', () => {
   it('reports a published version as published and a 404 as not', async () => {
     routes.set(`/${packageName('linux-x64').replace('/', '%2F')}/${VERSION}`, serve('{"version":"9.9.9"}'));
     assert.equal(await isPublished('linux-x64', VERSION, base), true);
-    assert.equal(await isPublished('linux-arm64', VERSION, base), false);
+    assert.equal(await isPublished('linux-x64', '0.0.0-missing', base), false);
   });
 });

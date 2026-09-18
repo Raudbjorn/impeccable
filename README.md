@@ -2,6 +2,8 @@
 
 Design guidance for AI coding agents. 1 skill, 25 commands, live browser iteration, and 62 deterministic detector rules for AI-generated frontend design.
 
+This fork's engine supports Linux x64 (x86_64) only.
+
 > **Quick start:** From your project root, run `npx impeccable install`, then run `/impeccable init` inside your AI coding tool. Full docs: [impeccable.style](https://impeccable.style).
 
 ## Why Impeccable?

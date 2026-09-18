@@ -2,7 +2,7 @@
 
 Every command the skill text runs is `{{scripts_path}}/impeccable <verb>`. The
 launcher next to the skill (`skill/scripts/impeccable`)
-finds or downloads one static binary per platform and execs it. That binary
+finds or downloads the Linux x64 binary and execs it. That binary
 is built from this repo's Cargo workspace. Core commands require no Node runtime. The fork's optional design-context import/export, evidence scoring, visual-cue, and image-gen helpers remain separate Node scripts under `skill/scripts/`; their references explicitly invoke `node`.
 
 This page is the map for anyone building or changing the runtime. The
@@ -240,17 +240,26 @@ Two release kinds touch the runtime, in this order:
 
 1. **Engine** (`engine-v<ENGINE_VERSION>`): `bun run release:engine` verifies
    the version, the npm platform-package pins and a clean tree, then tags and
-   pushes; `.github/workflows/release-engine.yml` builds the two Linux targets and
-   publishes the binaries with `.sha256` sidecars. The launcher, the npm shim
+   pushes. This fork has no release workflow; build and upload the Linux x64
+   binary with its `.sha256` sidecar manually. The launcher, the npm shim
    and `impeccable install` download from
    `github.com/Raudbjorn/impeccable/releases/download/engine-v<X>/`.
-2. **npm platform packages**, then the **skill** and **CLI** releases, which
-   `scripts/check-engine-release.mjs` gates on the engine release.
+2. **Skill** and **CLI** releases, which `scripts/check-engine-release.mjs`
+   gates on the fork's binary and checksum. npm platform packages are optional;
+   the shim downloads from GitHub when no matching fork package is installed.
+
+Use a fork-specific engine version such as `0.1.5-omp.1` in `ENGINE_VERSION`,
+the Cargo workspace version, and npm's optional dependency pin. This keeps the
+versioned cache separate from upstream. Regenerate the lockfiles and run
+`bun run build:release`; commit the generated provider output with the source
+changes because this fork has no sync workflow. Upload the binary and checksum,
+run `bun run check:engine-release`, and verify both launchers with empty caches
+before merging the new pins.
 
 The extension ships its own vendored WASM core and never execs the engine
 binary, so `bun run release:ext` is exempt from that gate. It does need
 `bun run build:extension` (and therefore a Rust toolchain and `wasm-pack`)
 before the zip is attached.
 
-CI runs the workspace build and tests (`rust`) and replays the
-oracle against a release build from the checkout under test.
+Before publishing, run the workspace tests and replay the oracle against a
+release build from the checkout under test.

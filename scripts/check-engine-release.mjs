@@ -4,20 +4,18 @@
  *
  * The launcher (skill/scripts/impeccable), the npm shim (cli/bin/cli.js), and
  * `impeccable install` all dead-end unless the engine release for the pinned
- * ENGINE_VERSION exists FIRST: the five platform binaries in the engine-v<version> GitHub Release
- * release channel AND the five @impeccable/cli-<os>-<arch> npm platform packages.
- * Nothing else mechanically stops a maintainer from tagging the skill release (or
- * merging and letting the sync workflow rewrite provider dirs) before those assets
- * are published, which breaks every install path.
+ * ENGINE_VERSION exists FIRST: the supported platform binaries and checksum
+ * sidecars in this fork's engine-v<version> GitHub Release.
+ * Tagging a skill release or merging new pins before those assets are
+ * published breaks installs that need to download the engine.
  *
  * This script verifies, for the pinned engine version, that:
- *   1. each of the five release binaries impeccable-<os>-<arch>[.exe] is fetchable
+ *   1. each supported release binary impeccable-<os>-<arch> is fetchable
  *   2. each binary's .sha256 sidecar is fetchable
- *   3. each npm platform package @impeccable/cli-<os>-<arch>@<version> is published
  *
  * Exits 0 when everything is present, non-zero (naming exactly what is missing)
- * otherwise. release.mjs runs it before an engine-dependent release; CI runs it
- * as a soft warning until the first engine release exists.
+ * otherwise. release.mjs runs it before an engine-dependent release. npm
+ * platform packages are optional: the shim can download from GitHub.
  *
  *   node scripts/check-engine-release.mjs            # check the pinned ENGINE_VERSION
  *   node scripts/check-engine-release.mjs --json     # machine-readable report
@@ -32,8 +30,6 @@ import {
   assetUrl,
 } from './fetch-engine.mjs';
 
-const NPM_REGISTRY = 'https://registry.npmjs.org';
-
 // A ranged GET is the most portable existence probe: GitHub release downloads
 // answer HEAD inconsistently across their 302 to object storage, but a
 // `Range: bytes=0-0` GET follows the redirect and returns 200/206 for a real
@@ -43,22 +39,6 @@ async function urlExists(url) {
     const res = await fetch(url, { redirect: 'follow', headers: { Range: 'bytes=0-0' } });
     return res.ok || res.status === 206;
   } catch (err) {
-    return false;
-  }
-}
-
-function npmPackageUrl(target, version) {
-  // Scoped name: the slash is percent-encoded for the registry path.
-  const name = `@impeccable/cli-${target}`;
-  return `${NPM_REGISTRY}/${name.replace('/', '%2f')}/${version}`;
-}
-
-async function npmVersionExists(target, version) {
-  const url = npmPackageUrl(target, version);
-  try {
-    const res = await fetch(url, { redirect: 'follow' });
-    return res.ok;
-  } catch {
     return false;
   }
 }
@@ -77,22 +57,18 @@ export async function checkEngineRelease({
     ENGINE_TARGETS.map(async (target) => {
       const binUrl = assetUrl(version, target, base);
       const shaUrl = `${binUrl}.sha256`;
-      const npmUrl = npmPackageUrl(target, version);
-
-      const [binOk, shaOk, npmOk] = await Promise.all([
+      const [binOk, shaOk] = await Promise.all([
         urlExists(binUrl),
         urlExists(shaUrl),
-        npmVersionExists(target, version),
       ]);
 
       if (!binOk) missing.push({ kind: 'binary', target, what: `impeccable-${target} binary`, url: binUrl });
       if (!shaOk) missing.push({ kind: 'checksum', target, what: `impeccable-${target} .sha256`, url: shaUrl });
-      if (!npmOk) missing.push({ kind: 'npm', target, what: `@impeccable/cli-${target}@${version}`, url: npmUrl });
     })
   );
 
-  // Stable ordering for a readable report: by target, then binary/checksum/npm.
-  const order = { binary: 0, checksum: 1, npm: 2 };
+  // Stable ordering for a readable report: by target, then binary/checksum.
+  const order = { binary: 0, checksum: 1 };
   missing.sort((a, b) => ENGINE_TARGETS.indexOf(a.target) - ENGINE_TARGETS.indexOf(b.target) || order[a.kind] - order[b.kind]);
 
   return { ok: missing.length === 0, version, base, missing };
@@ -101,7 +77,7 @@ export async function checkEngineRelease({
 function report(result) {
   const { ok, version, base, missing } = result;
   if (ok) {
-    console.log(`✓ engine v${version} release is complete: all ${ENGINE_TARGETS.length} binaries + .sha256 + npm platform packages are published.`);
+    console.log(`✓ engine v${version} release is complete: binaries + .sha256 for ${ENGINE_TARGETS.join(', ')} are published.`);
     console.log(`  release base: ${base}`);
     return;
   }
@@ -111,10 +87,8 @@ function report(result) {
     console.error(`      ${m.url}`);
   }
   console.error('');
-  console.error(`Publish engine v${version} (tag engine-v${version}, bun run release:engine) AND the`);
-  console.error('five @impeccable/cli-<os>-<arch> npm platform packages BEFORE releasing the');
-  console.error('skill or merging rust-swap. Ordering: engine release → platform packages →');
-  console.error('skill release/merge. See CLAUDE.md "Releases" and docs REVIEW-TRIAGE.md D4.');
+  console.error(`Publish engine-v${version} with its binaries and .sha256 sidecars before`);
+  console.error('releasing the skill/CLI or merging new engine pins. See docs/ENGINE.md.');
   console.error(`  release base: ${base}`);
 }
 

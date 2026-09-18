@@ -13,7 +13,7 @@ import path from 'node:path';
 const require = createRequire(import.meta.url);
 const pkg = require('../../package.json');
 const OS = process.platform;
-const ARCH = { arm64: 'arm64', x64: 'x64' }[process.arch] || process.arch;
+const ARCH = process.arch;
 const TARGET = `${OS}-${ARCH}`;
 const EXE = 'impeccable';
 const PLATFORM_PKG = `@impeccable/cli-${TARGET}`;
@@ -26,7 +26,12 @@ const URL = `${BASE}/engine-v${VERSION}/impeccable-${TARGET}`;
 
 function exists(p) { try { return !!p && fs.statSync(p).isFile(); } catch { return false; } }
 function fromPackage() {
-  try { return path.join(path.dirname(require.resolve(`${PLATFORM_PKG}/package.json`)), 'bin', EXE); } catch { return null; }
+  try {
+    const manifest = require.resolve(`${PLATFORM_PKG}/package.json`);
+    const installed = require(manifest);
+    if (installed.version !== VERSION || installed.repository?.url !== pkg.repository.url) return null;
+    return path.join(path.dirname(manifest), 'bin', EXE);
+  } catch { return null; }
 }
 async function download() {
   if (!VERSION) return null;
@@ -76,8 +81,8 @@ if (argv[0] === '--version' || argv[0] === '-v') {
   process.exit(0);
 }
 
-if (OS !== 'linux' || !['x64', 'arm64'].includes(ARCH)) {
-  process.stderr.write(`impeccable: unsupported platform ${TARGET}; supported: linux-x64, linux-arm64.\n`);
+if (OS !== 'linux' || ARCH !== 'x64') {
+  process.stderr.write(`impeccable: unsupported platform ${TARGET}; supported: linux-x64.\n`);
   process.exit(127);
 }
 

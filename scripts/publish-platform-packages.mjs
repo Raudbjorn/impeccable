@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Publish the five @impeccable/cli-<os>-<arch> npm platform packages for the
+ * Publish the supported @impeccable/cli-<os>-<arch> npm platform packages for the
  * pinned ENGINE_VERSION from the engine-v<ENGINE_VERSION> GitHub release.
  *
  * Step 3 of the engine cutover, as one command:
@@ -92,7 +92,7 @@ export async function fetchVerifiedBinary(target, version, base) {
   try {
     binary = await download(url);
   } catch (err) {
-    throw new Error(`release asset not available: ${err.message}. Publish engine-v${version} first (bun run release:engine) and wait for release-engine.yml to finish.`);
+    throw new Error(`release asset not available: ${err.message}. Publish the engine-v${version} binary and checksum on this fork first.`);
   }
   let sidecar;
   try {

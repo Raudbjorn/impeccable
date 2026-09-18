@@ -25,16 +25,14 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const DEFAULT_DOWNLOAD_BASE = 'https://github.com/Raudbjorn/impeccable/releases/download';
-export const ENGINE_TARGETS = ['linux-x64', 'linux-arm64'];
+export const ENGINE_TARGETS = ['linux-x64'];
 
 export function readEngineVersion(root = ROOT) {
   return fs.readFileSync(path.join(root, 'ENGINE_VERSION'), 'utf-8').trim();
 }
 
 export function currentTarget() {
-  const platform = os.platform();
-  const arch = { arm64: 'arm64', x64: 'x64' }[os.arch()] || 'unknown';
-  return `${platform}-${arch}`;
+  return `${os.platform()}-${os.arch()}`;
 }
 
 export function binaryName(target) {
