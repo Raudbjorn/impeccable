@@ -95,4 +95,4 @@ This CLI is part of [Impeccable](https://impeccable.style), a cross-provider des
 
 [Apache 2.0](https://github.com/Raudbjorn/impeccable/blob/main/LICENSE)
 
-Supported engine host: Linux x64 (x86_64) only.
+Supported engine host: Linux x64 (x86_64) only. The `0.1.5-omp.1` binary requires glibc 2.39 or newer.

@@ -142,7 +142,7 @@ if (cfg.engineGated && process.env.IMPECCABLE_SKIP_ENGINE_CHECK !== '1') {
   step(`Verifying engine v${engineVersion} release assets are published (D4 release-order guard)`);
   const result = await checkEngineRelease({ version: engineVersion });
   if (!result.ok) {
-    console.error('✗ Engine release is incomplete. Missing assets:');
+    console.error('✗ Engine release is incomplete. Asset verification failed:');
     for (const m of result.missing) console.error(`    · ${m.what}\n        ${m.url}`);
     fail(
       `Refusing to release ${cfg.label} ${version}: engine v${engineVersion} is not fully published.\n` +
@@ -150,7 +150,7 @@ if (cfg.engineGated && process.env.IMPECCABLE_SKIP_ENGINE_CHECK !== '1') {
       '  Ordering: engine release → skill/CLI release. See docs/ENGINE.md.'
     );
   }
-  ok(`engine v${engineVersion} release assets all present`);
+  ok(`engine v${engineVersion} release assets verified`);
 } else if (cfg.engineGated) {
   step('Skipping engine release-order guard (IMPECCABLE_SKIP_ENGINE_CHECK=1)');
 }

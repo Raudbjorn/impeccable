@@ -11,9 +11,9 @@
  *
  * This script verifies, for the pinned engine version, that:
  *   1. each supported release binary impeccable-<os>-<arch> is fetchable
- *   2. each binary's .sha256 sidecar is fetchable
+ *   2. each binary's .sha256 sidecar is valid and matches the binary
  *
- * Exits 0 when everything is present, non-zero (naming exactly what is missing)
+ * Exits 0 when everything verifies, non-zero (naming what is missing or invalid)
  * otherwise. release.mjs runs it before an engine-dependent release. npm
  * platform packages are optional: the shim can download from GitHub.
  *
@@ -28,24 +28,12 @@ import {
   DEFAULT_DOWNLOAD_BASE,
   readEngineVersion,
   assetUrl,
+  fetchVerifiedBinary,
 } from './fetch-engine.mjs';
-
-// A ranged GET is the most portable existence probe: GitHub release downloads
-// answer HEAD inconsistently across their 302 to object storage, but a
-// `Range: bytes=0-0` GET follows the redirect and returns 200/206 for a real
-// asset and 404 for a missing one without pulling the whole binary.
-async function urlExists(url) {
-  try {
-    const res = await fetch(url, { redirect: 'follow', headers: { Range: 'bytes=0-0' } });
-    return res.ok || res.status === 206;
-  } catch (err) {
-    return false;
-  }
-}
 
 /**
  * Check every asset for one engine version. Returns { ok, version, base, missing }
- * where missing is a list of { kind, target, what, url } entries.
+ * where missing lists absent or invalid assets as { kind, target, what, url }.
  */
 export async function checkEngineRelease({
   version = readEngineVersion(),
@@ -55,21 +43,15 @@ export async function checkEngineRelease({
 
   await Promise.all(
     ENGINE_TARGETS.map(async (target) => {
-      const binUrl = assetUrl(version, target, base);
-      const shaUrl = `${binUrl}.sha256`;
-      const [binOk, shaOk] = await Promise.all([
-        urlExists(binUrl),
-        urlExists(shaUrl),
-      ]);
-
-      if (!binOk) missing.push({ kind: 'binary', target, what: `impeccable-${target} binary`, url: binUrl });
-      if (!shaOk) missing.push({ kind: 'checksum', target, what: `impeccable-${target} .sha256`, url: shaUrl });
+      try {
+        await fetchVerifiedBinary(target, version, base);
+      } catch (err) {
+        missing.push({ kind: 'verification', target, what: err.message, url: assetUrl(version, target, base) });
+      }
     })
   );
 
-  // Stable ordering for a readable report: by target, then binary/checksum.
-  const order = { binary: 0, checksum: 1 };
-  missing.sort((a, b) => ENGINE_TARGETS.indexOf(a.target) - ENGINE_TARGETS.indexOf(b.target) || order[a.kind] - order[b.kind]);
+  missing.sort((a, b) => ENGINE_TARGETS.indexOf(a.target) - ENGINE_TARGETS.indexOf(b.target));
 
   return { ok: missing.length === 0, version, base, missing };
 }
@@ -77,11 +59,11 @@ export async function checkEngineRelease({
 function report(result) {
   const { ok, version, base, missing } = result;
   if (ok) {
-    console.log(`✓ engine v${version} release is complete: binaries + .sha256 for ${ENGINE_TARGETS.join(', ')} are published.`);
+    console.log(`✓ engine v${version} release is complete: binaries + .sha256 for ${ENGINE_TARGETS.join(', ')} are verified.`);
     console.log(`  release base: ${base}`);
     return;
   }
-  console.error(`✗ engine v${version} release is INCOMPLETE — ${missing.length} asset(s) missing:`);
+  console.error(`✗ engine v${version} release is INCOMPLETE — ${missing.length} target(s) failed verification:`);
   for (const m of missing) {
     console.error(`  · ${m.what}`);
     console.error(`      ${m.url}`);

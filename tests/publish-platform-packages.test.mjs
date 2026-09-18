@@ -8,11 +8,10 @@ import { createHash } from 'node:crypto';
 import {
   stampTemplate,
   stagePackage,
-  fetchVerifiedBinary,
   isPublished,
   packageName,
 } from '../scripts/publish-platform-packages.mjs';
-import { ENGINE_TARGETS, binaryName, fetchEngine } from '../scripts/fetch-engine.mjs';
+import { ENGINE_TARGETS, binaryName, fetchEngine, fetchVerifiedBinary } from '../scripts/fetch-engine.mjs';
 import { checkEngineRelease } from '../scripts/check-engine-release.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
@@ -32,11 +31,13 @@ describe('platform package templates', () => {
 
   it('requires the fork x64 binary and checksum without probing npm', async (t) => {
     const urls = [];
+    const binary = 'fork engine bytes';
+    let sidecar = createHash('sha256').update(binary).digest('hex');
     let missingKind;
     t.mock.method(globalThis, 'fetch', async (url) => {
       urls.push(url);
       const kind = url.endsWith('.sha256') ? 'checksum' : 'binary';
-      return new Response('', { status: kind === missingKind ? 404 : 200 });
+      return new Response(kind === 'checksum' ? sidecar : binary, { status: kind === missingKind ? 404 : 200 });
     });
     assert.equal((await checkEngineRelease({ version: VERSION })).ok, true);
     const asset = `https://github.com/Raudbjorn/impeccable/releases/download/engine-v${VERSION}/impeccable-linux-x64`;
@@ -45,7 +46,14 @@ describe('platform package templates', () => {
       missingKind = kind;
       const result = await checkEngineRelease({ version: VERSION });
       assert.equal(result.ok, false);
-      assert.deepEqual(result.missing.map(asset => asset.kind), [kind]);
+      assert.ok(result.missing.length > 0);
+    }
+    missingKind = undefined;
+    for (const invalid of ['', 'not a checksum', '0'.repeat(64)]) {
+      sidecar = invalid;
+      const result = await checkEngineRelease({ version: VERSION });
+      assert.equal(result.ok, false, `must reject invalid checksum: ${invalid}`);
+      assert.match(result.missing[0].what, /malformed|checksum mismatch/);
     }
     await assert.rejects(fetchEngine('linux-arm64', { version: VERSION }), /unsupported target linux-arm64/);
   });
@@ -126,9 +134,9 @@ describe('release asset verification and registry probe', () => {
   it('refuses when the sidecar is missing, empty, or mismatched', async () => {
     routes.set(asset, serve(binary));
     routes.delete(`${asset}.sha256`);
-    await assert.rejects(fetchVerifiedBinary('linux-x64', VERSION, base), /sidecar is missing.*refusing to publish/);
+    await assert.rejects(fetchVerifiedBinary('linux-x64', VERSION, base), /sidecar is missing.*refusing/);
     routes.set(`${asset}.sha256`, serve(''));
-    await assert.rejects(fetchVerifiedBinary('linux-x64', VERSION, base), /empty or malformed.*refusing to publish/);
+    await assert.rejects(fetchVerifiedBinary('linux-x64', VERSION, base), /empty or malformed.*refusing/);
     routes.set(`${asset}.sha256`, serve('0'.repeat(64)));
     await assert.rejects(fetchVerifiedBinary('linux-x64', VERSION, base), /checksum mismatch/);
   });

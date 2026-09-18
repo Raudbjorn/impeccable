@@ -304,7 +304,7 @@ The skill launcher, npm shim (`cli/bin/cli.js`), and `impeccable install` resolv
 2. `bun run release:engine` tags and pushes the tested commit. Manually publish `impeccable-linux-x64` and `impeccable-linux-x64.sha256` on this fork's release. No workflow builds or uploads them.
 3. Run `bun run check:engine-release` and verify both launchers with empty caches before merging the pins or publishing the skill/CLI. npm platform packages are optional; they are not a release prerequisite.
 
-`scripts/check-engine-release.mjs` requires the fork's pinned binary and checksum (ranged GET; honors `IMPECCABLE_DOWNLOAD_BASE`). `scripts/release.mjs` runs it as a hard gate before **skill** and **CLI** releases; the **extension** is exempt because it ships WASM. `IMPECCABLE_SKIP_ENGINE_CHECK=1` is only for existing assets whose release probe is unreachable. Run the gate locally; this fork has no CI or generated-output sync workflow.
+`scripts/check-engine-release.mjs` downloads the fork's pinned binary and verifies its SHA-256 against the required sidecar (honors `IMPECCABLE_DOWNLOAD_BASE`). `scripts/release.mjs` runs it as a hard gate before **skill** and **CLI** releases; the **extension** is exempt because it ships WASM. `IMPECCABLE_SKIP_ENGINE_CHECK=1` is only for existing assets whose release probe is unreachable. Run the gate locally; this fork has no CI or generated-output sync workflow.
 
 ## Adding New Commands
 
