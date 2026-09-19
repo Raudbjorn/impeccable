@@ -37,10 +37,17 @@ async function exercise(t, scenario) {
   const tools = path.join(root, 'tools');
   fs.mkdirSync(tools);
   if (scenario === 'stale-candidates') {
-    for (const bin of [path.join(scripts, 'bin/linux-x64/impeccable'), path.join(home, '.impeccable/bin/impeccable'), path.join(tools, 'impeccable')]) {
+    // Probed candidates: reached by name, so an engine from another
+    // distribution can be sitting there and must be declined.
+    for (const bin of [path.join(home, '.impeccable/bin/impeccable'), path.join(tools, 'impeccable')]) {
       fs.mkdirSync(path.dirname(bin), { recursive: true });
       fs.writeFileSync(bin, '#!/bin/sh\necho "impeccable-engine 0.1.5"\n', { mode: 0o755 });
     }
+  }
+  if (scenario === 'stale-sibling') {
+    const bin = path.join(scripts, 'bin/linux-x64/impeccable');
+    fs.mkdirSync(path.dirname(bin), { recursive: true });
+    fs.writeFileSync(bin, '#!/bin/sh\necho "sibling-engine"\n', { mode: 0o755 });
   }
   if (scenario === 'cache-write-failure') {
     // The POSIX staging name contains the launcher's PID, so intercept the
@@ -105,7 +112,7 @@ async function exercise(t, scenario) {
     assert.equal(requests.length, requestCount, 'subsequent runs use the cached engine without network');
   }
   assert.equal(result.signal, null, JSON.stringify(result));
-  const cacheFailure = scenario.startsWith('cache-');
+  const cacheFailure = scenario.startsWith('cache-') || scenario === 'stale-sibling';
   assert.equal(requests.filter(url => !url.endsWith('.sha256')).length, cacheFailure ? 0 : 1,
     'cache failures do not attempt a download; other scenarios download once');
   return { ...result, files: fs.existsSync(cacheDir) ? fs.readdirSync(cacheDir) : [], requests, cacheDir };
@@ -140,12 +147,24 @@ test('launcher downloads and runs a verified executable', async t => {
   assert.equal(result.requests.length, 2);
 });
 
-test('launcher ignores stale sibling, home, and PATH engines', async t => {
+test('launcher ignores stale home and PATH engines', async t => {
   const result = await exercise(t, 'stale-candidates');
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /verified-engine/);
   assert.deepEqual(result.files, ['impeccable']);
   assert.equal(result.requests.length, 2);
+});
+
+test('launcher execs the sibling binary without probing it', async t => {
+  // The sibling is the fast path: the design hook runs the launcher on every
+  // edit, and a probe would double the process spawns per edit. What keeps a
+  // wrong-version sibling from existing is `bun run build`, which refuses when
+  // Cargo.toml and ENGINE_VERSION disagree, plus the SHA-256 verification in
+  // install_engine_binaries. Probing here would buy nothing and cost that.
+  const result = await exercise(t, 'stale-sibling');
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /sibling-engine/);
+  assert.doesNotMatch(result.stdout, /verified-engine/);
 });
 
 for (const scenario of ['removed', 'emptied', 'empty-download', 'no-sidecar', 'empty-sidecar', 'mismatch', 'hash-failure', 'removed-during-hash', 'removed-before-move', 'removed-after-move', 'emptied-after-move', 'move-failure']) {

@@ -14,6 +14,10 @@ import {
 import { ENGINE_TARGETS, binaryName, fetchEngine, fetchVerifiedBinary } from '../scripts/fetch-engine.mjs';
 import { checkEngineRelease } from '../scripts/check-engine-release.mjs';
 
+// Pinned, not inherited: checkEngineRelease defaults to $IMPECCABLE_DOWNLOAD_BASE,
+// so a maintainer testing against a local release mirror would otherwise fail here.
+const BASE = 'https://github.com/Raudbjorn/impeccable/releases/download';
+
 const ROOT = path.resolve(import.meta.dirname, '..');
 const VERSION = '9.9.9';
 
@@ -39,19 +43,19 @@ describe('platform package templates', () => {
       const kind = url.endsWith('.sha256') ? 'checksum' : 'binary';
       return new Response(kind === 'checksum' ? sidecar : binary, { status: kind === missingKind ? 404 : 200 });
     });
-    assert.equal((await checkEngineRelease({ version: VERSION })).ok, true);
-    const asset = `https://github.com/Raudbjorn/impeccable/releases/download/engine-v${VERSION}/impeccable-linux-x64`;
+    assert.equal((await checkEngineRelease({ version: VERSION, base: BASE })).ok, true);
+    const asset = `${BASE}/engine-v${VERSION}/impeccable-linux-x64`;
     assert.deepEqual(urls.sort(), [asset, `${asset}.sha256`]);
     for (const kind of ['binary', 'checksum']) {
       missingKind = kind;
-      const result = await checkEngineRelease({ version: VERSION });
+      const result = await checkEngineRelease({ version: VERSION, base: BASE });
       assert.equal(result.ok, false);
       assert.ok(result.missing.length > 0);
     }
     missingKind = undefined;
     for (const invalid of ['', 'not a checksum', '0'.repeat(64)]) {
       sidecar = invalid;
-      const result = await checkEngineRelease({ version: VERSION });
+      const result = await checkEngineRelease({ version: VERSION, base: BASE });
       assert.equal(result.ok, false, `must reject invalid checksum: ${invalid}`);
       assert.match(result.missing[0].what, /malformed|checksum mismatch/);
     }

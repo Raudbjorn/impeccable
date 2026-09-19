@@ -3,9 +3,14 @@
 #   <this dir>/bin/<os>-<arch>/impeccable
 # Order: $IMPECCABLE_BIN, the sibling binary, ~/.impeccable/bin/impeccable,
 # the version-pinned cache, then `impeccable` on PATH. Never needs Node.
-# Sibling, unversioned home, and PATH binaries must answer engine-probe with
-# the pinned fork version. IMPECCABLE_BIN is an explicit override; the
-# version-pinned cache is trusted so hooks stay fast.
+# The unversioned home binary and the PATH candidate are validated with the
+# engine-probe handshake first: the retired 3.x npm CLI also installed a bin
+# named `impeccable`, and exec'ing it would fail every verb with
+# "Unknown command". Trusted candidates (IMPECCABLE_BIN, the sibling binary,
+# the version-pinned cache) are exec'd without a probe: hooks run them on
+# every edit and must stay fast. The sibling is trusted because nothing can
+# stage one at the wrong version: `bun run build` refuses to run when the
+# Cargo workspace version and ENGINE_VERSION disagree.
 set -eu
 
 # True when the candidate answers the engine handshake (prints
@@ -21,8 +26,17 @@ probe_ok() {
 probing=${IMPECCABLE_LAUNCHER_PROBE:-}
 
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# Every version-dependent path below (the probe comparison, the cache dir, the
+# download URL) degrades into nonsense on an empty version: a `bin//impeccable`
+# cache path and an `engine-v` tag that cannot exist. A VERSION that is missing
+# or blank means the install is incomplete, so say that instead.
 version=""
 [ -f "$dir/VERSION" ] && version=$(tr -d '[:space:]' < "$dir/VERSION")
+if [ -z "$version" ]; then
+  echo "impeccable: $dir/VERSION is missing or empty, so the engine version this skill pins is unknown." >&2
+  echo "Reinstall the skill, or set IMPECCABLE_BIN to a preinstalled engine binary." >&2
+  exit 1
+fi
 
 # What the binary needs to know about its home: the skill directory (for
 # reference/*.md and command-metadata.json) and how to name itself in the
@@ -59,7 +73,7 @@ if [ -f "$bin" ] && [ ! -x "$bin" ]; then
   # Lost the executable bit in transit (zip extraction, some copiers).
   chmod +x "$bin" 2>/dev/null || true
 fi
-if [ -x "$bin" ] && probe_ok "$bin"; then
+if [ -x "$bin" ]; then
   exec "$bin" "$@"
 fi
 home_bin="${HOME:-/nonexistent}/.impeccable/bin/impeccable"
@@ -69,7 +83,7 @@ fi
 # Version-pinned user cache, filled by the download below or by `impeccable update`.
 cache_root="${IMPECCABLE_HOME:-${HOME:-/nonexistent}/.impeccable}"
 cached="$cache_root/bin/$version/impeccable"
-if [ -n "$version" ] && [ -x "$cached" ]; then
+if [ -x "$cached" ]; then
   exec "$cached" "$@"
 fi
 if [ -z "$probing" ] && command -v impeccable >/dev/null 2>&1 && probe_ok impeccable; then

@@ -19,10 +19,22 @@ fn sh_launcher_asset_naming_matches_engine() {
     assert!(sh.contains(&format!("IMPECCABLE_DOWNLOAD_BASE:-{DEFAULT_DOWNLOAD_BASE}")));
     assert!(sh.contains(r#"asset="impeccable-$os-$arch""#));
     assert!(sh.contains(r#"url="$base/engine-v$version/$asset""#));
-    // Implicit sibling, PATH, and unversioned home candidates are probed.
+    // PATH and unversioned home candidates are probed; the probe pins the
+    // exact version, because an engine answering a different one is a
+    // different distribution's build.
     assert!(sh.contains("engine-probe"));
     assert!(sh.contains(r#"probe_ok "$home_bin""#));
     assert!(sh.contains("probe_ok impeccable"));
+    assert!(sh.contains(r#"[ "$probe_output" = "impeccable-engine $version" ]"#));
+    // The sibling is exec'd without a probe: hooks run it on every edit. What
+    // keeps a wrong-version sibling from being staged is the build gate over
+    // Cargo.toml and ENGINE_VERSION, not a check here.
+    assert!(!sh.contains(r#"probe_ok "$bin""#));
+    // Both recursive candidates skip their own probes so probing cannot loop.
+    assert!(sh.contains(r#"[ -z "$probing" ] && [ -x "$home_bin" ]"#));
+    // An unknown pin makes every version-dependent path degenerate, so the
+    // launcher refuses rather than composing `engine-v` and `bin//impeccable`.
+    assert!(sh.contains(r#"if [ -z "$version" ]; then"#));
     // The final error must not recommend the npm package (it still serves 3.x).
     assert!(!sh.contains("npm i -g"));
     assert!(!sh.contains("npm install"));
