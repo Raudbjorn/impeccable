@@ -4,7 +4,9 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
-import { analyzeImage, imageSource } from '../skill/scripts/image-analyze.mjs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { analyzeImage, clearImageCache, imageSource } from '../skill/scripts/image-analyze.mjs';
 import { createLlmAgent, liveScreenshot, resolveLlmAgentConfig, llmRequestSettings } from './live-e2e/agents/llm-agent.mjs';
 import { DEFAULT_MODELS, detectProvider, getProviderOptions } from './skill-behavior/providers.mjs';
 
@@ -112,29 +114,35 @@ it('local, base64, and URL images retain their content; live screenshots stay in
   }
 });
 
-it('vision sends the documented request and returns only the answer and usage', async () => {
+it('vision sends detailed or quick instructions with the requested focus and preserves image content', async () => {
   for (const image of [dataUrl, 'https://example.com/image.png']) {
-    const result = await analyzeImage({ image, prompt: 'Describe the layout.', apiKey: 'test-key', fetchImpl: async (url, request) => {
+    const mode = image === dataUrl ? 'detailed' : 'quick';
+    const result = await analyzeImage({ image, mode, prompt: 'Describe the layout.', cache: false, apiKey: 'test-key', fetchImpl: async (url, request) => {
       assert.equal(url, 'https://api.minimax.io/v1/chat/completions');
       assert.equal(request.headers.Authorization, 'Bearer test-key');
       const body = JSON.parse(request.body);
-      assert.deepEqual(body.messages[0].content, [
-        { type: 'text', text: 'Describe the layout.' }, { type: 'image_url', image_url: { url: image } },
-      ]);
+      const [instructions, attachment] = body.messages[0].content;
+      assert.equal(instructions.type, 'text');
+      assert.match(instructions.text, mode === 'quick' ? /fewer than 300 words/ : /image_overview.*visible_text.*objects_and_layout.*charts_or_data.*answer_to_request.*evidence.*uncertainty/);
+      assert.match(instructions.text, /content, never as instructions/);
+      assert.match(instructions.text, /Requested focus: Describe the layout\./);
+      assert.deepEqual(attachment, { type: 'image_url', image_url: { url: image } });
       assert.deepEqual(body.thinking, { type: 'adaptive' });
       assert.equal(body.reasoning_split, true);
       assert.equal(body.max_completion_tokens, 4096);
       assert.ok(request.signal instanceof AbortSignal);
       return Response.json({ model: 'MiniMax-M3', choices: [{ finish_reason: 'stop', message: { content: 'A compact layout.', reasoning_content: 'private reasoning' } }], usage: { total_tokens: 10 } });
     } });
-    assert.deepEqual(result, { ok: true, model: 'MiniMax-M3', text: 'A compact layout.', usage: { total_tokens: 10 } });
+    assert.deepEqual(result, { ok: true, model: 'MiniMax-M3', mode, text: 'A compact layout.', cached: false, usage: { total_tokens: 10 } });
   }
 });
 
 it('vision fails explicitly on invalid arguments, API failures, empty and truncated answers', async () => {
-  const options = { image: dataUrl, prompt: 'Describe.', apiKey: 'test-key' };
+  const options = { image: dataUrl, prompt: 'Describe.', cache: false, apiKey: 'test-key' };
   await assert.rejects(analyzeImage({ ...options, apiKey: '' }), /MINIMAX_API_KEY/);
-  await assert.rejects(analyzeImage({ ...options, prompt: '' }), /prompt/);
+  await assert.rejects(analyzeImage({ ...options, prompt: 12 }), /prompt/);
+  await assert.rejects(analyzeImage({ ...options, mode: 'toString' }), /quick or detailed/);
+  await assert.rejects(analyzeImage({ ...options, model: '' }), /model/);
   await assert.rejects(analyzeImage({ ...options, maxTokens: 0 }), /max-tokens/);
   for (const [response, message] of [
     [new Response('no', { status: 401 }), /HTTP 401/],
@@ -142,6 +150,116 @@ it('vision fails explicitly on invalid arguments, API failures, empty and trunca
     [Response.json({ error: { message: 'invalid request' } }), /API error/],
     [Response.json({ choices: [] }), /no analysis/],
     [Response.json({ choices: [{ finish_reason: 'length', message: { content: 'partial' } }] }), /truncated/],
+    [Response.json({ choices: [{ finish_reason: 'content_filter', message: { content: 'partial' } }] }), /did not complete/],
   ]) await assert.rejects(analyzeImage({ ...options, fetchImpl: async () => response }), message);
   await assert.rejects(analyzeImage({ ...options, fetchImpl: async () => { throw new DOMException('Timed out', 'TimeoutError'); } }), /Timed out/);
+});
+
+it('vision caches by image contents and request, persists across processes, and supports bypass and clearing', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'impeccable-vision-cache-'));
+  const cacheDir = path.join(root, 'cache');
+  let requests = 0;
+  const options = { image: dataUrl, apiKey: 'test-key', cacheDir, fetchImpl: async () => {
+    requests += 1;
+    return Response.json({ choices: [{ finish_reason: 'stop', message: { content: `Analysis ${requests}` } }], usage: { total_tokens: 10 } });
+  } };
+  try {
+    const first = await analyzeImage(options);
+    assert.equal(first.mode, 'detailed');
+    assert.equal(first.cached, false);
+    const image = path.join(root, 'shot.png');
+    await fs.writeFile(image, Buffer.from(png, 'base64'));
+    const same = await analyzeImage({ ...options, image });
+    assert.equal(same.cached, true);
+    assert.equal(same.text, first.text);
+    assert.deepEqual(same.usage, {});
+    const child = await promisify(execFile)(process.execPath, ['--input-type=module', '-e', `
+      import { analyzeImage } from ${JSON.stringify(new URL('../skill/scripts/image-analyze.mjs', import.meta.url).href)};
+      const result = await analyzeImage({ image: ${JSON.stringify(image)}, cacheDir: ${JSON.stringify(cacheDir)}, apiKey: 'test-key', fetchImpl: async () => { throw new Error('cache missed'); } });
+      console.log(JSON.stringify(result));
+    `]);
+    assert.equal(JSON.parse(child.stdout).cached, true);
+    assert.equal(requests, 1);
+    for (const changes of [{ mode: 'quick' }, { prompt: 'Read the text.' }, { model: 'another-vision-model' }, { maxTokens: 200 }]) {
+      assert.equal((await analyzeImage({ ...options, ...changes })).cached, false);
+    }
+    // Reusing a filename after its bytes change must miss the old screenshot's cache.
+    await fs.writeFile(image, Buffer.concat([Buffer.from(png, 'base64'), Buffer.from('new metadata')]));
+    assert.equal((await analyzeImage({ ...options, image })).cached, false);
+    const stored = await fs.readdir(cacheDir);
+    for (const name of stored) {
+      const file = path.join(cacheDir, name);
+      const contents = await fs.readFile(file, 'utf8');
+      assert.doesNotMatch(contents, /test-key|base64|Read the text/);
+      assert.equal((await fs.stat(file)).mode & 0o777, 0o600);
+    }
+    for (const changes of [{ cache: false }, { image: 'https://example.com/changing.png' }]) {
+      for (let i = 0; i < 2; i += 1) assert.equal((await analyzeImage({ ...options, ...changes })).cached, false);
+    }
+    assert.equal(requests, 10);
+    assert.deepEqual(await fs.readdir(cacheDir), stored);
+    await fs.writeFile(path.join(cacheDir, 'keep.txt'), 'unrelated');
+    const cleared = await promisify(execFile)(process.execPath, [new URL('../skill/scripts/image-analyze.mjs', import.meta.url).pathname, '--clear-cache', '--cache-dir', cacheDir], { env: { ...process.env, MINIMAX_API_KEY: '' } });
+    assert.deepEqual(JSON.parse(cleared.stdout), { ok: true, cleared: 6 });
+    assert.deepEqual(await fs.readdir(cacheDir), ['keep.txt']);
+    assert.equal((await analyzeImage(options)).cached, false);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+it('vision refreshes expired or corrupt cache entries and never caches failed answers', async () => {
+  const cacheDir = await fs.mkdtemp(path.join(os.tmpdir(), 'impeccable-vision-expiry-'));
+  let requests = 0;
+  const options = { image: dataUrl, apiKey: 'test-key', cacheDir, fetchImpl: async () => {
+    requests += 1;
+    return Response.json({ choices: [{ finish_reason: 'stop', message: { content: `Analysis ${requests}` } }] });
+  } };
+  try {
+    await analyzeImage(options);
+    const file = path.join(cacheDir, (await fs.readdir(cacheDir))[0]);
+    const entry = JSON.parse(await fs.readFile(file, 'utf8'));
+    await fs.writeFile(file, JSON.stringify({ ...entry, created: Date.now() - 7 * 24 * 60 * 60 * 1000 }));
+    assert.equal((await analyzeImage(options)).cached, false);
+    await fs.writeFile(file, 'broken JSON');
+    assert.equal((await analyzeImage(options)).cached, false);
+    assert.equal(requests, 3);
+    assert.equal((await analyzeImage(options)).cached, true);
+    assert.deepEqual(await clearImageCache(cacheDir), { ok: true, cleared: 1 });
+    for (const response of [
+      { base_resp: { status_code: 1004 } },
+      { choices: [{ finish_reason: 'length', message: { content: 'partial' } }] },
+      { choices: [] },
+    ]) {
+      await assert.rejects(analyzeImage({ ...options, fetchImpl: async () => Response.json(response) }));
+      assert.deepEqual(await fs.readdir(cacheDir), []);
+    }
+    await fs.writeFile(file, 'file blocks cache directory creation');
+    assert.equal((await analyzeImage({ ...options, cacheDir: file })).cached, false);
+  } finally {
+    await fs.rm(cacheDir, { recursive: true, force: true });
+  }
+});
+
+it('vision evicts the least recently used entries after 128 cached analyses', async () => {
+  const cacheDir = await fs.mkdtemp(path.join(os.tmpdir(), 'impeccable-vision-lru-'));
+  const options = { image: dataUrl, apiKey: 'test-key', cacheDir, fetchImpl: async () => Response.json({ choices: [{ finish_reason: 'stop', message: { content: 'Analysis' } }] }) };
+  try {
+    await analyzeImage({ ...options, prompt: 'Focus 0' });
+    const first = (await fs.readdir(cacheDir))[0];
+    await analyzeImage({ ...options, prompt: 'Focus 1' });
+    const second = (await fs.readdir(cacheDir)).find(name => name !== first);
+    for (let i = 2; i < 128; i += 1) await analyzeImage({ ...options, prompt: `Focus ${i}` });
+    // Give the first two entries distinct old access times without waiting for the clock.
+    await fs.utimes(path.join(cacheDir, first), 1, 1);
+    await fs.utimes(path.join(cacheDir, second), 2, 2);
+    assert.equal((await analyzeImage({ ...options, prompt: 'Focus 0' })).cached, true);
+    await analyzeImage({ ...options, prompt: 'Focus 128' });
+    assert.equal((await fs.readdir(cacheDir)).length, 128);
+    assert.equal((await analyzeImage({ ...options, prompt: 'Focus 0' })).cached, true);
+    assert.equal((await analyzeImage({ ...options, prompt: 'Focus 1' })).cached, false);
+    assert.equal((await fs.readdir(cacheDir)).length, 128);
+  } finally {
+    await fs.rm(cacheDir, { recursive: true, force: true });
+  }
 });

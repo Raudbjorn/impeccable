@@ -9,7 +9,7 @@ export const OPT_IN_SUITES = [
   'new-work-e2e',
   'skill-behavior',
   'skill-workflow',
-  'live-svelte-adapter-deepseek',
+  'live-svelte-adapter-minimax',
 ];
 
 const COMMON_INFRA_PATTERNS = [
@@ -75,6 +75,7 @@ export const SUITES = {
           'tests/compose.test.mjs',
           'tests/visual-cues.test.mjs',
           'tests/image-analyze.test.mjs',
+          'tests/web-search.test.mjs',
           'tests/omp-hook-module.test.mjs',
           'tests/omp-plugin-layout.test.mjs',
           'tests/prompt-budget.test.mjs',
@@ -318,21 +319,21 @@ export const SUITES = {
       },
     ],
   },
-  'live-svelte-adapter-deepseek': {
-    description: 'Provider-backed Svelte adapter browser sweep (DeepSeek by default).',
+  'live-svelte-adapter-minimax': {
+    description: 'Provider-backed Svelte adapter browser sweep (MiniMax by default).',
     optIn: true,
     needsPlaywright: true,
     triggers: [
       ...COMMON_INFRA_PATTERNS,
       /^ENGINE_VERSION$/,
       /^tests\/framework-fixtures\/vite8-sveltekit-stateful\//,
-      /^tests\/live-svelte-adapter-deepseek\.test\.mjs$/,
+      /^tests\/live-svelte-adapter-minimax\.test\.mjs$/,
     ],
     commands: [
       {
         runner: 'node',
         timeoutMs: 1200000,
-        files: ['tests/live-svelte-adapter-deepseek.test.mjs'],
+        files: ['tests/live-svelte-adapter-minimax.test.mjs'],
       },
     ],
   },

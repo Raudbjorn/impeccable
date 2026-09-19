@@ -61,7 +61,7 @@
     "test:live-e2e-agent": "node scripts/run-tests.mjs live-e2e-agent",
     "test:skill-behavior": "node scripts/run-tests.mjs skill-behavior",
     "test:skill-workflow": "node scripts/run-tests.mjs skill-workflow",
-    "test:live-svelte-adapter-deepseek": "node scripts/run-tests.mjs live-svelte-adapter-deepseek",
+    "test:live-svelte-adapter-minimax": "node scripts/run-tests.mjs live-svelte-adapter-minimax",
     "smoke:hooks": "node scripts/smoke-provider-hooks.mjs",
     "audit": "bun audit --audit-level=moderate",
     "prepack": "cp README.md README.repo.md && cp README.npm.md README.md",

@@ -6,8 +6,17 @@ import { MockLanguageModelV3 } from 'ai/test';
 import { prepareWorkspace, cleanupWorkspace, makeTools, runTurn, fileLoaded, SKILL_BODY, ENGINE_BIN } from './skill-behavior/harness.mjs';
 import { assertPlanningFallbackWarning, assertNewWorkLifecycle, assertWorkflowAdvice, assertCommandComparison, missingReferences } from './skill-behavior/assertions.mjs';
 import { CASE_STUDY_ANSWER } from './skill-behavior/fixtures.mjs';
+import { detectProvider, PROVIDERS, getProviderOptions } from './skill-behavior/providers.mjs';
 import { sourceHash as hashSources } from './skill-workflow/source-hash.mjs';
 import { assertCompleted, assertFreshCaptures, assertNoChangeDocumentation, assertDocumentationArtifacts } from './skill-workflow/assertions.mjs';
+
+it('uses MiniMax for skill behavior and rejects the removed DeepSeek provider', () => {
+  assert.equal(detectProvider('MiniMax-M3'), 'minimax');
+  assert.equal(PROVIDERS.minimax.envKey, 'MINIMAX_API_KEY');
+  assert.deepEqual(getProviderOptions('MiniMax-M3'), { anthropic: { thinking: { type: 'adaptive' } } });
+  assert.equal(PROVIDERS.deepseek, undefined);
+  assert.throws(() => detectProvider('deepseek-v4-flash'), /Unsupported model id/);
+});
 
 it('documentation artifacts require tokens and the v2 sidecar independently of wrapper coverage', () => {
   const design = '---\ncolors:\n  ink: "#222"\ntypography:\n  body:\n    fontFamily: system-ui\n---\n## Overview\nA reading surface.\n';
@@ -243,7 +252,7 @@ it('planning fallback requires an assistant warning between the denial and conte
 it('Compatible providers get an explicit output ceiling instead of the compatibility SDK default', async () => {
   const workspace = prepareWorkspace();
   try {
-    for (const modelId of ['deepseek-v4-flash', 'MiniMax-M3', 'claude-sonnet-5']) {
+    for (const modelId of ['MiniMax-M3', 'claude-sonnet-5']) {
       const model = new MockLanguageModelV3({
         modelId,
         doGenerate: {
@@ -255,7 +264,7 @@ it('Compatible providers get an explicit output ceiling instead of the compatibi
       });
       await runTurn({ workspace, model, userPrompt: 'Test the harness.', maxSteps: 1 });
       const request = model.doGenerateCalls[0];
-      assert.equal(request.maxOutputTokens, modelId.startsWith('MiniMax-') ? 32_768 : modelId.startsWith('deepseek-') ? 16_384 : undefined);
+      assert.equal(request.maxOutputTokens, modelId.startsWith('MiniMax-') ? 32_768 : undefined);
       assert.ok(request.prompt.some((message) => message.role === 'system' && message.content === SKILL_BODY));
     }
   } finally {

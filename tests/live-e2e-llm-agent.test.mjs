@@ -22,9 +22,9 @@ import {
 } from './live-e2e/agents/llm-agent.mjs';
 
 describe('live-e2e LLM request settings', () => {
-  it('explicitly selects low-effort DeepSeek thinking for bounded JSON edit requests', () => {
-    assert.deepEqual(llmRequestSettings('deepseek'), {
-      thinking: { type: 'enabled' }, output_config: { effort: 'low' },
+  it('enables adaptive MiniMax thinking for bounded JSON edit requests', () => {
+    assert.deepEqual(llmRequestSettings('minimax'), {
+      thinking: { type: 'adaptive' },
     });
   });
 
@@ -57,7 +57,7 @@ describe('live-e2e LLM agent provider config', () => {
   it('prefers Anthropic when both provider keys are present', () => {
     const config = resolveLlmAgentConfig({}, {
       ANTHROPIC_API_KEY: 'claude-key',
-      DEEPSEEK_API_KEY: 'deepseek-key',
+      MINIMAX_API_KEY: 'minimax-key',
     });
 
     assert.equal(config.provider, 'anthropic');
@@ -67,39 +67,39 @@ describe('live-e2e LLM agent provider config', () => {
     assert.equal(config.baseURL, undefined);
   });
 
-  it('falls back to DeepSeek V4 Flash when only DEEPSEEK_API_KEY is present', () => {
+  it('falls back to MiniMax M3 when only MINIMAX_API_KEY is present', () => {
     const config = resolveLlmAgentConfig({}, {
-      DEEPSEEK_API_KEY: 'test-key',
+      MINIMAX_API_KEY: 'test-key',
     });
 
-    assert.equal(config.provider, 'deepseek');
-    assert.equal(config.model, 'deepseek-v4-flash');
-    assert.equal(config.requiredEnv, 'DEEPSEEK_API_KEY');
+    assert.equal(config.provider, 'minimax');
+    assert.equal(config.model, 'MiniMax-M3');
+    assert.equal(config.requiredEnv, 'MINIMAX_API_KEY');
     assert.equal(config.apiKey, 'test-key');
-    assert.equal(config.baseURL, 'https://api.deepseek.com/anthropic');
+    assert.equal(config.baseURL, 'https://api.minimax.io/anthropic');
   });
 
-  it('explicitly selects DeepSeek over Anthropic', () => {
+  it('explicitly selects MiniMax over Anthropic', () => {
     const config = resolveLlmAgentConfig({}, {
-      IMPECCABLE_E2E_LLM_PROVIDER: 'deepseek',
+      IMPECCABLE_E2E_LLM_PROVIDER: 'minimax',
       ANTHROPIC_API_KEY: 'claude-key',
-      DEEPSEEK_API_KEY: 'deepseek-key',
+      MINIMAX_API_KEY: 'minimax-key',
     });
 
-    assert.equal(config.provider, 'deepseek');
-    assert.equal(config.model, 'deepseek-v4-flash');
-    assert.equal(config.requiredEnv, 'DEEPSEEK_API_KEY');
-    assert.equal(config.apiKey, 'deepseek-key');
-    assert.equal(config.baseURL, 'https://api.deepseek.com/anthropic');
+    assert.equal(config.provider, 'minimax');
+    assert.equal(config.model, 'MiniMax-M3');
+    assert.equal(config.requiredEnv, 'MINIMAX_API_KEY');
+    assert.equal(config.apiKey, 'minimax-key');
+    assert.equal(config.baseURL, 'https://api.minimax.io/anthropic');
   });
 
   it('allows explicit model and base URL overrides', () => {
     const config = resolveLlmAgentConfig(
       { model: 'custom-model', baseURL: 'https://example.test/anthropic' },
       {
-        IMPECCABLE_E2E_LLM_PROVIDER: 'deepseek',
+        IMPECCABLE_E2E_LLM_PROVIDER: 'minimax',
         IMPECCABLE_E2E_LLM_MODEL: 'ignored-model',
-        DEEPSEEK_API_KEY: 'test-key',
+        MINIMAX_API_KEY: 'test-key',
       },
     );
 
@@ -107,11 +107,11 @@ describe('live-e2e LLM agent provider config', () => {
     assert.equal(config.baseURL, 'https://example.test/anthropic');
   });
 
-  it('allows the DeepSeek API base URL to come from env', () => {
+  it('allows the MiniMax API base URL to come from env', () => {
     const config = resolveLlmAgentConfig({}, {
-      IMPECCABLE_E2E_LLM_PROVIDER: 'deepseek',
-      DEEPSEEK_API_KEY: 'test-key',
-      DEEPSEEK_API_BASE_URL: 'https://proxy.example.test/anthropic',
+      IMPECCABLE_E2E_LLM_PROVIDER: 'minimax',
+      MINIMAX_API_KEY: 'test-key',
+      MINIMAX_API_BASE_URL: 'https://proxy.example.test/anthropic',
     });
 
     assert.equal(config.baseURL, 'https://proxy.example.test/anthropic');
@@ -200,6 +200,16 @@ describe('live-e2e LLM agent provider config', () => {
     assert.equal(resolveLlmAgentConfig({}, { INCEPTION_API_KEY: 'k' }).provider, 'inception');
   });
 
+  it('uses MiniMax in the fallback slot formerly occupied by DeepSeek', () => {
+    assert.equal(resolveLlmAgentConfig({}, {
+      MINIMAX_API_KEY: 'minimax-key',
+      INCEPTION_API_KEY: 'inception-key',
+      DEEPSEEK_API_KEY: 'unused-key',
+    }).provider, 'minimax');
+    assert.equal(resolveLlmAgentConfig({}, { DEEPSEEK_API_KEY: 'unused-key' }).provider, 'openai');
+    assert.throws(() => resolveLlmAgentConfig({ provider: 'deepseek' }, {}), /Unsupported.*deepseek/);
+  });
+
   it('rejects unsupported providers', () => {
     assert.throws(
       () => resolveLlmAgentConfig({}, { IMPECCABLE_E2E_LLM_PROVIDER: 'other' }),
@@ -207,11 +217,21 @@ describe('live-e2e LLM agent provider config', () => {
     );
   });
 
+  it('rejects retired DeepSeek model overrides before selecting credentials for any provider', () => {
+    for (const provider of [undefined, 'openai', 'anthropic', 'minimax', 'inception']) {
+      for (const model of ['deepseek-v4-flash', 'DeepSeek-V4-Pro']) {
+        assert.throws(() => resolveLlmAgentConfig({ provider, model }, {}), /Unsupported IMPECCABLE_E2E_LLM_MODEL/);
+        assert.throws(() => resolveLlmAgentConfig({ provider }, { IMPECCABLE_E2E_LLM_MODEL: model }), /Unsupported IMPECCABLE_E2E_LLM_MODEL/);
+      }
+    }
+    assert.equal(resolveLlmAgentConfig({ provider: 'minimax', model: 'MiniMax-M3' }, { IMPECCABLE_E2E_LLM_MODEL: 'deepseek-v4-flash' }).model, 'MiniMax-M3');
+  });
+
   it('routes only Inception through the Chat Completions API', () => {
     assert.equal(requiresChatCompletionsApi('inception'), true);
     assert.equal(requiresChatCompletionsApi('openai'), false);
     assert.equal(requiresChatCompletionsApi('anthropic'), false);
-    assert.equal(requiresChatCompletionsApi('deepseek'), false);
+    assert.equal(requiresChatCompletionsApi('minimax'), false);
   });
 });
 
@@ -234,11 +254,11 @@ describe('live-e2e LLM agent createLlmAgent', () => {
   it('returns null when the resolved config has no apiKey', async () => {
     const agent = await createLlmAgent({
       config: {
-        provider: 'deepseek',
-        model: 'deepseek-v4-flash',
+        provider: 'minimax',
+        model: 'MiniMax-M3',
         apiKey: undefined,
-        baseURL: 'https://api.deepseek.com/anthropic',
-        requiredEnv: 'DEEPSEEK_API_KEY',
+        baseURL: 'https://api.minimax.io/anthropic',
+        requiredEnv: 'MINIMAX_API_KEY',
       },
     });
     assert.equal(agent, null);
@@ -275,7 +295,7 @@ describe('live-e2e LLM agent provider replay', () => {
     }
 
     const config = resolveLlmAgentConfig({
-      provider: process.env.IMPECCABLE_E2E_LLM_PROVIDER || 'deepseek',
+      provider: process.env.IMPECCABLE_E2E_LLM_PROVIDER || 'minimax',
       model: process.env.IMPECCABLE_E2E_LLM_MODEL,
     });
     const agent = await createLlmAgent({ config, log: (msg) => t.diagnostic(msg) });
@@ -312,7 +332,7 @@ describe('live-e2e LLM agent provider replay', () => {
     }
 
     const config = resolveLlmAgentConfig({
-      provider: process.env.IMPECCABLE_E2E_LLM_PROVIDER || 'deepseek',
+      provider: process.env.IMPECCABLE_E2E_LLM_PROVIDER || 'minimax',
       model: process.env.IMPECCABLE_E2E_LLM_MODEL,
     });
     const agent = await createLlmAgent({ config, log: (msg) => t.diagnostic(msg) });

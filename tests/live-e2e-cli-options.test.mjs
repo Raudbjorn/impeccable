@@ -33,8 +33,8 @@ describe('live-e2e readCliOption', () => {
 
   it('throws when the next argv would consume another flag as the value', () => {
     assert.throws(
-      () => readCliOption([...baseArgv, '--llm-model', '--llm-provider=deepseek'], 'llm-model'),
-      /--llm-model requires a value \(received "--llm-provider=deepseek"\)/,
+      () => readCliOption([...baseArgv, '--llm-model', '--llm-provider=minimax'], 'llm-model'),
+      /--llm-model requires a value \(received "--llm-provider=minimax"\)/,
     );
   });
 
