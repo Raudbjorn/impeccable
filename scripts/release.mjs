@@ -5,9 +5,8 @@
 // Usage: node scripts/release.mjs <skill|cli|extension|engine> [--dry-run]
 //
 // `engine` is different: it only tags `engine-v<ENGINE_VERSION>` and pushes the
-// tag; .github/workflows/release-engine.yml builds the five binaries and
-// publishes the GitHub Release. It has no changelog entry and no local
-// artifacts.
+// tag. Build and upload the binary and checksum manually afterward. It has
+// no changelog entry and no local artifacts.
 //
 // Refuses on a dirty tree, an unpushed HEAD, or a missing changelog entry.
 // For the skill component, also reruns `bun run build:release` and refuses if the
@@ -45,9 +44,8 @@ const COMPONENTS = {
     tagPrefix: 'cli-v',
     label: 'CLI',
     changelogLabel: 'CLI v',
-    // The npm shim resolves the engine binary through the @impeccable/cli-<os>-<arch>
-    // platform packages (pinned at ENGINE_VERSION) and the dist channel; publishing
-    // it before those exist strands `npx impeccable`. Enforce release order (D4).
+    // The npm shim downloads the pinned fork engine when no matching platform
+    // package is installed. Enforce release order (D4).
     engineGated: true,
     buildCmd: null,
     artifacts: [],
@@ -135,25 +133,24 @@ if (cfg.sibling) {
 
 // Release-order guard (triage decision D4). Engine-gated components refuse to
 // tag/publish until the engine release for the pinned ENGINE_VERSION is fully
-// live: the five engine-v<version> release binaries + .sha256 and the five @impeccable/cli-<os>-<arch>
-// npm platform packages. Without this the launcher, the npm shim, and
+// live: the supported engine-v<version> release binaries + .sha256.
+// Without this the launcher, the npm shim, and
 // `impeccable install` all dead-end. Set IMPECCABLE_SKIP_ENGINE_CHECK=1 only
-// when you know the assets exist and the registry probe is unreachable.
+// when you know the assets exist and the release probe is unreachable.
 if (cfg.engineGated && process.env.IMPECCABLE_SKIP_ENGINE_CHECK !== '1') {
   const engineVersion = readEngineVersion(repoRoot);
   step(`Verifying engine v${engineVersion} release assets are published (D4 release-order guard)`);
   const result = await checkEngineRelease({ version: engineVersion });
   if (!result.ok) {
-    console.error('✗ Engine release is incomplete. Missing assets:');
+    console.error('✗ Engine release is incomplete. Asset verification failed:');
     for (const m of result.missing) console.error(`    · ${m.what}\n        ${m.url}`);
     fail(
       `Refusing to release ${cfg.label} ${version}: engine v${engineVersion} is not fully published.\n` +
-      `  Publish engine v${engineVersion} (bun run release:engine) AND the five @impeccable/cli-<os>-<arch>\n` +
-      '  npm platform packages first. Ordering: engine release → platform packages → skill/CLI release.\n' +
-      '  See CLAUDE.md "Releases" and the engine repo docs/REVIEW-TRIAGE.md D4.'
+      `  Publish engine-v${engineVersion} with its binaries and .sha256 sidecars first.\n` +
+      '  Ordering: engine release → skill/CLI release. See docs/ENGINE.md.'
     );
   }
-  ok(`engine v${engineVersion} release assets all present`);
+  ok(`engine v${engineVersion} release assets verified`);
 } else if (cfg.engineGated) {
   step('Skipping engine release-order guard (IMPECCABLE_SKIP_ENGINE_CHECK=1)');
 }
@@ -404,10 +401,7 @@ function htmlToMarkdown(html) {
 }
 
 
-// The engine release: verify, tag, push. CI does the building and publishing
-// (release-engine.yml), so the maintainer's machine never needs five
-// toolchains. The whole workspace builds from source, so there is nothing to
-// fetch and nothing to order ahead of it.
+// The engine release: verify, tag, push. The fork publishes binaries manually.
 async function releaseEngine() {
   step('Reading version from ENGINE_VERSION');
   const version = readEngineVersion(repoRoot);
@@ -458,7 +452,6 @@ async function releaseEngine() {
   runMutating(`git push origin ${tag}`);
 
   console.log(`\n✓ Engine ${version} tagged as ${tag}`);
-  console.log(`\n→ Next step: watch the release-engine workflow (${REPO_URL}/actions/workflows/release-engine.yml).`);
-  console.log(`  It publishes the five binaries + .sha256 as ${REPO_URL}/releases/tag/${tag}.`);
-  console.log('  Then publish the five @impeccable/cli-<os>-<arch> npm platform packages with `bun run release:platform-packages`, then release the CLI/skill.');
+  console.log(`\n→ Next step: manually publish impeccable-linux-x64 and impeccable-linux-x64.sha256`);
+  console.log(`  as ${REPO_URL}/releases/tag/${tag}, then run \`bun run check:engine-release\`.`);
 }

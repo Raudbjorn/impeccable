@@ -4,20 +4,18 @@
  *
  * The launcher (skill/scripts/impeccable), the npm shim (cli/bin/cli.js), and
  * `impeccable install` all dead-end unless the engine release for the pinned
- * ENGINE_VERSION exists FIRST: the five platform binaries in the engine-v<version> GitHub Release
- * release channel AND the five @impeccable/cli-<os>-<arch> npm platform packages.
- * Nothing else mechanically stops a maintainer from tagging the skill release (or
- * merging and letting the sync workflow rewrite provider dirs) before those assets
- * are published, which breaks every install path.
+ * ENGINE_VERSION exists FIRST: the supported platform binaries and checksum
+ * sidecars in this fork's engine-v<version> GitHub Release.
+ * Tagging a skill release or merging new pins before those assets are
+ * published breaks installs that need to download the engine.
  *
  * This script verifies, for the pinned engine version, that:
- *   1. each of the five release binaries impeccable-<os>-<arch>[.exe] is fetchable
- *   2. each binary's .sha256 sidecar is fetchable
- *   3. each npm platform package @impeccable/cli-<os>-<arch>@<version> is published
+ *   1. each supported release binary impeccable-<os>-<arch> is fetchable
+ *   2. each binary's .sha256 sidecar is valid and matches the binary
  *
- * Exits 0 when everything is present, non-zero (naming exactly what is missing)
- * otherwise. release.mjs runs it before an engine-dependent release; CI runs it
- * as a soft warning until the first engine release exists.
+ * Exits 0 when everything verifies, non-zero (naming what is missing or invalid)
+ * otherwise. release.mjs runs it before an engine-dependent release. npm
+ * platform packages are optional: the shim can download from GitHub.
  *
  *   node scripts/check-engine-release.mjs            # check the pinned ENGINE_VERSION
  *   node scripts/check-engine-release.mjs --json     # machine-readable report
@@ -30,42 +28,12 @@ import {
   DEFAULT_DOWNLOAD_BASE,
   readEngineVersion,
   assetUrl,
+  fetchVerifiedBinary,
 } from './fetch-engine.mjs';
-
-const NPM_REGISTRY = 'https://registry.npmjs.org';
-
-// A ranged GET is the most portable existence probe: GitHub release downloads
-// answer HEAD inconsistently across their 302 to object storage, but a
-// `Range: bytes=0-0` GET follows the redirect and returns 200/206 for a real
-// asset and 404 for a missing one without pulling the whole binary.
-async function urlExists(url) {
-  try {
-    const res = await fetch(url, { redirect: 'follow', headers: { Range: 'bytes=0-0' } });
-    return res.ok || res.status === 206;
-  } catch (err) {
-    return false;
-  }
-}
-
-function npmPackageUrl(target, version) {
-  // Scoped name: the slash is percent-encoded for the registry path.
-  const name = `@impeccable/cli-${target}`;
-  return `${NPM_REGISTRY}/${name.replace('/', '%2f')}/${version}`;
-}
-
-async function npmVersionExists(target, version) {
-  const url = npmPackageUrl(target, version);
-  try {
-    const res = await fetch(url, { redirect: 'follow' });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Check every asset for one engine version. Returns { ok, version, base, missing }
- * where missing is a list of { kind, target, what, url } entries.
+ * where missing lists absent or invalid assets as { kind, target, what, url }.
  */
 export async function checkEngineRelease({
   version = readEngineVersion(),
@@ -75,25 +43,15 @@ export async function checkEngineRelease({
 
   await Promise.all(
     ENGINE_TARGETS.map(async (target) => {
-      const binUrl = assetUrl(version, target, base);
-      const shaUrl = `${binUrl}.sha256`;
-      const npmUrl = npmPackageUrl(target, version);
-
-      const [binOk, shaOk, npmOk] = await Promise.all([
-        urlExists(binUrl),
-        urlExists(shaUrl),
-        npmVersionExists(target, version),
-      ]);
-
-      if (!binOk) missing.push({ kind: 'binary', target, what: `impeccable-${target} binary`, url: binUrl });
-      if (!shaOk) missing.push({ kind: 'checksum', target, what: `impeccable-${target} .sha256`, url: shaUrl });
-      if (!npmOk) missing.push({ kind: 'npm', target, what: `@impeccable/cli-${target}@${version}`, url: npmUrl });
+      try {
+        await fetchVerifiedBinary(target, version, base);
+      } catch (err) {
+        missing.push({ kind: 'verification', target, what: err.message, url: assetUrl(version, target, base) });
+      }
     })
   );
 
-  // Stable ordering for a readable report: by target, then binary/checksum/npm.
-  const order = { binary: 0, checksum: 1, npm: 2 };
-  missing.sort((a, b) => ENGINE_TARGETS.indexOf(a.target) - ENGINE_TARGETS.indexOf(b.target) || order[a.kind] - order[b.kind]);
+  missing.sort((a, b) => ENGINE_TARGETS.indexOf(a.target) - ENGINE_TARGETS.indexOf(b.target));
 
   return { ok: missing.length === 0, version, base, missing };
 }
@@ -101,20 +59,18 @@ export async function checkEngineRelease({
 function report(result) {
   const { ok, version, base, missing } = result;
   if (ok) {
-    console.log(`✓ engine v${version} release is complete: all ${ENGINE_TARGETS.length} binaries + .sha256 + npm platform packages are published.`);
+    console.log(`✓ engine v${version} release is complete: binaries + .sha256 for ${ENGINE_TARGETS.join(', ')} are verified.`);
     console.log(`  release base: ${base}`);
     return;
   }
-  console.error(`✗ engine v${version} release is INCOMPLETE — ${missing.length} asset(s) missing:`);
+  console.error(`✗ engine v${version} release is INCOMPLETE — ${missing.length} target(s) failed verification:`);
   for (const m of missing) {
     console.error(`  · ${m.what}`);
     console.error(`      ${m.url}`);
   }
   console.error('');
-  console.error(`Publish engine v${version} (tag engine-v${version}, bun run release:engine) AND the`);
-  console.error('five @impeccable/cli-<os>-<arch> npm platform packages BEFORE releasing the');
-  console.error('skill or merging rust-swap. Ordering: engine release → platform packages →');
-  console.error('skill release/merge. See CLAUDE.md "Releases" and docs REVIEW-TRIAGE.md D4.');
+  console.error(`Publish engine-v${version} with its binaries and .sha256 sidecars before`);
+  console.error('releasing the skill/CLI or merging new engine pins. See docs/ENGINE.md.');
   console.error(`  release base: ${base}`);
 }
 

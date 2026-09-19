@@ -96,7 +96,7 @@ describe('release.mjs guards', () => {
     write('package.json', JSON.stringify({
       name: 'impeccable',
       version: '9.9.9',
-      optionalDependencies: { '@impeccable/cli-linux-arm64': '0.1.0', '@impeccable/cli-linux-x64': '0.1.0' },
+      optionalDependencies: { '@impeccable/cli-linux-x64': '0.1.0' },
     }));
     write('ENGINE_VERSION', '0.1.0\n');
     write('extension/manifest.json', JSON.stringify({ version: '2.0.0' }));
@@ -135,15 +135,15 @@ describe('release.mjs guards', () => {
     }
   });
 
-  it('dry-runs a clean engine release: tags only, CI publishes', () => {
+  it('dry-runs a clean engine release: tags only, manual upload follows', () => {
     const { code, stdout } = runRelease(workDir, 'engine');
     assert.equal(code, 0, stdout);
     assert.match(stdout, /Engine 0\.1\.0/);
-    assert.match(stdout, /2 platform package pins agree/);
+    assert.match(stdout, /1 platform package pins agree/);
     assert.match(stdout, /\[dry-run\] git tag -a engine-v0\.1\.0/);
     assert.match(stdout, /\[dry-run\] git push origin engine-v0\.1\.0/);
     assert.doesNotMatch(stdout, /gh release create/);
-    assert.match(stdout, /release-engine workflow/);
+    assert.match(stdout, /manually publish impeccable-linux-x64 and impeccable-linux-x64\.sha256/);
   });
 
   it('engine: refuses when package.json platform pins disagree with ENGINE_VERSION', () => {
@@ -152,7 +152,7 @@ describe('release.mjs guards', () => {
     git(workDir, 'push', 'origin', 'main');
     const { code, stderr } = runRelease(workDir, 'engine');
     assert.notEqual(code, 0);
-    assert.match(stderr, /pins @impeccable\/cli-linux-arm64@0\.1\.0.*expected 0\.2\.0/);
+    assert.match(stderr, /pins @impeccable\/cli-linux-x64@0\.1\.0.*expected 0\.2\.0/);
   });
 
   it('engine: refuses when the tag already exists on origin', () => {

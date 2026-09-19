@@ -15,9 +15,7 @@ import { fileURLToPath } from 'node:url';
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 export function engineTarget() {
-  const platform = os.platform();
-  const arch = { arm64: 'arm64', x64: 'x64' }[os.arch()] || 'unknown';
-  return `${platform}-${arch}`;
+  return `${os.platform()}-${os.arch()}`;
 }
 
 export function findEngineBinary() {

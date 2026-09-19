@@ -12,4 +12,6 @@ built binary at `bin/impeccable[.exe]` (executable), and publishes it under
 `@impeccable`. The version pinned in this repo's `package.json`
 `optionalDependencies` must equal `ENGINE_VERSION`.
 
-Targets: `linux-x64`, `linux-arm64`.
+Target: `linux-x64` only. Publishing these packages is optional for this fork:
+the shim accepts a platform package only when its version and repository match
+the fork, and otherwise downloads the pinned binary from GitHub Releases.
