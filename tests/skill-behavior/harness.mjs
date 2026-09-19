@@ -468,8 +468,7 @@ export async function runTurn({ workspace, model, userPrompt, priorMessages = []
       abortSignal: controller.signal,
       // Compatible models need explicit budgets instead of the SDK's 4096 default.
       // MiniMax exhausted 16k with finishReason=length before emitting an edit.
-      maxOutputTokens: model?.modelId?.startsWith('MiniMax-') ? 32_768
-        : model?.modelId?.startsWith('deepseek-') ? 16_384 : undefined,
+      maxOutputTokens: model?.modelId?.startsWith('MiniMax-') ? 32_768 : undefined,
       // Resolved from the model object so the 21 runTurn call sites stay
       // unchanged. Reasoning models run at the provider default otherwise,
       // which is not the tier this suite is meant to measure.
