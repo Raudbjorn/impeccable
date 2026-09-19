@@ -248,11 +248,15 @@ function inceptionKeyFromHelper(env) {
 
 export function resolveLlmAgentConfig(opts = {}, env = process.env) {
   const provider = resolveProvider(opts, env);
+  const model = opts.model || env.IMPECCABLE_E2E_LLM_MODEL;
+  if (/^deepseek(?:[-/]|$)/i.test(String(model || '').trim())) {
+    throw new Error(`Unsupported IMPECCABLE_E2E_LLM_MODEL: ${model}; use MiniMax-M3 for MiniMax`);
+  }
 
   if (provider === 'openai') {
     return {
       provider,
-      model: opts.model || env.IMPECCABLE_E2E_LLM_MODEL || DEFAULT_OPENAI_MODEL,
+      model: model || DEFAULT_OPENAI_MODEL,
       apiKey: opts.apiKey || env.OPENAI_API_KEY,
       requiredEnv: 'OPENAI_API_KEY',
       baseURL: opts.baseURL || env.OPENAI_BASE_URL,
@@ -263,7 +267,7 @@ export function resolveLlmAgentConfig(opts = {}, env = process.env) {
   if (provider === 'anthropic') {
     return {
       provider,
-      model: opts.model || env.IMPECCABLE_E2E_LLM_MODEL || DEFAULT_ANTHROPIC_MODEL,
+      model: model || DEFAULT_ANTHROPIC_MODEL,
       apiKey: opts.apiKey || env.ANTHROPIC_API_KEY,
       requiredEnv: 'ANTHROPIC_API_KEY',
       baseURL: opts.baseURL || env.ANTHROPIC_BASE_URL,
@@ -273,7 +277,7 @@ export function resolveLlmAgentConfig(opts = {}, env = process.env) {
   if (provider === 'minimax') {
     return {
       provider,
-      model: opts.model || env.IMPECCABLE_E2E_LLM_MODEL || 'MiniMax-M3',
+      model: model || 'MiniMax-M3',
       apiKey: opts.apiKey || env.MINIMAX_API_KEY,
       requiredEnv: 'MINIMAX_API_KEY',
       baseURL: opts.baseURL || env.MINIMAX_API_BASE_URL || 'https://api.minimax.io/anthropic',
@@ -290,7 +294,7 @@ export function resolveLlmAgentConfig(opts = {}, env = process.env) {
     }
     return {
       provider,
-      model: opts.model || env.IMPECCABLE_E2E_LLM_MODEL || DEFAULT_INCEPTION_MODEL,
+      model: model || DEFAULT_INCEPTION_MODEL,
       apiKey,
       requiredEnv: 'INCEPTION_API_KEY',
       baseURL: opts.baseURL || env.INCEPTION_API_BASE_URL || DEFAULT_INCEPTION_API_BASE_URL,

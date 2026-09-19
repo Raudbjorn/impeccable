@@ -217,6 +217,16 @@ describe('live-e2e LLM agent provider config', () => {
     );
   });
 
+  it('rejects retired DeepSeek model overrides before selecting credentials for any provider', () => {
+    for (const provider of [undefined, 'openai', 'anthropic', 'minimax', 'inception']) {
+      for (const model of ['deepseek-v4-flash', 'DeepSeek-V4-Pro']) {
+        assert.throws(() => resolveLlmAgentConfig({ provider, model }, {}), /Unsupported IMPECCABLE_E2E_LLM_MODEL/);
+        assert.throws(() => resolveLlmAgentConfig({ provider }, { IMPECCABLE_E2E_LLM_MODEL: model }), /Unsupported IMPECCABLE_E2E_LLM_MODEL/);
+      }
+    }
+    assert.equal(resolveLlmAgentConfig({ provider: 'minimax', model: 'MiniMax-M3' }, { IMPECCABLE_E2E_LLM_MODEL: 'deepseek-v4-flash' }).model, 'MiniMax-M3');
+  });
+
   it('routes only Inception through the Chat Completions API', () => {
     assert.equal(requiresChatCompletionsApi('inception'), true);
     assert.equal(requiresChatCompletionsApi('openai'), false);
