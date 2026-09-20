@@ -246,12 +246,19 @@ function inceptionKeyFromHelper(env) {
   }
 }
 
-export function resolveLlmAgentConfig(opts = {}, env = process.env) {
-  const provider = resolveProvider(opts, env);
-  const model = opts.model || env.IMPECCABLE_E2E_LLM_MODEL;
+function validateLlmSelection(provider, model) {
+  if (!['openai', 'anthropic', 'minimax', 'inception'].includes(provider)) {
+    throw new Error(`Unsupported IMPECCABLE_E2E_LLM_PROVIDER: ${provider}`);
+  }
   if (/^deepseek(?:[-/]|$)/i.test(String(model || '').trim())) {
     throw new Error(`Unsupported IMPECCABLE_E2E_LLM_MODEL: ${model}; use MiniMax-M3 for MiniMax`);
   }
+}
+
+export function resolveLlmAgentConfig(opts = {}, env = process.env) {
+  const provider = resolveProvider(opts, env);
+  const model = opts.model || env.IMPECCABLE_E2E_LLM_MODEL;
+  validateLlmSelection(provider, model);
 
   if (provider === 'openai') {
     return {
@@ -302,8 +309,6 @@ export function resolveLlmAgentConfig(opts = {}, env = process.env) {
       keyHelperError,
     };
   }
-
-  throw new Error(`Unsupported IMPECCABLE_E2E_LLM_PROVIDER: ${provider}`);
 }
 
 function resolveProvider(opts, env) {
@@ -385,6 +390,7 @@ async function createOpenAiShim({ apiKey, baseURL, reasoningEffort, useChatCompl
  */
 export async function createLlmAgent(opts = {}) {
   const config = opts.config || resolveLlmAgentConfig(opts);
+  validateLlmSelection(config.provider, config.model);
   const log = opts.log || (() => {});
   if (!config.apiKey) {
     // The runners resolve the config before a diagnostic logger exists, so a

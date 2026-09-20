@@ -236,8 +236,24 @@ describe('live-e2e LLM agent provider config', () => {
 });
 
 describe('live-e2e LLM agent createLlmAgent', () => {
+  it('validates pre-resolved provider and model choices before reading credentials', async () => {
+    const unreadableCredentials = { get apiKey() { throw new Error('credentials must not be read'); } };
+    for (const provider of ['openai', 'anthropic', 'minimax', 'inception']) {
+      for (const model of ['deepseek-v4-flash', 'DeepSeek-V4-Pro']) {
+        const config = Object.assign(Object.create(unreadableCredentials), { provider, model });
+        await assert.rejects(createLlmAgent({ config }), /Unsupported IMPECCABLE_E2E_LLM_MODEL/);
+      }
+    }
+    for (const provider of ['deepseek', 'other']) {
+      const config = Object.assign(Object.create(unreadableCredentials), { provider, model: 'custom-model' });
+      await assert.rejects(createLlmAgent({ config }), /Unsupported IMPECCABLE_E2E_LLM_PROVIDER/);
+    }
+  });
+
   it('uses an explicit opts.config without re-reading env', async () => {
     const agent = await createLlmAgent({
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
       config: {
         provider: 'anthropic',
         model: 'test-model',

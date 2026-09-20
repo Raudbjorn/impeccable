@@ -49,6 +49,7 @@ async function writeCached(file, result) {
       const stat = await fs.lstat(fullPath).catch(() => null);
       return stat?.isFile() ? { file: fullPath, time: stat.mtimeMs } : null;
     }));
+    // ponytail: concurrent eviction is best effort; lock pruning if a strict shared capacity is needed.
     const oldest = files.filter(Boolean).sort((a, b) => b.time - a.time).slice(CACHE_LIMIT);
     for (const stale of oldest) {
       await fs.unlink(stale.file).catch(() => {});

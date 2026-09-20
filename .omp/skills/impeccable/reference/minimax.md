@@ -21,7 +21,7 @@ Success returns `ok`, `model`, `mode`, `text`, `cached`, and `usage`. Use `text`
 
 ## Image cache
 
-Successful local/data-image analyses persist for seven days under `${IMPECCABLE_HOME:-~/.impeccable}/cache/image-analysis/`. The cache keeps at most 128 entries and evicts the least recently used. It stores analysis text with private file permissions, not the image, prompt, or API key. Keys include image contents, model, mode instructions, requested focus, and token budget. Replacing a screenshot at the same path invalidates its old analysis.
+Successful local/data-image analyses are reused for up to seven days under `${IMPECCABLE_HOME:-~/.impeccable}/cache/image-analysis/`. The cache targets 128 entries, evicting the least recently used; eviction is best effort under concurrent writers. It stores analysis text with private file permissions, not the image, prompt, or API key. Keys include image contents, model, mode instructions, requested focus, and token budget. Replacing a screenshot at the same path invalidates its old analysis.
 
 HTTPS images always get a fresh analysis because their contents can change at the same URL. Cached results have `cached: true` and empty `usage`, since no API call ran. A cache read/write failure falls back to an ordinary API request.
 
