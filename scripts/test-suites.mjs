@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { SCENARIO_TIMEOUT_MS } from '../tests/skill-behavior/budgets.mjs';
 
 export const DEFAULT_SUITES = ['core', 'oracle', 'detector', 'live', 'framework', 'plugin-e2e'];
 export const OPT_IN_SUITES = [
@@ -17,6 +18,7 @@ const COMMON_INFRA_PATTERNS = [
   /^bun\.lock$/,
   /^scripts\/run-tests\.mjs$/,
   /^scripts\/test-suites\.mjs$/,
+  /^tests\/skill-behavior\/budgets\.mjs$/,
   /^scripts\/lib\/(live-server-processes|process-group|test-orphan-reaper)\.mjs$/,
   /^tests\/lib\/live-servers\.mjs$/,
 ];
@@ -283,8 +285,8 @@ export const SUITES = {
     ],
     commands: [{
       runner: 'node',
-      timeoutMs: 240000,
-      wallClockMs: 1_800_000,
+      timeoutMs: SCENARIO_TIMEOUT_MS,
+      wallClockMs: Math.max(1_800_000, SCENARIO_TIMEOUT_MS + 60_000),
       files: ['tests/skill-behavior/scenarios.test.mjs'],
     }],
   },

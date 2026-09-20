@@ -220,6 +220,21 @@ Each scenario:
 
 The trace is the source of truth, not the model's free-form reply.
 
+Reference checkpoints wait for both the requested reference and a successful
+context-loader call, in either order. S4's follow-up reuses its verified prior
+context instead. A checkpoint only establishes this routing evidence; it does
+not establish task completion. The simulated user continues in the intended
+workspace, skipping cancellation/wrong-directory options unless a scenario
+explicitly supplies that answer.
+
+Turn deadlines allow 60 seconds for startup/thinking plus 30 seconds per
+`maxSteps`: six-step routing gets 240 seconds; the fourteen-step palette edit
+gets 480 seconds. Node's per-test cap is 510 seconds, covering both six-step
+S4 turns plus cleanup. The suite wall-clock cap remains 30 minutes. Setting
+`IMPECCABLE_SKILL_BEHAVIOR_TURN_TIMEOUT_MS` replaces each default turn budget;
+the runner expands its caps to keep the client deadline inside the test cap.
+Full browser workflows keep their explicit 840-second turn budgets.
+
 File tools are workspace-scoped; bash is a real host shell, **not a security
 sandbox**. Use disposable synthetic fixtures. Shell helpers do not inherit
 provider API keys/auth tokens; model calls still use the parent's keys. The
@@ -228,7 +243,8 @@ decision pages cannot wait for a nonexistent browser user. The engine returns
 its genuine structured-question fallback; browser decisions have separate E2E.
 
 Set `IMPECCABLE_SKILL_BEHAVIOR_TRACE_DIR=<directory>` to retain per-turn JSON
-with model, prompt, tool results, response ordering, usage, and finish reason.
+with model, prompt, start time, elapsed time, step/time budgets, tool results,
+response ordering, usage, and finish reason.
 Progress and failed turns retain their tool traces too; only completed turns
 carry the full response sequence and final usage.
 These are local diagnostic artifacts; inspect before sharing. Successful reads

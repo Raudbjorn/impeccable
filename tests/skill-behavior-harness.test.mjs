@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { MockLanguageModelV3 } from 'ai/test';
-import { prepareWorkspace, cleanupWorkspace, makeTools, runTurn, fileLoaded, SKILL_BODY, ENGINE_BIN } from './skill-behavior/harness.mjs';
+import { prepareWorkspace, cleanupWorkspace, makeTools, runTurn, fileLoaded, referenceLoadedWithContext, SKILL_BODY, ENGINE_BIN } from './skill-behavior/harness.mjs';
+import { turnTimeoutMs } from './skill-behavior/budgets.mjs';
 import { assertPlanningFallbackWarning, assertNewWorkLifecycle, assertWorkflowAdvice, assertCommandComparison, missingReferences } from './skill-behavior/assertions.mjs';
 import { CASE_STUDY_ANSWER } from './skill-behavior/fixtures.mjs';
 import { detectProvider, PROVIDERS, getProviderOptions } from './skill-behavior/providers.mjs';
@@ -43,6 +44,11 @@ it('advice outcomes do not depend on opening every reference, but keep consent a
   assert.doesNotThrow(() => check(comparison));
   assert.doesNotThrow(() => check("Critique reviews the surface. Polish refines it. Critique isn't required before polish."));
   assert.doesNotThrow(() => check('Critique gives a report. Polish edits the surface independently, without a critique.'));
+  assert.doesNotThrow(() => check('`/impeccable critique index.html` is diagnostic. Two parallel assessments produce a report.\n'
+    + '`/impeccable polish index.html` is remedial. It walks the surface, fixes defects, and closes gaps. Critique is not required.'));
+  assert.doesNotThrow(() => check('Critique gives a report. Polish improves the surface independently.'));
+  assert.throws(() => check('Critique fixes defects. Polish gives a report. Critique is optional.'), /explain critique/);
+  assert.throws(() => check('Critique gives a report. Polish is optional. Critique fixes defects.'), /explain polish/);
   assert.deepEqual(missingReferences(trace, ['reference/critique.md']), ['reference/critique.md']);
   for (const wrong of ['You must run critique before polish.', 'Critique is required before polish.', 'Polish requires a critique.']) {
     assert.throws(() => check(`${comparison} ${wrong}`), /invent a critique prerequisite/);
@@ -116,6 +122,30 @@ it('case-study user supplies evidence now instead of promising a future message'
   } finally {
     cleanupWorkspace(workspace);
   }
+});
+
+it('the simulated user continues in the intended workspace regardless of option order', async () => {
+  const workspace = prepareWorkspace();
+  try {
+    const { tools } = makeTools(workspace);
+    const question = 'The workspace contains only the skill itself. How should I proceed?';
+    const proceed = { label: 'Walk me through /impeccable init' };
+    for (const label of ['I meant a different workspace', 'Wrong directory', 'Cancel', 'Stop here']) {
+      for (const options of [[{ label }, proceed], [proceed, { label }]]) {
+        const result = JSON.parse(await tools.ask_user_question.execute({ questions: [{ question, options }] }));
+        assert.equal(result.answers[question], proceed.label);
+      }
+    }
+    const onlyCancel = JSON.parse(await tools.ask_user_question.execute({ questions: [{ question, options: [{ label: 'Cancel' }] }] }));
+    assert.match(onlyCancel.answers[question], /intended workspace/);
+    const direction = 'Which visual world should guide the design?';
+    const world = JSON.parse(await tools.ask_user_question.execute({ questions: [{ question: direction,
+      options: [{ label: 'Bus stop signage' }, { label: 'Harbor logs' }] }] }));
+    assert.equal(world.answers[direction], 'Bus stop signage');
+    const explicit = makeTools(workspace, {}, { answer: () => 'Stop here' });
+    const stopped = JSON.parse(await explicit.tools.ask_user_question.execute({ questions: [{ question, options: [proceed] }] }));
+    assert.equal(stopped.answers[question], 'Stop here');
+  } finally { cleanupWorkspace(workspace); }
 });
 
 it('new-work requires approval and a brief before code, then documents the finished redesign', () => {
@@ -290,6 +320,41 @@ it('protocol checkpoints stop at successful evidence without claiming task compl
   } finally { cleanupWorkspace(workspace); }
 });
 
+it('reference checkpoints require successful context in either loading order, or a primed prior turn', { skip: !ENGINE_BIN }, async () => {
+  const workspace = prepareWorkspace();
+  try {
+    const read = { toolName: 'read', input: { path: '.claude/skills/impeccable/reference/init.md' } };
+    const context = { toolName: 'bash', input: { command: '.claude/skills/impeccable/scripts/impeccable context' } };
+    for (const calls of [[read, context], [context, read]]) {
+      let step = 0;
+      const model = new MockLanguageModelV3({ doGenerate: async () => {
+        const call = calls[step++];
+        assert.ok(call, 'the checkpoint should stop as soon as both pieces of evidence exist');
+        return {
+          content: [{ type: 'tool-call', toolCallId: `step-${step}`, toolName: call.toolName, input: JSON.stringify(call.input) }],
+          finishReason: { unified: 'tool-calls', raw: 'tool-calls' },
+          usage: { inputTokens: { total: 1 }, outputTokens: { total: 1 } }, warnings: [],
+        };
+      } });
+      const result = await runTurn({ workspace, model, userPrompt: 'Route only.', maxSteps: 3, contextOnlyBash: true,
+        stopAfter: (trace) => referenceLoadedWithContext(trace, 'init.md') });
+      assert.equal(result.outcome, 'checkpoint');
+      assert.equal(result.steps, 2);
+    }
+    const denied = makeTools(workspace, {}, {}, { denyBash: true });
+    await denied.tools.read.execute(read.input);
+    await denied.tools.bash.execute(context.input);
+    assert.equal(referenceLoadedWithContext(denied.trace, 'init.md'), false);
+    assert.equal(referenceLoadedWithContext(denied.trace, 'init.md', true), true);
+    assert.equal(referenceLoadedWithContext(denied.trace, 'new-work.md', true), false);
+    fs.writeFileSync(path.join(workspace, '.claude/skills/impeccable/scripts/impeccable'), '#!/bin/sh\nexit 1\n');
+    const failed = makeTools(workspace, {}, {}, { contextOnlyBash: true });
+    await failed.tools.read.execute(read.input);
+    await failed.tools.bash.execute(context.input);
+    assert.equal(referenceLoadedWithContext(failed.trace, 'init.md'), false);
+  } finally { cleanupWorkspace(workspace); }
+});
+
 it('protocol notice checkpoints observe intermediate assistant text', async () => {
   const workspace = prepareWorkspace();
   try {
@@ -340,7 +405,41 @@ it('optional diagnostics retain tool evidence when a provider turn fails', async
     assert.match(diagnostic.error, /synthetic provider failure/);
     assert.equal(diagnostic.trace.toolCalls.length, 1);
     assert.equal(fileLoaded(diagnostic.trace, 'PRODUCT.md'), true);
+    assert.ok(Number.isFinite(Date.parse(diagnostic.startedAt)));
+    assert.ok(diagnostic.elapsedMs >= 0);
+    assert.equal(diagnostic.maxSteps, 8);
+    assert.equal(diagnostic.timeoutMs, turnTimeoutMs(8));
   } finally {
+    if (previous === undefined) delete process.env.IMPECCABLE_SKILL_BEHAVIOR_TRACE_DIR;
+    else process.env.IMPECCABLE_SKILL_BEHAVIOR_TRACE_DIR = previous;
+    cleanupWorkspace(workspace);
+  }
+});
+
+it('a stalled provider is aborted within its explicit turn budget and keeps diagnostics', async () => {
+  const workspace = prepareWorkspace();
+  const previous = process.env.IMPECCABLE_SKILL_BEHAVIOR_TRACE_DIR;
+  const traceDir = path.join(workspace, 'diagnostics');
+  process.env.IMPECCABLE_SKILL_BEHAVIOR_TRACE_DIR = traceDir;
+  let signal;
+  // Simulate the open provider socket that keeps a real stalled call alive.
+  const socket = setTimeout(() => {}, 1_000);
+  try {
+    const model = new MockLanguageModelV3({ doGenerate: ({ abortSignal }) => {
+      signal = abortSignal;
+      return new Promise((resolve, reject) => {
+        if (signal.aborted) reject(signal.reason);
+        else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+    } });
+    await assert.rejects(runTurn({ workspace, model, userPrompt: 'Stall.', maxSteps: 14, timeoutMs: 25 }), /aborted after 25ms client-side timeout/);
+    assert.equal(signal.aborted, true);
+    const diagnostic = JSON.parse(fs.readFileSync(path.join(traceDir, fs.readdirSync(traceDir)[0]), 'utf8'));
+    assert.equal(diagnostic.status, 'failed');
+    assert.equal(diagnostic.timeoutMs, 25);
+    assert.equal(diagnostic.maxSteps, 14);
+  } finally {
+    clearTimeout(socket);
     if (previous === undefined) delete process.env.IMPECCABLE_SKILL_BEHAVIOR_TRACE_DIR;
     else process.env.IMPECCABLE_SKILL_BEHAVIOR_TRACE_DIR = previous;
     cleanupWorkspace(workspace);
