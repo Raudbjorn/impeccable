@@ -2,6 +2,8 @@
 
 Discover what should be made and how it should work, then return a confirmed design brief without code.
 
+When PRODUCT.md is missing, complete [init.md](init.md) first. Reuse its answers in discovery below.
+
 ## Phase 1: Discovery interview
 
 Do not write code or choose visual direction yet.

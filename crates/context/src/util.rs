@@ -272,15 +272,6 @@ pub fn opt_string(s: &Option<String>) -> Value {
 
 /// `os.homedir()` as Node computes it on posix: $HOME first.
 pub fn homedir(env: &Env) -> String {
-    if cfg!(windows) {
-        // Node win32: USERPROFILE, then the process's own profile dir.
-        if let Some(h) = env.get("USERPROFILE") {
-            if !h.is_empty() {
-                return h.clone();
-            }
-        }
-        return std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".to_string());
-    }
     if let Some(h) = env.get("HOME") {
         if !h.is_empty() {
             return h.clone();

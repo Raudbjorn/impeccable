@@ -53,21 +53,13 @@ const NEXT_PROXY_FILES: &[&str] = &["proxy.ts", "proxy.js", "proxy.mjs"];
 const NEXT_CONFIG_FILES: &[&str] = &[
     "next.config.js",
     "next.config.mjs",
-    "next.config.cjs",
     "next.config.ts",
     "next.config.mts",
-    "next.config.cts",
 ];
 
 /// JS: detect-csp.mjs#hasNextProjectMarker
 fn has_next_project_marker(project_root: &str) -> bool {
     if NEXT_CONFIG_FILES.iter().any(|n| exists(&jsp::join(&[project_root, n]))) {
-        return true;
-    }
-    if ["app", "pages", "src/app", "src/pages"]
-        .iter()
-        .any(|rel| exists(&jsp::join(&[project_root, rel])))
-    {
         return true;
     }
     let Ok(raw) = std::fs::read_to_string(jsp::join(&[project_root, "package.json"])) else {

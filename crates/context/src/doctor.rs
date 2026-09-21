@@ -92,6 +92,7 @@ fn collect(cwd: &str, target: &TargetOptions, env: &Env, provider_id: &str) -> R
     findings.extend(boot.native_platform);
     findings.extend(boot.design_sidecar);
     findings.extend(check_design_drift(abs_design_path.as_deref(), &project_root, 25));
+    findings.extend(crate::compose::assessment::drift(&project_root, true));
     findings.extend(check_design_coverage(ctx.design.as_deref(), ctx.design_path.as_deref()));
     findings.extend(boot.config);
     findings.extend(boot.build_path);

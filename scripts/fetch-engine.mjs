@@ -1,21 +1,21 @@
 #!/usr/bin/env node
 /**
  * Fetch the pinned engine binary (root ENGINE_VERSION) for one or every
- * platform into skill/scripts/bin/<os>-<arch>/impeccable[.exe], the sibling
+ * platform into skill/scripts/bin/<os>-<arch>/impeccable, the sibling
  * layout the launcher (skill/scripts/impeccable) looks in first.
  *
  *   node scripts/fetch-engine.mjs                # current platform
  *   node scripts/fetch-engine.mjs --all          # every release target
  *   node scripts/fetch-engine.mjs --target linux-x64 [--target ...]
- *   node scripts/fetch-engine.mjs --dest <dir>   # <dir>/<os>-<arch>/impeccable[.exe]
+ *   node scripts/fetch-engine.mjs --dest <dir>   # <dir>/<os>-<arch>/impeccable
  *   node scripts/fetch-engine.mjs --lenient      # a target that cannot be fetched warns instead of failing
  *
  * Environment (same names the launcher honors):
  *   IMPECCABLE_DOWNLOAD_BASE  release channel root (default: the public repo's GitHub Releases)
  *   IMPECCABLE_BIN            copy this local binary for the current platform instead of downloading
  *
- * The URL scheme is the launcher's: <base>/engine-v<version>/impeccable-<os>-<arch>[.exe],
- * with an optional <asset>.sha256 next to it that is verified when present.
+ * The URL scheme is the launcher's: <base>/engine-v<version>/impeccable-<os>-<arch>,
+ * with a required <asset>.sha256 that must match the downloaded binary.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -24,25 +24,23 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-export const DEFAULT_DOWNLOAD_BASE = 'https://github.com/pbakaus/impeccable/releases/download';
-export const ENGINE_TARGETS = ['darwin-arm64', 'darwin-x64', 'linux-x64', 'linux-arm64', 'windows-x64'];
+export const DEFAULT_DOWNLOAD_BASE = 'https://github.com/Raudbjorn/impeccable/releases/download';
+export const ENGINE_TARGETS = ['linux-x64'];
 
 export function readEngineVersion(root = ROOT) {
   return fs.readFileSync(path.join(root, 'ENGINE_VERSION'), 'utf-8').trim();
 }
 
 export function currentTarget() {
-  const platform = { darwin: 'darwin', linux: 'linux', win32: 'windows' }[os.platform()] || 'unknown';
-  const arch = { arm64: 'arm64', x64: 'x64' }[os.arch()] || 'unknown';
-  return `${platform}-${arch}`;
+  return `${os.platform()}-${os.arch()}`;
 }
 
 export function binaryName(target) {
-  return target.startsWith('windows-') ? 'impeccable.exe' : 'impeccable';
+  return 'impeccable';
 }
 
 export function assetUrl(version, target, base = process.env.IMPECCABLE_DOWNLOAD_BASE || DEFAULT_DOWNLOAD_BASE) {
-  const asset = `impeccable-${target}${target.startsWith('windows-') ? '.exe' : ''}`;
+  const asset = `impeccable-${target}`;
   return `${base.replace(/\/$/, '')}/engine-v${version}/${asset}`;
 }
 
@@ -54,6 +52,31 @@ async function download(url) {
   const res = await fetch(url, { redirect: 'follow' });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText} for ${url}`);
   return Buffer.from(await res.arrayBuffer());
+}
+
+/** Download and checksum-verify one release binary. The sidecar is mandatory. */
+export async function fetchVerifiedBinary(target, version, base) {
+  const url = assetUrl(version, target, base);
+  let binary;
+  try {
+    binary = await download(url);
+  } catch (err) {
+    throw new Error(`release asset not available: ${err.message}. Publish the engine-v${version} binary and checksum on this fork first.`);
+  }
+  let sidecar;
+  try {
+    sidecar = (await download(`${url}.sha256`)).toString('utf-8').trim().split(/\s+/)[0];
+  } catch (err) {
+    throw new Error(`cannot verify ${url}: its .sha256 sidecar is missing (${err.message}); refusing an unverified binary`);
+  }
+  if (!/^[0-9a-f]{64}$/i.test(sidecar || '')) {
+    throw new Error(`cannot verify ${url}: its .sha256 sidecar is empty or malformed; refusing an unverified binary`);
+  }
+  const actual = createHash('sha256').update(binary).digest('hex');
+  if (actual !== sidecar.toLowerCase()) {
+    throw new Error(`checksum mismatch for ${url}: expected ${sidecar}, got ${actual}`);
+  }
+  return binary;
 }
 
 function install(buffer, target, dest) {
@@ -71,23 +94,13 @@ function install(buffer, target, dest) {
  * unavailable or its checksum does not match.
  */
 export async function fetchEngine(target, { version = readEngineVersion(), dest, base } = {}) {
+  if (!ENGINE_TARGETS.includes(target)) throw new Error(`unsupported target ${target}`);
   const local = process.env.IMPECCABLE_BIN;
   if (local && target === currentTarget()) {
     if (!fs.existsSync(local)) throw new Error(`IMPECCABLE_BIN points at a missing file: ${local}`);
     return install(fs.readFileSync(local), target, dest);
   }
-  const url = assetUrl(version, target, base);
-  const buffer = await download(url);
-  let checksum = null;
-  try {
-    checksum = (await download(`${url}.sha256`)).toString('utf-8').trim().split(/\s+/)[0];
-  } catch {
-    // No checksum published for this asset: accept the download as-is, like the launcher.
-  }
-  if (checksum) {
-    const actual = createHash('sha256').update(buffer).digest('hex');
-    if (actual !== checksum) throw new Error(`checksum mismatch for ${url}: expected ${checksum}, got ${actual}`);
-  }
+  const buffer = await fetchVerifiedBinary(target, version, base);
   return install(buffer, target, dest);
 }
 

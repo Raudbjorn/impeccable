@@ -9,11 +9,12 @@
  * orchestrator handles wrap, write, accept, and carbonize cleanup
  * deterministically.
  *
- * Primary provider/model: Anthropic + Claude Haiku 4.5. DeepSeek V4 Flash is
- * a secondary cheap fallback used only when ANTHROPIC_API_KEY is absent and
- * DEEPSEEK_API_KEY is present, or when explicitly forced with
- * IMPECCABLE_E2E_LLM_PROVIDER=deepseek. Override the model via { model } when
- * constructing, or via IMPECCABLE_E2E_LLM_MODEL at the call site.
+ * Primary provider/model: OpenAI + gpt-5.6-terra. Anthropic and MiniMax M3
+ * are fallbacks when their API keys are present, or can be selected with
+ * IMPECCABLE_E2E_LLM_PROVIDER. Inception Mercury is a fourth option,
+ * explicit-only unless INCEPTION_API_KEY is in the environment. Override the
+ * model via { model } when constructing, or via IMPECCABLE_E2E_LLM_MODEL at
+ * the call site.
  *
  * Prompt caching: live.md (the live-mode skill spec) is the bulk of the
  * system prompt and is stable across calls. We mark a cache_control breakpoint
@@ -25,10 +26,12 @@
  * unset; the test runner reads that and skips the case rather than failing.
  */
 
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Anthropic from '@anthropic-ai/sdk';
+import { imageSource } from '../../../skill/scripts/image-analyze.mjs';
 import { applyManualEditBatchToSource, loadManualEditEventBatch } from '../agent.mjs';
 import { applySteerEdits } from '../agent.mjs';
 
@@ -43,13 +46,30 @@ const LIVE_MD_PATH = path.join(REPO_ROOT, 'skill', 'reference', 'live.md');
 const DEFAULT_OPENAI_MODEL = 'gpt-5.6-terra';
 const DEFAULT_OPENAI_REASONING_EFFORT = 'medium';
 const DEFAULT_ANTHROPIC_MODEL = 'claude-haiku-4-5';
-// DeepSeek model list: https://api-docs.deepseek.com/api/list-models
-const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
-const DEFAULT_DEEPSEEK_API_BASE_URL = 'https://api.deepseek.com/anthropic';
+// Inception Labs' Mercury is a diffusion LLM: it drafts a whole response and
+// refines it, rather than emitting left to right, which makes it fast and
+// makes it a different failure shape from the autoregressive providers above.
+// Its API is OpenAI-shaped (verified: /v1/models lists mercury-2 as the only
+// id, and /v1/chat/completions returns the standard choices[0].message
+// envelope), so it rides createOpenAiShim with a baseURL override rather than
+// needing an SDK of its own.
+const DEFAULT_INCEPTION_MODEL = 'mercury-2';
+const DEFAULT_INCEPTION_API_BASE_URL = 'https://api.inceptionlabs.ai/v1';
+// The key is not kept in .env like the other three. It comes from a local
+// helper at call time so it never lands in a file. Set the env var to skip the
+// helper; set the command to the empty string to disable the lookup entirely,
+// which is what the unit tests do so they never shell out to a developer's
+// real credentials.
+const DEFAULT_INCEPTION_KEY_COMMAND = 'inceptionlabs-api-key';
 const LLM_REQUEST_MAX_RETRIES = 1;
 const VARIANT_REQUEST_TIMEOUT_MS = 105_000;
 const MANUAL_EDIT_REQUEST_TIMEOUT_MS = 55_000;
 const MANUAL_EDIT_RESPONSE_MAX_ATTEMPTS = 3;
+
+function requestOptions(timeout, signal) {
+  const deadline = AbortSignal.timeout(timeout);
+  return { maxRetries: LLM_REQUEST_MAX_RETRIES, timeout, signal: signal ? AbortSignal.any([signal, deadline]) : deadline };
+}
 
 export const VARIANT_SYSTEM_INSTRUCTIONS = [
   'You are an automated subagent inside Impeccable\'s live-mode test harness.',
@@ -193,7 +213,7 @@ const STEER_SYSTEM_INSTRUCTIONS = [
 
 /**
  * @typedef {object} LlmAgentOptions
- * @property {'anthropic' | 'deepseek'=} provider Override IMPECCABLE_E2E_LLM_PROVIDER.
+ * @property {'openai' | 'anthropic' | 'inception' | 'minimax'=} provider Override IMPECCABLE_E2E_LLM_PROVIDER.
  * @property {string=} apiKey  Override the selected provider's API key env var.
  * @property {string=} model   Override the selected provider's default model.
  * @property {string=} baseURL Override the provider API base URL.
@@ -202,13 +222,48 @@ const STEER_SYSTEM_INSTRUCTIONS = [
  * @property {(msg: string) => void=} log  Optional logger for debug output.
  */
 
+/**
+ * Runs the configured Inception key helper. Returns `{ key, error }` rather
+ * than logging directly: resolveLlmAgentConfig() is called well before a
+ * runner's diagnostic logger exists (it's wired up later, when
+ * createLlmAgent() is called with the already-resolved config), so a helper
+ * failure has to travel on the config itself to reach anything that can
+ * report it.
+ */
+function inceptionKeyFromHelper(env) {
+  const command = env.IMPECCABLE_E2E_INCEPTION_KEY_CMD ?? DEFAULT_INCEPTION_KEY_COMMAND;
+  if (!command) return { key: undefined, error: undefined };
+  try {
+    const out = execFileSync(command, { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] });
+    return { key: out.trim() || undefined, error: undefined };
+  } catch (err) {
+    // ENOENT means no helper on PATH, which is the expected state for anyone
+    // who hasn't installed it; stay silent. Anything else (nonzero exit,
+    // timeout, permission denied) means a helper the caller named is broken,
+    // so name it rather than let every runner report only a missing key.
+    if (err?.code === 'ENOENT') return { key: undefined, error: undefined };
+    return { key: undefined, error: `inception key helper "${command}" failed: ${err.message}` };
+  }
+}
+
+function validateLlmSelection(provider, model) {
+  if (!['openai', 'anthropic', 'minimax', 'inception'].includes(provider)) {
+    throw new Error(`Unsupported IMPECCABLE_E2E_LLM_PROVIDER: ${provider}`);
+  }
+  if (/^deepseek(?:[-/]|$)/i.test(String(model || '').trim())) {
+    throw new Error(`Unsupported IMPECCABLE_E2E_LLM_MODEL: ${model}; use MiniMax-M3 for MiniMax`);
+  }
+}
+
 export function resolveLlmAgentConfig(opts = {}, env = process.env) {
   const provider = resolveProvider(opts, env);
+  const model = opts.model || env.IMPECCABLE_E2E_LLM_MODEL;
+  validateLlmSelection(provider, model);
 
   if (provider === 'openai') {
     return {
       provider,
-      model: opts.model || env.IMPECCABLE_E2E_LLM_MODEL || DEFAULT_OPENAI_MODEL,
+      model: model || DEFAULT_OPENAI_MODEL,
       apiKey: opts.apiKey || env.OPENAI_API_KEY,
       requiredEnv: 'OPENAI_API_KEY',
       baseURL: opts.baseURL || env.OPENAI_BASE_URL,
@@ -219,24 +274,41 @@ export function resolveLlmAgentConfig(opts = {}, env = process.env) {
   if (provider === 'anthropic') {
     return {
       provider,
-      model: opts.model || env.IMPECCABLE_E2E_LLM_MODEL || DEFAULT_ANTHROPIC_MODEL,
+      model: model || DEFAULT_ANTHROPIC_MODEL,
       apiKey: opts.apiKey || env.ANTHROPIC_API_KEY,
       requiredEnv: 'ANTHROPIC_API_KEY',
       baseURL: opts.baseURL || env.ANTHROPIC_BASE_URL,
     };
   }
 
-  if (provider === 'deepseek') {
+  if (provider === 'minimax') {
     return {
       provider,
-      model: opts.model || env.IMPECCABLE_E2E_LLM_MODEL || DEFAULT_DEEPSEEK_MODEL,
-      apiKey: opts.apiKey || env.DEEPSEEK_API_KEY,
-      requiredEnv: 'DEEPSEEK_API_KEY',
-      baseURL: opts.baseURL || env.DEEPSEEK_API_BASE_URL || DEFAULT_DEEPSEEK_API_BASE_URL,
+      model: model || 'MiniMax-M3',
+      apiKey: opts.apiKey || env.MINIMAX_API_KEY,
+      requiredEnv: 'MINIMAX_API_KEY',
+      baseURL: opts.baseURL || env.MINIMAX_API_BASE_URL || 'https://api.minimax.io/anthropic',
     };
   }
 
-  throw new Error(`Unsupported IMPECCABLE_E2E_LLM_PROVIDER: ${provider}`);
+  if (provider === 'inception') {
+    let apiKey = opts.apiKey || env.INCEPTION_API_KEY;
+    let keyHelperError;
+    if (!apiKey) {
+      const helper = inceptionKeyFromHelper(env);
+      apiKey = helper.key;
+      keyHelperError = helper.error;
+    }
+    return {
+      provider,
+      model: model || DEFAULT_INCEPTION_MODEL,
+      apiKey,
+      requiredEnv: 'INCEPTION_API_KEY',
+      baseURL: opts.baseURL || env.INCEPTION_API_BASE_URL || DEFAULT_INCEPTION_API_BASE_URL,
+      reasoningEffort: opts.reasoningEffort || env.IMPECCABLE_E2E_LLM_EFFORT || DEFAULT_OPENAI_REASONING_EFFORT,
+      keyHelperError,
+    };
+  }
 }
 
 function resolveProvider(opts, env) {
@@ -244,19 +316,26 @@ function resolveProvider(opts, env) {
   if (explicit) return String(explicit).trim().toLowerCase();
   if (env.OPENAI_API_KEY) return 'openai';
   if (env.ANTHROPIC_API_KEY) return 'anthropic';
-  if (env.DEEPSEEK_API_KEY) return 'deepseek';
+  if (env.MINIMAX_API_KEY) return 'minimax';
+  // Only an explicit env var auto-selects Inception. The key helper is never
+  // consulted here: a helper sitting on PATH should not silently take over a
+  // run the caller did not ask for.
+  if (env.INCEPTION_API_KEY) return 'inception';
   return 'openai';
 }
 
 export function llmRequestSettings(provider) {
-  // DeepSeek defaults to high-effort thinking, which can consume the entire
-  // bounded response before emitting the JSON these edit tests exercise.
-  // Low effort retains planning for the full live spec without inheriting
-  // the provider's high-effort default.
-  // https://api-docs.deepseek.com/guides/thinking_mode/
-  return provider === 'deepseek'
-    ? { thinking: { type: 'enabled' }, output_config: { effort: 'low' } }
-    : {};
+  return provider === 'minimax' ? { thinking: { type: 'adaptive' } } : {};
+}
+
+/**
+ * Only Inception rides the Chat Completions path through the OpenAI shim;
+ * OpenAI itself uses the Responses API. Pulled out as its own function so a
+ * regression back to the unsupported Responses path for Inception is a unit
+ * test, not something only the paid, opt-in provider replay would catch.
+ */
+export function requiresChatCompletionsApi(provider) {
+  return provider === 'inception';
 }
 
 /**
@@ -267,7 +346,7 @@ export function llmRequestSettings(provider) {
  * (reasoning models reject it), and the reasoning effort rides through
  * providerOptions.
  */
-async function createOpenAiShim({ apiKey, baseURL, reasoningEffort, }) {
+async function createOpenAiShim({ apiKey, baseURL, reasoningEffort, useChatCompletions = false, }) {
   const [{ generateText }, { createOpenAI }] = await Promise.all([
     import('ai'),
     import('@ai-sdk/openai'),
@@ -275,16 +354,21 @@ async function createOpenAiShim({ apiKey, baseURL, reasoningEffort, }) {
   const provider = createOpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
   return {
     messages: {
-      async create({ model, system, messages, max_tokens }, { timeout } = {}) {
+      async create({ model, system, messages, max_tokens }, { timeout, signal } = {}) {
         const systemText = Array.isArray(system)
           ? system.map((block) => block?.text || '').filter(Boolean).join('\n\n')
           : String(system || '');
+        // provider(model) is the Responses API, which is what OpenAI itself
+        // serves. An OpenAI-compatible third party generally implements
+        // /chat/completions only, and the Responses call 404s against it, so
+        // those providers take provider.chat(model) instead. Verified: the
+        // Responses path returns {"detail":"Not Found"} from Inception.
         const result = await generateText({
-          model: provider(model),
+          model: useChatCompletions ? provider.chat(model) : provider(model),
           system: systemText,
           messages: messages.map((m) => ({ role: m.role, content: String(m.content) })),
           maxOutputTokens: max_tokens,
-          abortSignal: timeout ? AbortSignal.timeout(timeout) : undefined,
+          abortSignal: signal || (timeout ? AbortSignal.timeout(timeout) : undefined),
           providerOptions: { openai: { reasoningEffort } },
         });
         return {
@@ -306,14 +390,23 @@ async function createOpenAiShim({ apiKey, baseURL, reasoningEffort, }) {
  */
 export async function createLlmAgent(opts = {}) {
   const config = opts.config || resolveLlmAgentConfig(opts);
-  if (!config.apiKey) return null;
+  validateLlmSelection(config.provider, config.model);
+  const log = opts.log || (() => {});
+  if (!config.apiKey) {
+    // The runners resolve the config before a diagnostic logger exists, so a
+    // broken (as opposed to simply absent) Inception key helper can only be
+    // reported here, at the point where the caller's logger is finally in
+    // scope, right before the skip a missing key produces either way.
+    if (config.keyHelperError) log(config.keyHelperError);
+    return null;
+  }
 
   const { apiKey, baseURL, model, provider } = config;
-  const log = opts.log || (() => {});
+  const manualTimeout = provider === 'minimax' ? 90_000 : MANUAL_EDIT_REQUEST_TIMEOUT_MS;
 
   const liveMd = opts.includeLiveSpec === false ? null : await fs.readFile(LIVE_MD_PATH, 'utf-8');
-  const client = provider === 'openai'
-    ? await createOpenAiShim({ apiKey, baseURL, reasoningEffort: config.reasoningEffort })
+  const client = provider === 'openai' || provider === 'inception'
+    ? await createOpenAiShim({ apiKey, baseURL, reasoningEffort: config.reasoningEffort, useChatCompletions: requiresChatCompletionsApi(provider) })
     : new Anthropic({ apiKey, ...(baseURL ? { baseURL } : {}) });
   const systemBlocks = (instructions) => [
     {
@@ -335,6 +428,9 @@ export async function createLlmAgent(opts = {}) {
         '```',
       ].join('\n');
 
+      const screenshot = provider === 'minimax' && event.screenshotPath
+        ? await liveScreenshot(event.screenshotPath, context.tmp)
+        : null;
       let userMessage = baseUserMessage;
       for (let attempt = 0; attempt < MANUAL_EDIT_RESPONSE_MAX_ATTEMPTS; attempt += 1) {
         const lastAttempt = attempt + 1 >= MANUAL_EDIT_RESPONSE_MAX_ATTEMPTS;
@@ -345,20 +441,17 @@ export async function createLlmAgent(opts = {}) {
               ...llmRequestSettings(provider),
               model,
               temperature: 0,
-              max_tokens: 16000,
+              max_tokens: provider === 'minimax' ? 32_768 : 16000,
               // When present, live.md is the final cacheable stable prefix.
               // Benchmarks omit it so external payloads contain only the
               // synthetic element contract and per-run event.
               system: systemBlocks(VARIANT_SYSTEM_INSTRUCTIONS),
-              messages: [{ role: 'user', content: userMessage }],
+              messages: [{ role: 'user', content: screenshot ? [{ type: 'text', text: userMessage }, screenshot] : userMessage }],
             },
-            {
-              maxRetries: LLM_REQUEST_MAX_RETRIES,
-              timeout: VARIANT_REQUEST_TIMEOUT_MS,
-            },
+            requestOptions(provider === 'minimax' ? 360_000 : VARIANT_REQUEST_TIMEOUT_MS, context.signal),
           );
         } catch (err) {
-          if (lastAttempt) throw err;
+          if (lastAttempt || context.signal?.aborted) throw err;
           log(`variant request failed; retrying: ${err.message}`);
           userMessage = [
             baseUserMessage,
@@ -375,7 +468,7 @@ export async function createLlmAgent(opts = {}) {
         const inputTokens = response?.usage?.input_tokens ?? 0;
         const outputTokens = response?.usage?.output_tokens ?? 0;
         log(
-          `provider=${provider} model=${model} attempt=${attempt + 1} input=${inputTokens} output=${outputTokens} cache_read=${cacheRead} cache_write=${cacheWrite}`,
+          `provider=${provider} model=${model} attempt=${attempt + 1} input=${inputTokens} output=${outputTokens} stop=${response?.stop_reason} cache_read=${cacheRead} cache_write=${cacheWrite}`,
         );
         if (!response || !Array.isArray(response.content)) {
           if (lastAttempt) throw new Error('LLM agent: provider returned an empty variant response');
@@ -495,12 +588,10 @@ export async function createLlmAgent(opts = {}) {
               system: systemBlocks(MANUAL_EDIT_SYSTEM_INSTRUCTIONS),
               messages: [{ role: 'user', content: userMessage }],
             },
-            {
-              maxRetries: LLM_REQUEST_MAX_RETRIES,
-              timeout: MANUAL_EDIT_REQUEST_TIMEOUT_MS,
-            },
+            requestOptions(manualTimeout, context.signal),
           );
         } catch (err) {
+          if (context.signal?.aborted) throw err;
           if (attempt + 1 < MANUAL_EDIT_RESPONSE_MAX_ATTEMPTS) {
             log(`manual_apply request failed; retrying: ${err.message}`);
             userMessage = manualEditRetryMessage(baseUserMessage, [`provider request failed: ${err.message}`]);
@@ -514,7 +605,7 @@ export async function createLlmAgent(opts = {}) {
         const inputTokens = response?.usage?.input_tokens ?? 0;
         const outputTokens = response?.usage?.output_tokens ?? 0;
         log(
-          `manual_apply provider=${provider} model=${model} attempt=${attempt + 1} input=${inputTokens} output=${outputTokens} cache_read=${cacheRead} cache_write=${cacheWrite}`,
+          `manual_apply provider=${provider} model=${model} attempt=${attempt + 1} input=${inputTokens} output=${outputTokens} stop=${response?.stop_reason} cache_read=${cacheRead} cache_write=${cacheWrite}`,
         );
         if (!response || !Array.isArray(response.content)) {
           if (attempt + 1 < MANUAL_EDIT_RESPONSE_MAX_ATTEMPTS) {
@@ -623,10 +714,9 @@ export async function createLlmAgent(opts = {}) {
         max_tokens: 4096,
         system: systemBlocks(STEER_SYSTEM_INSTRUCTIONS),
         messages: [{ role: 'user', content: userMessage }],
-      }, provider === 'deepseek' ? {
-        maxRetries: LLM_REQUEST_MAX_RETRIES,
-        timeout: MANUAL_EDIT_REQUEST_TIMEOUT_MS,
-      } : {});
+      }, provider === 'minimax'
+        ? requestOptions(manualTimeout, context.signal)
+        : { signal: context.signal });
 
       const cacheRead = response.usage?.cache_read_input_tokens ?? 0;
       const inputTokens = response.usage?.input_tokens ?? 0;
@@ -1670,4 +1760,9 @@ function findJsonValueEnd(text, start) {
   }
 
   return -1;
+}
+
+export async function liveScreenshot(file, root) {
+  if (!root) throw new Error('A live workspace is required for screenshots');
+  return { type: 'image', source: await imageSource(file, { root }) };
 }

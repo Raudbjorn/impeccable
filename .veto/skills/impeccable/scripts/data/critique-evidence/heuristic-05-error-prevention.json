@@ -1,0 +1,80 @@
+{
+  "heuristic_id": "ep",
+  "heuristic_name": "Error Prevention",
+  "nielsen_index": 5,
+  "short_description": "Better than good error messages is a design that prevents problems in the first place.",
+  "catalog": {
+    "positive": [
+      {
+        "id": "ep-pos-confirm-destructive",
+        "impact": 2,
+        "definition": "Destructive action requires confirmation (modal, type-to-confirm, or two-step)",
+        "evidence_required": "name the action and the confirmation step"
+      },
+      {
+        "id": "ep-pos-constrained-input",
+        "impact": 2,
+        "definition": "Input field constrains values via picker, dropdown, or pattern (date picker, country dropdown)",
+        "evidence_required": "name the field and the constraint"
+      },
+      {
+        "id": "ep-pos-smart-defaults",
+        "impact": 1,
+        "definition": "Form preloads sensible defaults that reduce error likelihood",
+        "evidence_required": "name the field and the default"
+      },
+      {
+        "id": "ep-pos-clear-labels",
+        "impact": 1,
+        "definition": "Field labels and helper text remove ambiguity about what is expected",
+        "evidence_required": "name the field and the label or hint"
+      },
+      {
+        "id": "ep-pos-autosave",
+        "impact": 2,
+        "definition": "Long form autosaves drafts so user work is not lost on accidental navigation",
+        "evidence_required": "name the form and the autosave evidence"
+      }
+    ],
+    "negative": [
+      {
+        "id": "ep-neg-no-confirm-destruction",
+        "impact": -3,
+        "definition": "Destructive action runs immediately on click with no confirmation",
+        "evidence_required": "name the action"
+      },
+      {
+        "id": "ep-neg-free-text-where-constrained",
+        "impact": -2,
+        "definition": "Field accepts free text where a constrained input would prevent error (date as text, etc.)",
+        "evidence_required": "name the field and the missing constraint"
+      },
+      {
+        "id": "ep-neg-blank-defaults",
+        "impact": -1,
+        "definition": "Required fields ship with no defaults, forcing user to fill from scratch",
+        "evidence_required": "name the fields"
+      },
+      {
+        "id": "ep-neg-ambiguous-label",
+        "impact": -2,
+        "definition": "Field label is ambiguous so the user cannot tell what to enter",
+        "evidence_required": "cite the label and the resulting confusion"
+      },
+      {
+        "id": "ep-neg-no-draft-recovery",
+        "impact": -2,
+        "definition": "Long form loses all input on accidental navigation with no draft recovery",
+        "evidence_required": "name the form and the lost path"
+      }
+    ],
+    "critical_negative": [
+      {
+        "id": "ep-neg-accidental-account-destruction",
+        "impact": -5,
+        "definition": "A single click can permanently destroy account data, payment, or critical state with no recovery",
+        "evidence_required": "name the action and the irreversibility"
+      }
+    ]
+  }
+}

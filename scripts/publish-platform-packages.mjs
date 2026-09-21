@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Publish the five @impeccable/cli-<os>-<arch> npm platform packages for the
+ * Publish the supported @impeccable/cli-<os>-<arch> npm platform packages for the
  * pinned ENGINE_VERSION from the engine-v<ENGINE_VERSION> GitHub release.
  *
  * Step 3 of the engine cutover, as one command:
@@ -29,12 +29,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
   ENGINE_TARGETS,
   assetUrl,
   binaryName,
+  fetchVerifiedBinary,
   readEngineVersion,
 } from './fetch-engine.mjs';
 
@@ -77,37 +77,6 @@ export function stagePackage({ target, version, binary, template, license, outDi
   fs.chmodSync(binPath, 0o755);
   fs.writeFileSync(path.join(dir, 'LICENSE'), license);
   return dir;
-}
-
-async function download(url) {
-  const res = await fetch(url, { redirect: 'follow' });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText} for ${url}`);
-  return Buffer.from(await res.arrayBuffer());
-}
-
-/** Download and checksum-verify one release binary. The sidecar is mandatory. */
-export async function fetchVerifiedBinary(target, version, base) {
-  const url = assetUrl(version, target, base);
-  let binary;
-  try {
-    binary = await download(url);
-  } catch (err) {
-    throw new Error(`release asset not available: ${err.message}. Publish engine-v${version} first (bun run release:engine) and wait for release-engine.yml to finish.`);
-  }
-  let sidecar;
-  try {
-    sidecar = (await download(`${url}.sha256`)).toString('utf-8').trim().split(/\s+/)[0];
-  } catch (err) {
-    throw new Error(`cannot verify ${url}: its .sha256 sidecar is missing (${err.message}); refusing to publish an unverified binary`);
-  }
-  if (!/^[0-9a-f]{64}$/i.test(sidecar || '')) {
-    throw new Error(`cannot verify ${url}: its .sha256 sidecar is empty or malformed; refusing to publish an unverified binary`);
-  }
-  const actual = createHash('sha256').update(binary).digest('hex');
-  if (actual !== sidecar.toLowerCase()) {
-    throw new Error(`checksum mismatch for ${url}: expected ${sidecar}, got ${actual}`);
-  }
-  return binary;
 }
 
 /** True when <name>@<version> already exists on the registry. */

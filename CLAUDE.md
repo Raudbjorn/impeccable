@@ -2,7 +2,7 @@
 
 ## Architecture (v3.0+)
 
-There is **one** user-invocable skill, `impeccable`, with **24 commands** underneath it. Users type `/impeccable polish`, `/impeccable audit`, etc. The skill is defined in `skill/`:
+There is **one** user-invocable skill, `impeccable`, with **26 commands** underneath it. Users type `/impeccable polish`, `/impeccable audit`, etc. The skill is defined in `skill/`:
 
 - `SKILL.src.md` — frontmatter (with the auto-trigger-optimized description and the `allowed-tools` list), shared design laws, and the **Commands** router table. Provider `SKILL.md` files are generated from this source.
 - `reference/` — one `<command>.md` per command (`audit.md`, `polish.md`, `critique.md`, etc.), the shared playbooks the router loads outside the command table (`new-work.md`, `craft-floor.md`, `operate.md`, `routing.md`), and the native platform references (`ios.md`, `android.md`). When a sub-command is matched, the router loads its reference file.
@@ -17,8 +17,8 @@ The skill has no runtime of its own. Every command the skill text runs is `{{scr
 The binary is built from **this repo's Cargo workspace** (`Cargo.toml` at the root, `crates/*`; `cargo build --release -p impeccable`). Its verbs are the old script basenames (`context`, `doctor`, `pin`, `hook`, `hook-before-edit`, `live*`, `detect`, ...) with two aliases: `signals` for context-signals and `hooks` for hook-admin. Its observable behavior is specified in `docs/CLI-CONTRACT.md` and pinned by `tests/oracle/`. **Read `docs/ENGINE.md` before touching `crates/`**: it maps the crates and the browser-bundle flow.
 
 - **The rule engine is in the workspace.** Every `check_*` / `scan_*`, the browser rule adapters and the visual-contrast decisions live in `crates/core`, Apache-2.0 like everything else; `crates/foundation` holds what they are written against (JS semantics, color, the registry, the `Dom` trait, the plain-data input and output types) and `crates/core` re-exports it, so consumers name one crate. `crates/wasm` compiles the same source to WebAssembly for the extension, the live overlay and the site, and `cargo xtask bundle` builds those artifacts. There is no build-time download and no exact toolchain pin: `cargo build --release -p impeccable` works offline on stable.
-- **`ENGINE_VERSION`** (repo root) pins the engine release (`engine-v<X>` on this repo's GitHub Releases, built by `.github/workflows/release-engine.yml` when `bun run release:engine` pushes the tag). The build copies it to `skill/scripts/VERSION`, which the launcher reads to name the download and the cache dir; `cli/bin/cli.js` reads the same version from `package.json`'s `optionalDependencies`. Bumping it is a release-time decision, like the other manifest versions.
-- **Binaries are never tracked.** `skill/scripts/bin/` and `**/skills/impeccable/scripts/bin/` are gitignored, so the tracked provider dirs and `plugin/` ship launcher-only and users get the binary on first run. `bun run build:release` produces launcher-only zips by default; `IMPECCABLE_BUNDLE_ENGINE=1 bun run build:release` fetches every target (`scripts/fetch-engine.mjs --all --lenient`) and stages `bin/<os-arch>/` into the dist skill copies **after** the root harness dirs and `plugin/` were synced, so `dist/universal.zip` is self-contained for offline installs while git stays clean. Bundling is opt-in because five targets in every provider copy put `universal.zip` near 340 MB, past the 25 MB Cloudflare Pages file cap that `impeccable install` downloads through.
+- **`ENGINE_VERSION`** (repo root) pins the engine release (`engine-v<X>` on this fork's GitHub Releases). This fork has no workflows: build and upload the Linux x64 binary and checksum manually after `bun run release:engine` pushes the tag. The build copies the pin to `skill/scripts/VERSION`; `cli/bin/cli.js` reads the same version from `package.json`'s `optionalDependencies`. Keep the Cargo workspace version in sync so `engine-probe` reports the pinned fork version.
+- **Binaries are never tracked.** `skill/scripts/bin/` and `**/skills/impeccable/scripts/bin/` are gitignored, so the tracked provider dirs and `plugin/` ship launcher-only and users get the binary on first run. `bun run build:release` produces launcher-only zips by default; `IMPECCABLE_BUNDLE_ENGINE=1 bun run build:release` fetches the linux-x64 binary (`scripts/fetch-engine.mjs --all --lenient` for the staged copy) and stages `bin/linux-x64/` into the dist skill copies **after** the root harness dirs and `plugin/` were synced, so `dist/universal.zip` is self-contained for offline installs while git stays clean. The fork ships a single bundled target today; the env var is opt-in because the staged binary still trips the 25 MB Cloudflare Pages file cap that `impeccable install` downloads through.
 - **Tests get a binary** from `IMPECCABLE_BIN`, then `skill/scripts/bin/<os-arch>/` (`bun run fetch:engine`; `IMPECCABLE_BIN=<local build> bun run fetch:engine` copies a local build there), then `target/release/impeccable` from a plain `cargo build --release -p impeccable`. `tests/lib/engine-bin.mjs` is the one resolver; suites that need the binary skip cleanly without it.
 - **The oracle is the behavior gate.** `tests/oracle/` holds goldens recorded from the JS scripts before they left the tree, plus reviewed deltas in `DELTAS.md`; `tests/oracle.test.mjs` replays them against the binary in `bun run test`. New cases are recorded from the binary (`record.mjs --bin`) and reviewed by hand. `tests/oracle/vectors/calls/` is the frozen function-level snapshot; it cannot be regenerated.
 - **What stays JavaScript here:** the in-page live-mode JS (`skill/scripts/live-browser*.js`, `modern-screenshot.umd.js`), the build and test tooling, the extension shell, and the npm shim.
@@ -86,12 +86,12 @@ Impeccable writes files into user projects, so a released version has to cope wi
 
 ## Repo split: public product vs private service (impeccable-site)
 
-As of v4 the repo holds only the open-source product layer: the skill, CLI, extension, their tests, and the build that generates provider outputs. Everything service-side lives in the private repo `pbakaus/impeccable-site` (checked out at `~/code/impeccable-site`): the impeccable.style site, the review labs, the concept/composition catalogs and reviews, the world-card image pipeline and R2 publish, the Cloudflare Pages Functions (including `/api/roll` and `/api/chosen`), and `docs/WORLD-CATALOG-AUTHORING.md`.
+As of v4 the repo holds only the open-source product layer: the skill, CLI, extension, their tests, and the build that generates provider outputs. We're localising the concept/composition catalogs and reviews, the world-card image pipeline and R2 publish, the Cloudflare Pages Functions (including `/api/roll` and `/api/chosen`), and `docs/WORLD-CATALOG-AUTHORING.md`.
 
-Consequences here:
+Current behavior:
 
-- `impeccable concept-seed` has no local catalog. It resolves data via `IMPECCABLE_CATALOG_DIR` (private repo, evals, tests), then the roll API at impeccable.style, then a degraded promotion-only seed. Oracle cases run against `tests/fixtures/concept-catalog/`.
-- The choice-ping telemetry (`--chosen`) honors `DO_NOT_TRACK` and `IMPECCABLE_NO_TELEMETRY` and only fires for API-dealt rolls.
+- `impeccable concept-seed` uses configured local retrieval or catalog data when available; the legacy catalog path can still fall back to the roll API at impeccable.style, then a degraded promotion-only seed. Oracle cases run against `tests/fixtures/concept-catalog/`.
+- The choice-ping telemetry (`--chosen`) is permanently disabled on this fork (`concept_seed::telemetry_disabled` always returns `true`, `ping_chosen` always returns `false`); it never fires regardless of `DO_NOT_TRACK` or `IMPECCABLE_NO_TELEMETRY`.
 - Site copy, changelog, theme, and count validation for site pages happen in impeccable-site; this repo's `validateProse` scans only the READMEs.
 - The release script reads the changelog from `../impeccable-site/site/pages/changelog.astro` when releasing from here.
 - Never add catalog data files back to this repo; the catalog is the paid-service moat.
@@ -123,6 +123,7 @@ bun run fetch:engine     # Download the pinned engine binary for this machine in
 The skill's `scripts/` payload is copied verbatim to every provider (launcher with its executable bit, `impeccable.cmd`, `VERSION`, `command-metadata.json`, page JS); nothing under `skill/scripts/bin/` is read as source. The in-page detector bundle and the extension's detector pieces are produced by `cargo xtask bundle`, which `bun run build:extension` runs; the page JS and the bundling itself live in the `impeccable-bundle` library crate (`crates/bundle`) so a downstream rule pack can build the same artifacts for its own wasm module.
 
 Source files use placeholders that get replaced per-provider:
+
 - `{{model}}` — Model name (Claude, Gemini, GPT, etc.)
 - `{{config_file}}` — Config file name (CLAUDE.md, .cursorrules, etc.)
 - `{{ask_instruction}}` — How to ask user questions
@@ -136,19 +137,11 @@ Source files use placeholders that get replaced per-provider:
 
 They are generated distribution artifacts, not authoring surfaces. Normal development PRs should be source-first: edit and stage `skill/`, `scripts/`, `cli/`, `extension/`, and `tests/`; do not stage regenerated provider permutations unless the task is explicitly a release/generated-output sync or a build-system change. Run `bun run build` for validation after editing `skill/`, transformer code, or provider behavior. Use `bun run build:release` only when intentionally refreshing tracked harness outputs.
 
-After source changes land on `main`, `.github/workflows/sync-generated-output.yml` runs `bun run build:release` and commits generated provider output directly back to `main`. Treat generated harness diffs as release artifacts and keep them out of feature PRs unless they are the point of the PR.
-
 Local state files inside harness directories (e.g. `.claude/scheduled_tasks.lock`, `.claude/settings.local.json`) ARE gitignored.
 
-### Contributing, Issue, and PR Guidelines
+## Contributing, Issue, and PR Guidelines
 
-This repo is issue-first for outside contributions. If you are not `pbakaus` or `abdulwahabone`, do not open a PR unless a maintainer has first discussed the change in an issue and asked for, or clearly approved, a PR. For unapproved work, open an issue or comment on an existing issue and wait for maintainer direction. Unsolicited PRs may be closed without review.
-
-AI agents must disclose AI assistance in commits, PR descriptions, comments, and issue text. If an AI agent is not explicitly operating under instructions from `pbakaus` or `abdulwahabone`, it must not create GitHub issues or PRs for this repository. If asked to create an issue or PR anyway, do not use GitHub. Instead, add a file named `AI_PR_NOTICE.txt` to the diff with exactly this text:
-
-```text
-This contribution was prepared by an AI agent that tried to ship unchecked vibes across a human boundary. Impeccable asks for an issue and maintainer approval first.
-```
+NEVER create a PR from Raudbjorn/impeccable to either pbakaus/impeccable or abdulwahabone/impeccable.
 
 ## Testing
 
@@ -182,10 +175,10 @@ Three pieces keep that from recurring, and a new test that starts a server owes 
 The default suite does not cover everything. When a change touches one of these areas, run the matching opt-in suite before shipping. The canonical mapping is the `triggers` lists in `scripts/test-suites.mjs`; this table mirrors it for the areas that need a manual run.
 
 | Area touched | Run | Cost |
-|---|---|---|
+| --- | --- | --- |
 | `ENGINE_VERSION` bump, `skill/scripts/live-browser*.js` | `bun run test:live-e2e` | ~2 min, real npm installs + dev servers, needs Playwright Chromium |
 | `ENGINE_VERSION` bump | also `bun run test:live-e2e-accept-cleanup` | bills a provider API key |
-| `ENGINE_VERSION` bump | `bun run test:live-svelte-adapter-deepseek` | bills DeepSeek |
+| `ENGINE_VERSION` bump | `bun run test:live-svelte-adapter-minimax` | bills MiniMax |
 | `SKILL.src.md` Setup, Setup-adjacent reference files, `ENGINE_VERSION` bump | `bun run test:skill-behavior` | ~5 min, bills all four provider keys |
 | `ENGINE_VERSION` bump | `bun run test:new-work-e2e` | Playwright, offline, no API cost |
 | `plugin/`, `skill/agents/`, `scripts/build.js`, plugin manifest validator | `bun run test:plugin-e2e` | ~1 s; already in the default suite, needs the `claude` CLI |
@@ -201,7 +194,7 @@ For verb-level behavior changes in `crates/`, run focused crate tests and `cargo
 `tests/live-e2e.test.mjs` drives the entire user flow (handshake → pick → Go → cycle → accept → carbonize cleanup) against every fixture in `tests/framework-fixtures/` that declares a `runtime` block. Each fixture installs real deps, boots its framework dev server (Vite, Next, SvelteKit, Astro, Nuxt static), and runs Playwright Chromium against a deterministic fake agent that produces realistic variants in the exact format `reference/live.md` describes.
 
 ```bash
-bun run test:live-e2e                                       # full suite, ~2 min, 19 fixtures
+bun run test:live-e2e                                       # full suite, ~2 min, 26 fixtures
 IMPECCABLE_E2E_ONLY=vite8-react-modal bun run test:live-e2e # scope to one fixture
 IMPECCABLE_E2E_DEBUG=1 bun run test:live-e2e                # dump page DOM + dev-server tail on failure
 ```
@@ -218,7 +211,7 @@ Three live-mode invariants worth knowing before editing (established by the 2026
 
 The agent is pluggable via a one-method interface in `tests/live-e2e/agent.mjs`: `generateVariants(event, context) → { scopedCss, variants[] }`. The default fake agent emits canned variants that exercise all three param kinds (`range`, `steps`, `toggle`). The orchestrator (wrap, write, accept, carbonize) is agent-agnostic.
 
-**LLM agent (opt-in)**: set `IMPECCABLE_E2E_AGENT=llm` to swap the fake agent for `tests/live-e2e/agents/llm-agent.mjs`. Default provider/model: OpenAI `gpt-5.6-terra` at medium reasoning effort (a frontier tier, matching what drives real live sessions); Anthropic and DeepSeek remain selectable via `IMPECCABLE_E2E_LLM_PROVIDER`. Requires the selected provider's key in env (`OPENAI_API_KEY` by default); the test runner skips with a clear message when it's unset. Override the model with `IMPECCABLE_E2E_LLM_MODEL` and the effort with `IMPECCABLE_E2E_LLM_EFFORT`. Caching is on — live.md is the cacheable prefix, and after the first call subsequent fixtures pay only the cache-read rate. Pass rate on a typical sweep is 18/19; the modal fixture's intrinsic state-loss flake is amplified by LLM latency and may need a re-run. **This path hits the API and costs money** — keep it out of CI unless you really want it there.
+**LLM agent (opt-in)**: set `IMPECCABLE_E2E_AGENT=llm` to swap the fake agent for `tests/live-e2e/agents/llm-agent.mjs`. Default provider/model: OpenAI `gpt-5.6-terra` at medium reasoning effort (a frontier tier, matching what drives real live sessions); Anthropic, MiniMax, and Inception remain selectable via `IMPECCABLE_E2E_LLM_PROVIDER`. Inception serves Mercury (`mercury-2`), a diffusion LLM whose failure shape differs from the autoregressive three; its API is OpenAI-compatible, so it rides the same shim with a `baseURL` override, but only over `/chat/completions` (`provider.chat(model)`) because it does not implement the Responses API the OpenAI default uses. Its key is the one provider key not kept in `.env`: with `INCEPTION_API_KEY` unset the harness runs a local helper (`inceptionlabs-api-key`, overridable with `IMPECCABLE_E2E_INCEPTION_KEY_CMD`, empty string to disable) so the key never lands in a file. A helper on PATH never auto-selects the provider; only an explicit `IMPECCABLE_E2E_LLM_PROVIDER=inception` or `INCEPTION_API_KEY` in the environment does. Every other provider requires its key in env (`OPENAI_API_KEY` by default); the test runner skips with a clear message when it's unset. Override the model with `IMPECCABLE_E2E_LLM_MODEL` and the effort with `IMPECCABLE_E2E_LLM_EFFORT`. Caching is on — live.md is the cacheable prefix, and after the first call subsequent fixtures pay only the cache-read rate. The modal fixture's intrinsic state-loss flake is amplified by LLM latency and may need a re-run. Measured sweep, 2026-09-06, Inception `mercury-2`: 23 of 26 fixtures pass in 12 minutes. All three failures reproduce only under Mercury (the same three pass with the fake agent), and each is a distinct output-quality miss rather than a harness fault: `vite8-react-mapped-list` rewrote a sibling branch inside a `.map()` and tripped the "sibling branch must not be rewritten" assertion; `vite8-react-unocss` named a param `colorScheme`, and the resulting `data-p-colorScheme` attribute is one React rejects as non-lowercase, failing the clean-console check; `vite8-sveltekit-stateful` burned all three retries inserting whitespace into copy it was told to preserve verbatim (`BelegStudio` became `Beleg Studio`), which is the failure a model that denoises a whole block rather than emitting left to right is most likely to have. Under Mercury only, accept also logs a non-fatal `live-complete` failure that does not appear with the fake agent; it is unexplained, and a fixture can still pass through it. **This path hits the API and costs money** — keep it out of CI unless you really want it there.
 
 Adding a new fixture is a matter of cloning a directory under `tests/framework-fixtures/`, swapping the source files, and writing a `fixture.json`. See `tests/framework-fixtures/README.md` for the full schema.
 
@@ -232,7 +225,7 @@ IMPECCABLE_SKILL_BEHAVIOR_MODELS=gemini-3.5-flash bun run test:skill-behavior   
 IMPECCABLE_SKILL_BEHAVIOR_VERBOSE=1 bun run test:skill-behavior    # dump per-scenario trace JSON to stderr (use when iterating)
 ```
 
-**Frontier tiers, more than one family.** The lineup is `DEFAULT_MODELS` in `tests/skill-behavior/providers.mjs`, currently `claude-sonnet-5` and `gemini-3.6-flash`. `gpt-5.6-luna` and `deepseek-v4-flash` were dropped in 2026-08: below the frontier tier they fail scenarios for model-floor reasons rather than skill-text defects, and a suite that is always red is a suite nobody reads. **Don't substitute Claude alone**: many of the most useful findings come from divergence between families, so keep at least two. The dropped models stay selectable via `IMPECCABLE_SKILL_BEHAVIOR_MODELS` when a Setup or routing change warrants a wider sweep.
+**Frontier tiers, more than one family.** The lineup is `DEFAULT_MODELS` in `tests/skill-behavior/providers.mjs`: `claude-sonnet-5`, `gpt-5.6-terra`, `gemini-3.7-flash`, and `MiniMax-M3`. Override it with `IMPECCABLE_SKILL_BEHAVIOR_MODELS` for a scoped run. MiniMax replaces the former DeepSeek API provider and uses `MINIMAX_API_KEY` with the installed Anthropic-compatible SDK. Keep coverage across model families when checking Setup or routing changes.
 
 **Auth** lives in repo-root `.env` (copied from `~/code/impeccable-evals/.env`, gitignored). Providers skip cleanly when their key is unset; they don't fail.
 
@@ -259,28 +252,31 @@ The package no longer exports a JS detector API (`main` / `exports` are gone); t
 
 ## Versioning
 
-**Feature PRs do not bump versions and do not add changelog entries.** Bumping is a release step, not part of the change that earns the release: a version in a feature branch conflicts with every other open branch, and a changelog entry describes a release that has not happened. Land the code first; the maintainer bumps and writes the changelog when cutting the release. This holds even though the "Bump when: ..." notes below name the source dirs — those say *which* component a change belongs to, not *when* to edit the manifest. The only PR that touches a manifest version is one whose purpose is the release itself.
-
 There are three independently versioned components plus the engine pin. Only bump the one(s) that actually changed:
 
 **Engine pin** (`ENGINE_VERSION`, root):
+
 - The engine release the launcher downloads and the npm shim's `optionalDependencies` pin. Bump it when a new engine release is published; keep `package.json` `optionalDependencies` at the same version and run `bun run build` (it rewrites `skill/scripts/VERSION`). A skill release that needs the new engine bumps this together with the skill version.
 
 **CLI** (npm package):
+
 - `package.json` → `version`
 - Bump when: CLI shim code changes (`cli/bin/cli.js`, `cli/platform-packages/`)
 
 **Skills** (Claude Code plugin / skill definitions):
+
 - `.claude-plugin/plugin.json` → `version` (source of truth)
 - `.claude-plugin/marketplace.json` → `plugins[0].version`
 - Bump when: skill content changes (`skill/`, reference files, command metadata, etc.)
 - After bumping, run `bun run build:release` so the committed `./plugin` subtree (`plugin/.claude-plugin/plugin.json` + `plugin/skills/impeccable/SKILL.md`) is regenerated to the new version. The build validator (`validatePluginVersions` in `scripts/build.js`) fails if `marketplace.json`, the `./plugin` manifest, or the bundled `SKILL.md` frontmatter disagree with `plugin.json` — this guards the marketplace install path against version drift (issue #274).
 
 **Chrome extension**:
+
 - `extension/manifest.json` → `version`
 - Bump when: extension code changes (`extension/`), or a rule change alters what the shipped bundle detects. The extension runs the rules as WebAssembly in an offscreen document; `extension/detector/` is built at package time by `cargo xtask bundle` and is not tracked, so an extension release always needs `bun run build:extension` (and therefore a Rust toolchain plus `wasm-pack`) before the zip is attached.
 
 **Website changelog** (`site/pages/changelog.astro` in the private impeccable-site repo):
+
 - Add a new `<article>` entry at the top of the relevant component's group, and move the `cf-entry--current` class + `Current` badge onto it (off the previous newest skill entry). The component is derived from the entry `id` prefix: `cli-*`, `ext-*`, else skill.
 - Keep it concise and sell the release: a short `cf-entry-lead` that frames what shipped, then a handful of tight `<li>` items. Lead with the most compelling feature.
 - User-facing only. Every item must be something an impeccable user would notice or act on (a new command behavior, rule, or fix). Leave out internal build/tooling/refactor details, dependency bumps, and generated-output syncs.
@@ -307,13 +303,13 @@ If you need to fix release notes after the fact (typo, missing thank-you, format
 
 ### Release order is mechanically enforced (triage decision D4)
 
-The skill launcher, the npm shim (`cli/bin/cli.js`), and `impeccable install` all resolve the engine binary for the pinned `ENGINE_VERSION`. Nothing they do works until the engine release exists first. **The order is: publish the engine release, then the platform packages, then release/merge the skill (or CLI):**
+The skill launcher, npm shim (`cli/bin/cli.js`), and `impeccable install` resolve the fork binary for `ENGINE_VERSION`. **Publish the engine before merging its pins or releasing the skill/CLI.**
 
-1. Publish engine `engine-v<ENGINE_VERSION>`: `bun run release:engine` tags and pushes; `release-engine.yml` builds the five `impeccable-<os>-<arch>[.exe]` binaries plus a `.sha256` beside each and publishes the release on this repo. The whole workspace builds from source, so nothing has to ship ahead of it.
-2. Publish the five `@impeccable/cli-<os>-<arch>@<ENGINE_VERSION>` npm platform packages.
-3. Only then tag/publish the skill or CLI release, and only then merge a branch that bumps `ENGINE_VERSION` (the `sync-generated-output.yml` workflow rewrites provider dirs on merge to `main`).
+1. Prepare a fork-specific engine version, update the Cargo workspace and npm pin, regenerate lockfiles, run tests, and commit `bun run build:release` output with the source changes.
+2. `bun run release:engine` tags and pushes the tested commit. Manually publish `impeccable-linux-x64` and `impeccable-linux-x64.sha256` on this fork's release. No workflow builds or uploads them.
+3. Run `bun run check:engine-release` and verify both launchers with empty caches before merging the pins or publishing the skill/CLI. npm platform packages are optional; they are not a release prerequisite.
 
-`scripts/check-engine-release.mjs` verifies step 1 and 2 for the pinned version (ranged-GET each release asset, registry-probe each npm package; honors `IMPECCABLE_DOWNLOAD_BASE`). It exits non-zero and names exactly which assets are missing. `scripts/release.mjs` runs it as a hard gate before tagging the **skill** and **CLI** components and refuses to proceed when any asset is absent; the **extension** release is exempt because it ships a vendored WASM detector and never execs the engine. `IMPECCABLE_SKIP_ENGINE_CHECK=1` bypasses the gate only for the case where the assets exist but the registry probe is unreachable. CI's `engine-release-ready` job runs the same script as a hard gate, so missing release assets fail CI.
+`scripts/check-engine-release.mjs` downloads the fork's pinned binary and verifies its SHA-256 against the required sidecar (honors `IMPECCABLE_DOWNLOAD_BASE`). `scripts/release.mjs` runs it as a hard gate before **skill** and **CLI** releases; the **extension** is exempt because it ships WASM. `IMPECCABLE_SKIP_ENGINE_CHECK=1` is only for existing assets whose release probe is unreachable. Run the gate locally; this fork has no CI or generated-output sync workflow.
 
 ## Adding New Commands
 
@@ -344,7 +340,7 @@ The build validator (`generateCounts` in `scripts/build.js`) checks these files 
 The rule logic lives in `crates/core`: every check, the browser rule adapters over the `Dom` trait, and the visual-contrast decisions. `crates/wasm` compiles the same source for the extension, the live overlay and the site. Everything a rule change touches:
 
 | Where | What it is |
-|---|---|
+| --- | --- |
 | `docs/CLI-CONTRACT.md` | Hand-edited: the observable contract of `impeccable detect` and every other verb |
 | `crates/foundation` | What checks are written against: the rule registry (`registry.rs`, also published as `antipatterns.json`), findings, color, the `Dom` trait, `SnapshotDom`, and the plain-data input and output types |
 | `crates/core` | The checks themselves, plus the re-exports that let consumers name one crate |

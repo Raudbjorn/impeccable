@@ -43,8 +43,6 @@ fn stage_bundle_zip(path: &str, os: &str, arch: &str) {
     zip.write_all(b"---\nname: impeccable\n---\n# impeccable\n").unwrap();
     zip.start_file(".claude/skills/impeccable/scripts/impeccable", modeless).unwrap();
     zip.write_all(b"#!/bin/sh\nexit 0\n").unwrap();
-    zip.start_file(".claude/skills/impeccable/scripts/impeccable.cmd", plain).unwrap();
-    zip.write_all(b"@echo off\r\n").unwrap();
     zip.start_file(".claude/skills/impeccable/scripts/VERSION", plain).unwrap();
     zip.write_all(b"9.9.9-exec-test\n").unwrap();
     // A staged engine binary: its presence keeps install_engine_binaries off

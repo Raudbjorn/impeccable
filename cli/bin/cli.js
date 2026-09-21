@@ -12,21 +12,51 @@ import path from 'node:path';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../../package.json');
-const OS = { darwin: 'darwin', linux: 'linux', win32: 'windows' }[process.platform] || process.platform;
-const ARCH = { arm64: 'arm64', x64: 'x64' }[process.arch] || process.arch;
+const OS = process.platform;
+const ARCH = process.arch;
 const TARGET = `${OS}-${ARCH}`;
-const EXE = OS === 'windows' ? 'impeccable.exe' : 'impeccable';
+const EXE = 'impeccable';
 const PLATFORM_PKG = `@impeccable/cli-${TARGET}`;
 // The engine version travels as the pinned optionalDependency range.
 const VERSION = String(pkg.optionalDependencies?.[PLATFORM_PKG] || Object.values(pkg.optionalDependencies || {})[0] || '').replace(/^[^\d]*/, '');
 const CACHE_ROOT = process.env.IMPECCABLE_HOME || path.join(os.homedir(), '.impeccable');
 const CACHED = path.join(CACHE_ROOT, 'bin', VERSION, EXE);
-const BASE = (process.env.IMPECCABLE_DOWNLOAD_BASE || 'https://github.com/pbakaus/impeccable/releases/download').replace(/\/$/, '');
-const URL = `${BASE}/engine-v${VERSION}/impeccable-${TARGET}${OS === 'windows' ? '.exe' : ''}`;
+const BASE = (process.env.IMPECCABLE_DOWNLOAD_BASE || 'https://github.com/Raudbjorn/impeccable/releases/download').replace(/\/$/, '');
+const URL = `${BASE}/engine-v${VERSION}/impeccable-${TARGET}`;
 
 function exists(p) { try { return !!p && fs.statSync(p).isFile(); } catch { return false; } }
+// npm writes a repository URL several ways for the same repo (`git+https://`,
+// bare `https://`, with or without `.git`, or the `github:owner/name`
+// shorthand), so compare the repo it identifies rather than the string. A
+// package that names a different repo is another distribution's build and is
+// declined; the reason is printed, because silently falling through to a
+// download looks identical to having no package at all.
+function repoIdentity(repository) {
+  const url = typeof repository === 'string' ? repository : repository?.url;
+  if (!url) return null;
+  const m = String(url).match(/(?:github\.com[/:]|^github:)([^/]+)\/([^/#]+?)(?:\.git)?(?:#.*)?$/i);
+  return m ? `${m[1].toLowerCase()}/${m[2].toLowerCase()}` : String(url);
+}
 function fromPackage() {
-  try { return path.join(path.dirname(require.resolve(`${PLATFORM_PKG}/package.json`)), 'bin', EXE); } catch { return null; }
+  let manifest;
+  try { manifest = require.resolve(`${PLATFORM_PKG}/package.json`); } catch { return null; }
+  try {
+    const installed = require(manifest);
+    const want = repoIdentity(pkg.repository);
+    const got = repoIdentity(installed.repository);
+    if (installed.version !== VERSION) {
+      process.stderr.write(`impeccable: ignoring ${PLATFORM_PKG}@${installed.version}; this build pins ${VERSION}.\n`);
+      return null;
+    }
+    if (want && got !== want) {
+      process.stderr.write(`impeccable: ignoring ${PLATFORM_PKG} built from ${got ?? 'an unknown repo'}; this build expects ${want}.\n`);
+      return null;
+    }
+    return path.join(path.dirname(manifest), 'bin', EXE);
+  } catch (err) {
+    process.stderr.write(`impeccable: ignoring unreadable ${PLATFORM_PKG} (${err.message}).\n`);
+    return null;
+  }
 }
 async function download() {
   if (!VERSION) return null;
@@ -74,6 +104,11 @@ const argv = process.argv.slice(2);
 if (argv[0] === '--version' || argv[0] === '-v') {
   process.stdout.write(`${pkg.version}\n`);
   process.exit(0);
+}
+
+if (OS !== 'linux' || ARCH !== 'x64') {
+  process.stderr.write(`impeccable: unsupported platform ${TARGET}; supported: linux-x64.\n`);
+  process.exit(127);
 }
 
 const bin = await locate();

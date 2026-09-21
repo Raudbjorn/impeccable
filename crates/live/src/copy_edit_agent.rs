@@ -464,10 +464,7 @@ fn is_inside_quoted_literal(line: &str, index: usize) -> bool {
 /// JS: runManualEditValidationScript(cwd)
 fn run_manual_edit_validation_script(cwd: &str) -> Option<Value> {
     let script = read_manual_edit_validation_script(cwd)?;
-    // JS: spawnSync(script, { shell: true }): /bin/sh -c on unix, cmd.exe on
-    // Windows.
-    let comspec = std::env::var("ComSpec").ok();
-    let child = proc::shell(&script, comspec.as_deref())
+    let child = proc::shell(&script)
         .current_dir(cwd)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())

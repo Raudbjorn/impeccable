@@ -393,3 +393,78 @@ fn push_unique(v: &mut Vec<usize>, k: usize) {
         v.push(k);
     }
 }
+
+#[cfg(test)]
+mod glob_tests {
+    use super::glob_to_regex;
+
+    // Ported from tests/live-path-glob.test.mjs, which covered
+    // livePathGlobToRegex before the JS live scripts left the tree. The
+    // translation this pins is fiddly (three distinct `*` forms, an escape
+    // set, and anchoring) and nothing else exercised it directly.
+    fn matches(pattern: &str, path: &str) -> bool {
+        glob_to_regex(pattern).is_match(path)
+    }
+
+    #[test]
+    fn anchors_exact_matches() {
+        assert!(matches("src/App.tsx", "src/App.tsx"));
+        assert!(!matches("src/App.tsx", "App.tsx"));
+        assert!(!matches("src/App.tsx", "src/App.tsx/extra"));
+    }
+
+    #[test]
+    fn single_star_does_not_cross_path_separators() {
+        assert!(matches("*.tsx", "App.tsx"));
+        assert!(matches("*.tsx", "Button.tsx"));
+        assert!(!matches("*.tsx", "components/Button.tsx"));
+        assert!(!matches("*.tsx", "src/components/Button.tsx"));
+    }
+
+    #[test]
+    fn double_star_crosses_path_separators() {
+        assert!(matches("**/*.tsx", "App.tsx"));
+        assert!(matches("**/*.tsx", "Button.tsx"));
+        assert!(matches("**/*.tsx", "components/Button.tsx"));
+        assert!(matches("**/*.tsx", "src/components/Button.tsx"));
+    }
+
+    #[test]
+    fn double_star_without_trailing_slash_anchors_at_start_only() {
+        assert!(matches("src/**", "src/App"));
+        assert!(matches("src/**", "src/components/Button"));
+        assert!(!matches("src/**", "App"));
+        assert!(!matches("src/**", "src2/Button"));
+    }
+
+    #[test]
+    fn question_mark_matches_one_character() {
+        assert!(matches("src/?.tsx", "src/a.tsx"));
+        assert!(matches("src/?.tsx", "src/x.tsx"));
+        assert!(!matches("src/?.tsx", "src/ab.tsx"));
+        assert!(!matches("src/?.tsx", "src/.tsx"));
+    }
+
+    #[test]
+    fn escapes_regex_special_characters() {
+        assert!(matches("src/app.test.tsx", "src/app.test.tsx"));
+        assert!(!matches("src/app.test.tsx", "src/appXtest.tsx"));
+        assert!(!matches("src/app.test.tsx", "src/app-test.tsx"));
+        // A literal bracket pair must escape rather than compile as a class;
+        // an unescaped `[` would fail Regex::new and fall back to `^$`,
+        // which silently matches nothing.
+        assert!(matches("src/app[1].tsx", "src/app[1].tsx"));
+    }
+
+    #[test]
+    fn handles_empty_pattern() {
+        assert!(glob_to_regex("").is_match(""));
+        assert!(!glob_to_regex("").is_match("x"));
+    }
+
+    #[test]
+    fn multiple_double_star_segments_work() {
+        assert!(matches("src/**/components/**/*.tsx", "src/a/b/components/x/y/Button.tsx"));
+        assert!(!matches("src/**/components/**/*.tsx", "components/Button.tsx"));
+    }
+}

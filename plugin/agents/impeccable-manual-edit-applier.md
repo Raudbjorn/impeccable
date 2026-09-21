@@ -95,3 +95,5 @@ No entries applied:
 ```
 
 `appliedEntryIds` must contain only entries whose every op landed. `files` must list every source file you changed. `failed` and `notes` must always be arrays. `failed` must list entries you did not fully apply.
+
+Script paths above resolve against `$CLAUDE_PLUGIN_ROOT` because this file is loaded as a plugin agent, and a spawned agent never loads SKILL.md. The skill reference docs resolve the same scripts against the skill base directory Setup defines. The two forms are the loader contract, not drift.

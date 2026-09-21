@@ -1,0 +1,7 @@
+{
+  "stdout": "",
+  "stderr": "generate-image: no region nope in spec.json; ids: top, art, body\n",
+  "exit": 1,
+  "signal": null,
+  "files": {}
+}

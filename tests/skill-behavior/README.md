@@ -2,8 +2,8 @@
 
 LLM-backed scenarios that verify how the impeccable skill drives context,
 command-reference, new-work, and native-platform loading. Each scenario runs
-against the default Anthropic, OpenAI, and Google models. DeepSeek remains
-available through `IMPECCABLE_SKILL_BEHAVIOR_MODELS`.
+against the default Anthropic, OpenAI, Google, and MiniMax models. MiniMax M3
+replaces the former DeepSeek API provider.
 
 These are the tests you re-run when you refactor anything in SKILL.md's
 `## Setup` section. They fail when the agent stops following the loading
@@ -16,11 +16,18 @@ bun run test:skill-behavior
 IMPECCABLE_SKILL_BEHAVIOR_VERBOSE=1 bun run test:skill-behavior   # dump per-scenario traces
 IMPECCABLE_SKILL_BEHAVIOR_MODELS=claude-sonnet-5 bun run test:skill-behavior   # scope to one model
 IMPECCABLE_SKILL_BEHAVIOR_EFFORT=xhigh bun run test:skill-behavior             # OpenAI reasoning effort (default: high)
+export MINIMAX_API_KEY="$(minimax-api-key)"
+IMPECCABLE_SKILL_BEHAVIOR_MODELS=MiniMax-M3 bun run test:skill-behavior
 ```
 
 Requires `.env` at repo root with at least one of `ANTHROPIC_API_KEY`,
-`OPENAI_API_KEY`, `GOOGLE_CLOUD_API_KEY`, `DEEPSEEK_API_KEY`. Providers without a key are
+`OPENAI_API_KEY`, `GOOGLE_CLOUD_API_KEY`, `MINIMAX_API_KEY`. Providers without a key are
 skipped, not failed.
+
+Shell tools require Linux with `bwrap` (Bubblewrap). Commands run with their own
+process namespace and temporary directory. Only the fixture workspace persists writes; browser configuration and caches use the private temporary directory.
+This prevents model-authored cleanup commands from killing other test browsers.
+The read tool delivers local images as image content for vision-capable models, including MiniMax.
 
 Also requires the engine binary (`bun run fetch:engine`, or `IMPECCABLE_BIN`).
 The staged skill dir ships the launcher (`scripts/impeccable`); the harness
@@ -213,6 +220,21 @@ Each scenario:
 
 The trace is the source of truth, not the model's free-form reply.
 
+Reference checkpoints wait for both the requested reference and a successful
+context-loader call, in either order. S4's follow-up reuses its verified prior
+context instead. A checkpoint only establishes this routing evidence; it does
+not establish task completion. The simulated user continues in the intended
+workspace, skipping cancellation/wrong-directory options unless a scenario
+explicitly supplies that answer.
+
+Turn deadlines allow 60 seconds for startup/thinking plus 30 seconds per
+`maxSteps`: six-step routing gets 240 seconds; the fourteen-step palette edit
+gets 480 seconds. Node's per-test cap is 510 seconds, covering both six-step
+S4 turns plus cleanup. The suite wall-clock cap remains 30 minutes. Setting
+`IMPECCABLE_SKILL_BEHAVIOR_TURN_TIMEOUT_MS` replaces each default turn budget;
+the runner expands its caps to keep the client deadline inside the test cap.
+Full browser workflows keep their explicit 840-second turn budgets.
+
 File tools are workspace-scoped; bash is a real host shell, **not a security
 sandbox**. Use disposable synthetic fixtures. Shell helpers do not inherit
 provider API keys/auth tokens; model calls still use the parent's keys. The
@@ -221,7 +243,8 @@ decision pages cannot wait for a nonexistent browser user. The engine returns
 its genuine structured-question fallback; browser decisions have separate E2E.
 
 Set `IMPECCABLE_SKILL_BEHAVIOR_TRACE_DIR=<directory>` to retain per-turn JSON
-with model, prompt, tool results, response ordering, usage, and finish reason.
+with model, prompt, start time, elapsed time, step/time budgets, tool results,
+response ordering, usage, and finish reason.
 Progress and failed turns retain their tool traces too; only completed turns
 carry the full response sequence and final usage.
 These are local diagnostic artifacts; inspect before sharing. Successful reads
@@ -316,15 +339,16 @@ results remain the completed measurements.
 | 11 | empty workspace; prompt is `/impeccable shape ...` | runs `impeccable context`; resolves `reference/init.md` before planning the surface |
 | 12 | empty workspace; prompt is natural-language build intent with no command word | runs `impeccable context`; resolves `reference/init.md` before implementation |
 | 13 | empty workspace; prompt is `/impeccable teach` | runs `impeccable context` and diverts into `reference/init.md` because `teach` aliases `init` |
-| 14 | PRODUCT.md with `## Platform: ios` (native iOS app); prompt is `/impeccable craft a tide detail screen` | `impeccable context` runs and emits the contents of `reference/ios.md` directly, placing native conventions in context without a second model-directed read |
-| 15 | same iOS fixture; prompt is `/impeccable audit` | agent loads `reference/audit.native.md` (the Commands-table native variant, routed instead of `audit.md`) |
+| 14 | PRODUCT.md with `## Platform: android` (native Android app); prompt is `/impeccable craft a tide detail screen` | `impeccable context` runs and emits the contents of `reference/android.md` directly, placing native conventions in context without a second model-directed read |
+| 15 | same Android fixture; prompt is `/impeccable audit` | agent loads `reference/audit.native.md` (the Commands-table native variant, routed instead of `audit.md`) |
 | 16 | existing surface, with and without PRODUCT.md; asks where to start | completes relevant advice without edits, interviews, critique archives, menu scans, or explicit invented refinement prerequisites; reference coverage is diagnostic |
 | 17 | existing surface; asks whether critique is required before polish | completes read-only advice distinguishing assessment from implementation and explaining critique is optional; reference coverage is diagnostic |
 | 18 | existing surface; explicitly requests polish followed by a next-command recommendation | loads `polish.md` rather than substituting workflow advice for the requested work |
 | 19 | tiny spacing edit with PRODUCT.md + DESIGN.md; Bash denied, a real-loader success control, a denied-launcher planning-only case, and a denied-launcher documentation case (PRODUCT.md + index.html, no DESIGN.md) | edits require successful playbook/craft-floor reads and a pre-edit denial warning; planning stays read-only and skips craft-floor; documentation requires successful document.md and source reads before any DESIGN.md write, with the denial disclosed before the first tool call after the denied launcher |
-| 20 | PRODUCT.md + DESIGN.md + `index.html`; prompt is `/impeccable generate 2 bold variants of the hero heading` | loads `reference/generate.md`, and before any `live.md` read (live.md alone is the misroute) |
-| 21 | same fixture; prompt is natural language with no command word ("Show me a few quieter versions of the hero heading in the browser so I can pick one.") | infers `reference/generate.md` before any `live.md` read |
-| 22 | same fixture; prompt is `Make the hero heading bolder.` | does **not** load `reference/generate.md` (a plain refinement stays out of live); which playbook the refinement lands on is existing routing's business, not this guard's |
+| 20 | incumbent Diwali storefront; explicitly requests keeping its marigold-and-deep-red palette | preserves the requested palette under craft-floor.md's explicit-brief override |
+| 21 | PRODUCT.md + DESIGN.md + `index.html`; prompt is `/impeccable generate 2 bold variants of the hero heading` | loads `reference/generate.md`, and before any `live.md` read (live.md alone is the misroute) |
+| 22 | same fixture; prompt is natural language with no command word ("Show me a few quieter versions of the hero heading in the browser so I can pick one.") | infers `reference/generate.md` before any `live.md` read |
+| 23 | same fixture; prompt is `Make the hero heading bolder.` | does **not** load `reference/generate.md` (a plain refinement stays out of live); which playbook the refinement lands on is existing routing's business, not this guard's |
 
 ## Setup launcher-failure branch (2026-09-06, PR #750)
 
@@ -404,7 +428,7 @@ Keep #744 open; evaluate activation separately with #375.
 To repeat only these cases (provider keys and an engine binary required):
 
 ```sh
-IMPECCABLE_SKILL_BEHAVIOR_MODELS=claude-sonnet-5,gpt-5.6-terra,gemini-3.7-flash,deepseek-v4-flash \
+IMPECCABLE_SKILL_BEHAVIOR_MODELS=claude-sonnet-5,gpt-5.6-terra,gemini-3.7-flash,MiniMax-M3 \
   node --test --test-name-pattern='scenario 19:' tests/skill-behavior/scenarios.test.mjs
 ```
 
@@ -475,8 +499,9 @@ anything.
 they fail scenarios by stopping mid-run or archiving a report without stating
 it, which is model-floor behavior rather than a skill-text defect. Their columns
 stay here because they are the record of what a weaker model does with this text,
-and that is the useful part. Reproduce with
-`IMPECCABLE_SKILL_BEHAVIOR_MODELS=gpt-5.6-luna,deepseek-v4-flash`.
+and that is the useful part. DeepSeek results below are historical: that API
+provider has since been replaced by MiniMax. GPT-5.6 Luna remains selectable
+through `IMPECCABLE_SKILL_BEHAVIOR_MODELS=gpt-5.6-luna`.
 
 Against the current default lineup, two cells are the known floor:
 `redesign replaces DESIGN` is flaky on every model, and `critique closes` is
@@ -523,6 +548,7 @@ problem that one model's priors expose rather than as a model floor.
 | 1-7, 10, 12-15 | pass | pass | pass |
 | 8 (SvelteKit exploration) | flaky | pass | pass |
 | 11 (shape resolves the build gate) | flaky | pass | pass |
+| 16 (cultural-palette override survives craft-floor.md) | not measured (no provider key in this environment) | not measured | not measured |
 
 Scenarios 8 and 11 pass on re-run, so treat a single failure there as flake and
 confirm with a second run before investigating.
@@ -536,11 +562,11 @@ and the two causes are worth keeping because neither was where it looked:
   was the only concrete instruction left standing and sonnet ran it. Fixed by
   removing the command from the turn entirely rather than by strengthening the
   warning around it.
-- **15 was a broken fixture.** The iOS workspace held PRODUCT.md and nothing
+- **15 was a broken fixture.** The Android workspace held PRODUCT.md and nothing
   else, so `audit the app in this workspace` named an app that did not exist.
   Sonnet spent its whole step budget looking for it and read no reference file
   at all, which the assertion reported as "loaded `audit.md` instead of the
-  variant". The fixture now ships one SwiftUI screen, the same courtesy
+  variant". The fixture now ships one Compose screen, the same courtesy
   `MINIMAL_LANDING_HTML` already did for the web scenarios. The scenario passes
   on unmodified `main` once the fixture is answerable, which is the proof the
   routing text was never at fault.
@@ -626,13 +652,13 @@ Both files honor `--test-name-pattern`, which is much cheaper than a full sweep
 when bisecting one scenario:
 
 ```bash
-IMPECCABLE_QUESTION_DISABLED=1 CI=1 IMPECCABLE_SKILL_BEHAVIOR_MODELS=deepseek-v4-flash \
-  node --test --test-timeout=300000 --test-force-exit \
+IMPECCABLE_QUESTION_DISABLED=1 CI=1 IMPECCABLE_SKILL_BEHAVIOR_MODELS=MiniMax-M3 \
+  node --test --test-timeout=900000 --test-force-exit \
   --test-name-pattern="bolder refinement" tests/skill-workflow/full-build.test.mjs
 ```
 
-Use the suite's current 900000ms timeout for full workflow cases; the 300000ms
-example above is historical. The harness now disables decision pages itself.
+Use the suite's current 900000ms timeout for full workflow cases.
+The harness disables decision pages itself.
 Pipe
 to a file rather than `tail`; node prints the failing-test summary at the end,
 and truncating it costs you the per-model attribution.
@@ -671,3 +697,18 @@ loading the sub-command reference. Stronger SKILL.md wording (MUST,
 "non-optional", reordered earlier) didn't move it; this looks like a
 model-floor behavior rather than a skill ambiguity. Claude and Gemini
 honor the load.
+
+MiniMax uses the installed Anthropic-compatible provider with adaptive thinking and a 32,768-token output budget; a measured 16k response exhausted its budget before emitting the edit. `MiniMax-M3` joins the default lineup; missing keys still skip their provider. Its routing checks use the same six-step allowance as Gemini.
+
+For paid live checks with MiniMax:
+
+```sh
+export MINIMAX_API_KEY="$(minimax-api-key)"
+IMPECCABLE_E2E_AGENT=llm IMPECCABLE_E2E_LLM_PROVIDER=minimax bun run test:live-e2e
+bun run test:live-e2e-accept-cleanup
+bun run test:live-svelte-adapter-minimax
+```
+
+The cleanup and Svelte suites default to MiniMax; override their provider with `IMPECCABLE_E2E_LLM_PROVIDER`. The Svelte suite uses `IMPECCABLE_SVELTE_MINIMAX_ARTIFACT_DIR` for an explicit evidence directory. MiniMax receives annotated screenshots automatically as base64 image blocks. Unannotated requests remain text-only.
+
+The integration uses the installed Anthropic SDKs and MiniMax's [Anthropic-compatible API](https://platform.minimax.io/docs/api-reference/text-anthropic-api). Live tests read `MINIMAX_API_KEY` and default to `MiniMax-M3`; override the model with `IMPECCABLE_E2E_LLM_MODEL` and the endpoint with `MINIMAX_API_BASE_URL` (default `https://api.minimax.io/anthropic`).

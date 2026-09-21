@@ -59,8 +59,7 @@ pub fn spawn_detached(cwd: &str, env: &Env) -> Option<Value> {
 }
 
 /// JS: the `--background` branch of live-server.mjs: spawn
-/// `<self> live-server <args>` detached (setsid on unix, DETACHED_PROCESS on
-/// windows) with ignored stdio, then wait up to 10 s for a `server.json`
+/// `<self> live-server <args>` detached (setsid on Linux) with ignored stdio, then wait up to 10 s for a `server.json`
 /// written by a pid other than ours and return its record.
 pub fn spawn_detached_with_args(cwd: &str, env: &Env, child_args: &[String]) -> Option<Value> {
     let exe = std::env::current_exe().ok()?;

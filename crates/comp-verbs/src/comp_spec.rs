@@ -645,7 +645,7 @@ pub fn plate_prompt(spec: &Value, region: &Value) -> String {
     plate_prompt_background(spec, region, false)
 }
 
-fn plate_prompt_background(spec: &Value, region: &Value, transparent: bool) -> String {
+pub fn plate_prompt_background(spec: &Value, region: &Value, transparent: bool) -> String {
     let world = spec
         .get("palette")
         .and_then(Value::as_array)
@@ -805,7 +805,7 @@ fn resolve(io: &Io, p: &str) -> PathBuf {
 pub fn run(argv: &[String], io: &mut Io) -> i32 {
     let spec_path = arg_or(argv, "spec", SPEC_PATH).to_string();
     if flag(argv, "help") || argv.is_empty() {
-        io.out("usage: comp-spec.mjs --comp <png> --grid            write .impeccable/build/comp-grid.png (10x10 labeled grid) + palette + bands\n       comp-spec.mjs --comp <png> --regions <json>  measure regions -> .impeccable/build/spec.json\n         regions json: { \"regions\": [ { \"id\": \"art\", \"kind\": \"plate|image|texture|text|control|chrome\", \"grid\": \"E0:J4\", \"note\": \"...\" } ] }\n       comp-spec.mjs --comp <png> --auto            band regions when you have no regions file\n       comp-spec.mjs --print                        the compact spec\n       comp-spec.mjs --crop <id> [--out f] [--scale n]   reference crop of a region (never a shipping asset)\n       comp-spec.mjs --plate-prompt <id> [--background transparent|opaque|auto]  the regeneration prompt for a raster region\n");
+        io.out("usage: impeccable comp-spec --comp <png> --grid            write .impeccable/build/comp-grid.png (10x10 labeled grid) + palette + bands\n       impeccable comp-spec --comp <png> --regions <json>  measure regions -> .impeccable/build/spec.json\n         regions json: { \"regions\": [ { \"id\": \"art\", \"kind\": \"plate|image|texture|text|control|chrome\", \"grid\": \"E0:J4\", \"note\": \"...\" } ] }\n       impeccable comp-spec --comp <png> --auto            band regions when you have no regions file\n       impeccable comp-spec --print                        the compact spec\n       impeccable comp-spec --crop <id> [--out f] [--scale n]   reference crop of a region (never a shipping asset)\n       impeccable comp-spec --plate-prompt <id> [--background transparent|opaque|auto]  the regeneration prompt for a raster region\n");
         return 0;
     }
     if flag(argv, "print") {
@@ -886,7 +886,7 @@ pub fn run(argv: &[String], io: &mut Io) -> i32 {
 
     let comp_path = arg(argv, "comp");
     let Some(comp_path) = comp_path else {
-        io.err("usage: comp-spec.mjs --comp <png> (--grid | --regions <json> | --auto) [--spec out.json]\n       comp-spec.mjs --print | --crop <id> [--out file] [--scale n] | --plate-prompt <id>\n");
+        io.err("usage: impeccable comp-spec --comp <png> (--grid | --regions <json> | --auto) [--spec out.json]\n       impeccable comp-spec --print | --crop <id> [--out file] [--scale n] | --plate-prompt <id>\n");
         return 1;
     };
     let comp = match png_io::load_raster(&resolve(io, comp_path)) {

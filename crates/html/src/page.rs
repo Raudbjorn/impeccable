@@ -46,8 +46,7 @@ pub fn check_static_page_typography(doc: &StaticDocument) -> Vec<RuleHit> {
         // JS-PARITY: detect-html.mjs#checkStaticPageTypography uses
         // primaryFontFace(ff) whose default skip is CSS_GENERIC_FONTS, so a
         // system stack keeps its system face as primary (fix #678).
-        let primary = ff
-            .split(',')
+        let primary = impeccable_core::fonts::split_font_family_list(ff).into_iter()
             .map(font_token)
             .find(|f| !f.is_empty() && !CSS_GENERIC_FONTS.contains(&f.as_str()));
         let Some(primary) = primary else {

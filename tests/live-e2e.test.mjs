@@ -225,8 +225,8 @@ for (const { name, fixture } of fixtures) {
       // the limitation is visible in the run output.
       const knownLimitation = fixture.runtime.knownLimitation;
 
-      // Pick the agent. `IMPECCABLE_E2E_AGENT=llm` opts into Claude first,
-      // with DeepSeek as the secondary fallback/override; everything else
+      // Pick the agent. `IMPECCABLE_E2E_AGENT=llm` selects an API provider
+      // from the available keys or an explicit override; everything else
       // uses the deterministic fake. Skip rather than fail when LLM is
       // requested but the selected provider key is missing so default suite
       // runs in unauthenticated environments still pass.
@@ -1998,6 +1998,7 @@ async function runManualEditStage(page, stage, { t, fixture, session, agentMode,
           timeout: agentMode === 'llm' ? 60_000 : 20_000,
         });
       } catch (err) {
+        if (process.env.IMPECCABLE_E2E_DEBUG) t.diagnostic(`Browser errors: ${JSON.stringify(session.consoleErrors)}`);
         if (edit.expectedSourceFile) {
           t.diagnostic(`--- source ${edit.expectedSourceFile} after visible-text failure ---`);
           t.diagnostic(readFileSync(join(tmp, edit.expectedSourceFile), 'utf-8'));

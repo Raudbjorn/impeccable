@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { turnTimeoutMs } from './skill-behavior/budgets.mjs';
 
 import {
   DEFAULT_SUITES,
@@ -12,6 +13,15 @@ import {
 } from '../scripts/test-suites.mjs';
 
 describe('test suite registry', () => {
+  it('lets behavior turns abort before the test cap, including the two-turn scenario', () => {
+    const command = SUITES['skill-behavior'].commands[0];
+    assert.ok(turnTimeoutMs(14) < command.timeoutMs, 'S20 must retain its own timeout diagnostic');
+    assert.ok(2 * turnTimeoutMs(6) < command.timeoutMs, 'both S4 turns must fit inside one test');
+    assert.ok(command.timeoutMs < command.wallClockMs);
+    assert.ok(turnTimeoutMs(3, undefined) <= turnTimeoutMs(14, undefined));
+    assert.equal(turnTimeoutMs(14, '1234'), 1234);
+    for (const invalid of ['0', '-1', 'NaN', 'Infinity']) assert.throws(() => turnTimeoutMs(8, invalid), /positive integer/);
+  });
   it('separates protocol checkpoints from opt-in browser-backed completion', () => {
     assert.deepEqual(suiteFiles(['skill-behavior']), ['tests/skill-behavior/scenarios.test.mjs']);
     assert.ok(OPT_IN_SUITES.includes('skill-workflow'));

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 /**
  * Build-pipeline emitters for the Impeccable design hook.
  *
@@ -6,13 +8,9 @@
  * 1. Project-local install (the `npx impeccable skills install` CLI path):
  *      - Claude Code: `.claude/settings.json`   (${CLAUDE_PROJECT_DIR}-relative)
  *      - Codex:       `.codex/hooks.json`
- *      - Cursor:      `.cursor/hooks.json`
- *      - Grok Build:  `.grok/hooks/impeccable.json`
  *
  * 2. Claude Code plugin package (the marketplace / `/plugin install` path):
  *      - `plugin/hooks/hooks.json`              (${CLAUDE_PLUGIN_ROOT}-relative)
- *        Also consumed by Grok Build via Claude Code plugin compatibility
- *        (`CLAUDE_PLUGIN_ROOT` is aliased to `GROK_PLUGIN_ROOT`).
  *
  * 3. OpenAI plugin package:
  *      - `hooks/hooks.json`                     (${PLUGIN_ROOT}-relative)
@@ -29,8 +27,8 @@ const STATUS_MESSAGE = 'Checking UI changes';
 // The Stop deep pass scans every UI file touched in the session with the
 // full rule set, so it gets a longer budget than the single-file per-edit
 // pass. Wired only for Claude Code and Codex, which both dispatch a native
-// `Stop` hook event; Cursor's stop hook is not consistently dispatched and
-// GitHub Copilot's stop-style events do not feed context back to the model.
+// `Stop` hook event; GitHub Copilot's stop-style events do not feed context
+// back to the model.
 const STOP_TIMEOUT_SECONDS = 30;
 const STOP_STATUS_MESSAGE = 'Design deep pass';
 
@@ -40,7 +38,6 @@ const STOP_STATUS_MESSAGE = 'Design deep pass';
 // runs the platform binary next to it, or downloads it once; no runtime probe
 // is needed and there is no Node on the path to check.
 export const LAUNCHER_NAME = 'impeccable';
-export const LAUNCHER_NAME_WINDOWS = 'impeccable.cmd';
 
 // A hook manifest can be copied into a user-level settings file (issue #399:
 // user-level hooks fire in every project, where a project-relative path may
@@ -51,20 +48,12 @@ export const LAUNCHER_NAME_WINDOWS = 'impeccable.cmd';
 export const guardedLauncher = (launcherPath, verb = 'hook') =>
   `[ ! -f "${launcherPath}" ] || "${launcherPath}" ${verb}`;
 
-// cmd.exe form for harnesses that read a `commandWindows` sibling (Codex
-// 0.146.0+ selects it on Windows; issue #452). `exit /b` forwards the
-// launcher's errorlevel. Paths keep forward slashes; cmd.exe accepts them in
-// quoted paths and it is the form the CLI already writes.
-export const windowsLauncherCommand = (launcherCmdPath, verb = 'hook') =>
-  `if exist "${launcherCmdPath}" ("${launcherCmdPath}" ${verb} & exit /b)`;
-
-function stopEntry(command, commandWindows) {
+function stopEntry(command) {
   return {
     hooks: [
       {
         type: 'command',
         command,
-        ...(commandWindows ? { commandWindows } : {}),
         timeout: STOP_TIMEOUT_SECONDS,
         statusMessage: STOP_STATUS_MESSAGE,
       },
@@ -73,7 +62,6 @@ function stopEntry(command, commandWindows) {
 }
 
 const launcherIn = (scriptsDir) => `${scriptsDir}/${LAUNCHER_NAME}`;
-const launcherCmdIn = (scriptsDir) => `${scriptsDir}/${LAUNCHER_NAME_WINDOWS}`;
 
 const CLAUDE_PROJECT_SCRIPTS = '${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts';
 const CLAUDE_PLUGIN_SCRIPTS = '${CLAUDE_PLUGIN_ROOT}/skills/impeccable/scripts';
@@ -85,18 +73,12 @@ const CODEX_PLUGIN_SCRIPTS = '${PLUGIN_ROOT}/skills/impeccable/scripts';
 // so each generated manifest points at its own payload rather than a hardcoded
 // `.agents`; otherwise the guarded hook silently no-ops on `.codex` installs.
 const codexProjectScripts = (skillDir) => `${skillDir}/skills/impeccable/scripts`;
-const CURSOR_SCRIPTS = '.cursor/skills/impeccable/scripts';
 const GITHUB_PROJECT_SCRIPTS = '$(git rev-parse --show-toplevel)/.github/skills/impeccable/scripts';
 // Grok project hooks are relative to the git/workspace root. Claude tool names
 // in the matcher (Edit|Write|MultiEdit) alias to Grok's search_replace family.
-const GROK_PROJECT_SCRIPTS = '.grok/skills/impeccable/scripts';
 
-// `windows: true` adds the `commandWindows` sibling; only Codex-shaped
-// consumers honor it, and an unknown key would fail Codex's strict parser if
-// it were the other way round, so it stays opt-in per manifest.
-function buildClaudeCompatibleHooks(matcher, scriptsDir, { windows = false } = {}) {
+function buildClaudeCompatibleHooks(matcher, scriptsDir) {
   const command = guardedLauncher(launcherIn(scriptsDir));
-  const commandWindows = windows ? windowsLauncherCommand(launcherCmdIn(scriptsDir)) : undefined;
   return {
     PostToolUse: [
       {
@@ -105,14 +87,13 @@ function buildClaudeCompatibleHooks(matcher, scriptsDir, { windows = false } = {
           {
             type: 'command',
             command,
-            ...(commandWindows ? { commandWindows } : {}),
             timeout: TIMEOUT_SECONDS,
             statusMessage: STATUS_MESSAGE,
           },
         ],
       },
     ],
-    Stop: [stopEntry(command, commandWindows)],
+    Stop: [stopEntry(command)],
   };
 }
 
@@ -140,7 +121,7 @@ export function buildClaudePluginHooksManifest() {
 // instead of relying on its Claude compatibility alias.
 export function buildCodexPluginHooksManifest() {
   return {
-    hooks: buildClaudeCompatibleHooks('Edit|Write|apply_patch', CODEX_PLUGIN_SCRIPTS, { windows: true }),
+    hooks: buildClaudeCompatibleHooks('Edit|Write|apply_patch', CODEX_PLUGIN_SCRIPTS),
   };
 }
 
@@ -149,26 +130,12 @@ export function buildCodexPluginHooksManifest() {
 // Codex provider, whose self-consistent bundle keeps the skill at `.codex/skills`.
 export function buildCodexHooksManifest(skillDir = '.codex') {
   return {
-    hooks: buildClaudeCompatibleHooks('Edit|Write|apply_patch', codexProjectScripts(skillDir), { windows: true }),
-  };
-}
-
-export function buildCursorHooksManifest(scriptsDir = CURSOR_SCRIPTS) {
-  return {
-    version: 1,
-    hooks: {
-      preToolUse: [
-        {
-          command: guardedLauncher(launcherIn(scriptsDir), 'hook-before-edit'),
-          timeout: TIMEOUT_SECONDS,
-        },
-      ],
-    },
+    hooks: buildClaudeCompatibleHooks('Edit|Write|apply_patch', codexProjectScripts(skillDir)),
   };
 }
 
 // GitHub Copilot reads project hooks from `.github/hooks/*.json`. Its schema
-// differs from Claude/Codex/Cursor: the event key is lowercase `postToolUse`,
+// differs from Claude/Codex: the event key is lowercase `postToolUse`,
 // each entry is flat (no nested `hooks` array), the command lives under `bash`
 // (with an optional `powershell` sibling), the timeout key is `timeoutSec`, and
 // `matcher` is a full-match regex (`^(?:PATTERN)$`) tested against the tool name.
@@ -194,15 +161,28 @@ export function buildGitHubHooksManifest() {
   };
 }
 
-// Grok Build discovers project hooks from `.grok/hooks/*.json` and requires
-// folder trust (`/hooks-trust` or `--trust`) before they run. Event schema is
-// Claude-compatible (PostToolUse / Stop / PreToolUse); Claude tool names in
-// matchers are aliased to Grok tools (Edit|Write|MultiEdit → search_replace).
-// https://docs.x.ai/build/features/hooks
-export function buildGrokHooksManifest() {
-  return {
-    hooks: buildClaudeCompatibleHooks('Edit|Write|MultiEdit', GROK_PROJECT_SCRIPTS),
-  };
+// oh-my-pi's hook is a loaded JS module (`pi.on(eventName, handler)`), not a
+// JSON manifest, so this is the one builder that returns literal file
+// content rather than an object every other caller JSON.stringify's — see
+// `hooksJsonFor()`'s `isModule` tag below. The exported function's name,
+// `impeccableHook`, is load-bearing: it is the marker
+// `skill/scripts/context.mjs`, `skill/scripts/hook-admin.mjs`, and
+// `cli/bin/commands/skills.mjs` each scan for (as `OMP_HOOK_MODULE_MARKER` or
+// its inline equivalent) to detect whether this hook is installed, since the
+// path string these markers use for every other provider never appears here
+// literally (it is built via `join(...)` with separate segments below).
+// Renaming it breaks detection in all three without any test failing here.
+// The payload it sends to hook.mjs
+// on stdin is deliberately shaped exactly like Claude Code's own
+// PostToolUse/Stop JSON: hook-lib.mjs's extraction (`resolveTargetFiles()`,
+// `isStopEvent()`, the `stop_hook_active` re-entrancy guard) and its default
+// `payload()` output are shape-driven, not harness-gated, and
+// `resolveHarness()` has no 'omp' branch — a payload this shape falls
+// through to the 'claude' default on both ends, so hook-lib.mjs needs no
+// changes at all. `spawnSync` (not `pi.exec()`) is used deliberately:
+// `pi.exec()`'s documented options carry no stdin, which hook.mjs requires.
+export function buildOmpHookModule() {
+  return readFileSync(new URL('../../../crates/context/assets/omp-hook.js', import.meta.url), 'utf8');
 }
 
 export function hooksJsonFor(provider, options = {}) {
@@ -211,12 +191,10 @@ export function hooksJsonFor(provider, options = {}) {
       return buildClaudeSettingsManifest();
     case 'codex':
       return buildCodexHooksManifest(options.configDir || '.codex');
-    case 'cursor':
-      return buildCursorHooksManifest();
     case 'github':
       return buildGitHubHooksManifest();
-    case 'grok':
-      return buildGrokHooksManifest();
+    case 'omp':
+      return { isModule: true, content: buildOmpHookModule() };
     default:
       return null;
   }

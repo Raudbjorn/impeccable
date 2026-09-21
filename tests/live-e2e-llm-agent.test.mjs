@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -11,6 +11,7 @@ import {
   parseManualEditResponse,
   parseVariantResponse,
   progressiveVariantGuidance,
+  requiresChatCompletionsApi,
   resolveLlmAgentConfig,
   validateManualEditCoverage,
   validateManualEditPlanningCoverage,
@@ -21,9 +22,9 @@ import {
 } from './live-e2e/agents/llm-agent.mjs';
 
 describe('live-e2e LLM request settings', () => {
-  it('explicitly selects low-effort DeepSeek thinking for bounded JSON edit requests', () => {
-    assert.deepEqual(llmRequestSettings('deepseek'), {
-      thinking: { type: 'enabled' }, output_config: { effort: 'low' },
+  it('enables adaptive MiniMax thinking for bounded JSON edit requests', () => {
+    assert.deepEqual(llmRequestSettings('minimax'), {
+      thinking: { type: 'adaptive' },
     });
   });
 
@@ -56,7 +57,7 @@ describe('live-e2e LLM agent provider config', () => {
   it('prefers Anthropic when both provider keys are present', () => {
     const config = resolveLlmAgentConfig({}, {
       ANTHROPIC_API_KEY: 'claude-key',
-      DEEPSEEK_API_KEY: 'deepseek-key',
+      MINIMAX_API_KEY: 'minimax-key',
     });
 
     assert.equal(config.provider, 'anthropic');
@@ -66,39 +67,39 @@ describe('live-e2e LLM agent provider config', () => {
     assert.equal(config.baseURL, undefined);
   });
 
-  it('falls back to DeepSeek V4 Flash when only DEEPSEEK_API_KEY is present', () => {
+  it('falls back to MiniMax M3 when only MINIMAX_API_KEY is present', () => {
     const config = resolveLlmAgentConfig({}, {
-      DEEPSEEK_API_KEY: 'test-key',
+      MINIMAX_API_KEY: 'test-key',
     });
 
-    assert.equal(config.provider, 'deepseek');
-    assert.equal(config.model, 'deepseek-v4-flash');
-    assert.equal(config.requiredEnv, 'DEEPSEEK_API_KEY');
+    assert.equal(config.provider, 'minimax');
+    assert.equal(config.model, 'MiniMax-M3');
+    assert.equal(config.requiredEnv, 'MINIMAX_API_KEY');
     assert.equal(config.apiKey, 'test-key');
-    assert.equal(config.baseURL, 'https://api.deepseek.com/anthropic');
+    assert.equal(config.baseURL, 'https://api.minimax.io/anthropic');
   });
 
-  it('explicitly selects DeepSeek over Anthropic', () => {
+  it('explicitly selects MiniMax over Anthropic', () => {
     const config = resolveLlmAgentConfig({}, {
-      IMPECCABLE_E2E_LLM_PROVIDER: 'deepseek',
+      IMPECCABLE_E2E_LLM_PROVIDER: 'minimax',
       ANTHROPIC_API_KEY: 'claude-key',
-      DEEPSEEK_API_KEY: 'deepseek-key',
+      MINIMAX_API_KEY: 'minimax-key',
     });
 
-    assert.equal(config.provider, 'deepseek');
-    assert.equal(config.model, 'deepseek-v4-flash');
-    assert.equal(config.requiredEnv, 'DEEPSEEK_API_KEY');
-    assert.equal(config.apiKey, 'deepseek-key');
-    assert.equal(config.baseURL, 'https://api.deepseek.com/anthropic');
+    assert.equal(config.provider, 'minimax');
+    assert.equal(config.model, 'MiniMax-M3');
+    assert.equal(config.requiredEnv, 'MINIMAX_API_KEY');
+    assert.equal(config.apiKey, 'minimax-key');
+    assert.equal(config.baseURL, 'https://api.minimax.io/anthropic');
   });
 
   it('allows explicit model and base URL overrides', () => {
     const config = resolveLlmAgentConfig(
       { model: 'custom-model', baseURL: 'https://example.test/anthropic' },
       {
-        IMPECCABLE_E2E_LLM_PROVIDER: 'deepseek',
+        IMPECCABLE_E2E_LLM_PROVIDER: 'minimax',
         IMPECCABLE_E2E_LLM_MODEL: 'ignored-model',
-        DEEPSEEK_API_KEY: 'test-key',
+        MINIMAX_API_KEY: 'test-key',
       },
     );
 
@@ -106,14 +107,107 @@ describe('live-e2e LLM agent provider config', () => {
     assert.equal(config.baseURL, 'https://example.test/anthropic');
   });
 
-  it('allows the DeepSeek API base URL to come from env', () => {
+  it('allows the MiniMax API base URL to come from env', () => {
     const config = resolveLlmAgentConfig({}, {
-      IMPECCABLE_E2E_LLM_PROVIDER: 'deepseek',
-      DEEPSEEK_API_KEY: 'test-key',
-      DEEPSEEK_API_BASE_URL: 'https://proxy.example.test/anthropic',
+      IMPECCABLE_E2E_LLM_PROVIDER: 'minimax',
+      MINIMAX_API_KEY: 'test-key',
+      MINIMAX_API_BASE_URL: 'https://proxy.example.test/anthropic',
     });
 
     assert.equal(config.baseURL, 'https://proxy.example.test/anthropic');
+  });
+
+  it('resolves Inception Mercury when explicitly selected, key from env', () => {
+    const config = resolveLlmAgentConfig({}, {
+      IMPECCABLE_E2E_LLM_PROVIDER: 'inception',
+      INCEPTION_API_KEY: 'k',
+      IMPECCABLE_E2E_INCEPTION_KEY_CMD: '',
+    });
+    assert.equal(config.provider, 'inception');
+    assert.equal(config.model, 'mercury-2');
+    assert.equal(config.baseURL, 'https://api.inceptionlabs.ai/v1');
+    assert.equal(config.requiredEnv, 'INCEPTION_API_KEY');
+    assert.equal(config.apiKey, 'k');
+  });
+
+  it('reads and trims the Inception key when the local helper emits one', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'impeccable-inception-helper-'));
+    const helperPath = join(dir, 'key-helper.sh');
+    writeFileSync(helperPath, '#!/bin/sh\nprintf \'  sentinel-key-value  \\n\'\n');
+    chmodSync(helperPath, 0o755);
+    try {
+      const config = resolveLlmAgentConfig({}, {
+        IMPECCABLE_E2E_LLM_PROVIDER: 'inception',
+        IMPECCABLE_E2E_INCEPTION_KEY_CMD: helperPath,
+      });
+      assert.equal(config.apiKey, 'sentinel-key-value');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('discards a key when the local helper emits empty output', () => {
+    const config = resolveLlmAgentConfig({}, {
+      IMPECCABLE_E2E_LLM_PROVIDER: 'inception',
+      // `echo` with no args prints only a newline; the (empty) trimmed
+      // output must be discarded rather than passed through as a key.
+      IMPECCABLE_E2E_INCEPTION_KEY_CMD: 'echo',
+    });
+    assert.equal(config.apiKey, undefined);
+  });
+
+  it('discards a key and does not throw when the helper command fails', () => {
+    const config = resolveLlmAgentConfig({}, {
+      IMPECCABLE_E2E_LLM_PROVIDER: 'inception',
+      IMPECCABLE_E2E_INCEPTION_KEY_CMD: 'false',
+    });
+    assert.equal(config.apiKey, undefined);
+  });
+
+  it('carries a keyHelperError on the config when the helper exists but fails', () => {
+    // resolveLlmAgentConfig() runs before a runner's diagnostic logger
+    // exists (see tests/live-e2e.test.mjs), so a broken helper's reason has
+    // to travel on the config itself rather than through a callback here.
+    const config = resolveLlmAgentConfig({}, {
+      IMPECCABLE_E2E_LLM_PROVIDER: 'inception',
+      IMPECCABLE_E2E_INCEPTION_KEY_CMD: 'false',
+    });
+    assert.equal(config.apiKey, undefined);
+    assert.match(config.keyHelperError, /false/);
+  });
+
+  it('carries no keyHelperError when the helper command is simply not installed', () => {
+    const config = resolveLlmAgentConfig({}, {
+      IMPECCABLE_E2E_LLM_PROVIDER: 'inception',
+      IMPECCABLE_E2E_INCEPTION_KEY_CMD: '/nonexistent/path/impeccable-does-not-exist',
+    });
+    assert.equal(config.apiKey, undefined);
+    assert.equal(config.keyHelperError, undefined);
+  });
+
+  it('does not shell out for a key when the helper command is disabled', () => {
+    const config = resolveLlmAgentConfig({}, {
+      IMPECCABLE_E2E_LLM_PROVIDER: 'inception',
+      IMPECCABLE_E2E_INCEPTION_KEY_CMD: '',
+    });
+    assert.equal(config.apiKey, undefined);
+  });
+
+  it('never auto-selects Inception from the key helper alone', () => {
+    // A helper on PATH must not hijack a run nobody asked for; only an
+    // explicit provider or INCEPTION_API_KEY in the environment selects it.
+    assert.equal(resolveLlmAgentConfig({}, {}).provider, 'openai');
+    assert.equal(resolveLlmAgentConfig({}, { INCEPTION_API_KEY: 'k' }).provider, 'inception');
+  });
+
+  it('uses MiniMax in the fallback slot formerly occupied by DeepSeek', () => {
+    assert.equal(resolveLlmAgentConfig({}, {
+      MINIMAX_API_KEY: 'minimax-key',
+      INCEPTION_API_KEY: 'inception-key',
+      DEEPSEEK_API_KEY: 'unused-key',
+    }).provider, 'minimax');
+    assert.equal(resolveLlmAgentConfig({}, { DEEPSEEK_API_KEY: 'unused-key' }).provider, 'openai');
+    assert.throws(() => resolveLlmAgentConfig({ provider: 'deepseek' }, {}), /Unsupported.*deepseek/);
   });
 
   it('rejects unsupported providers', () => {
@@ -122,11 +216,44 @@ describe('live-e2e LLM agent provider config', () => {
       /Unsupported IMPECCABLE_E2E_LLM_PROVIDER: other/,
     );
   });
+
+  it('rejects retired DeepSeek model overrides before selecting credentials for any provider', () => {
+    for (const provider of [undefined, 'openai', 'anthropic', 'minimax', 'inception']) {
+      for (const model of ['deepseek-v4-flash', 'DeepSeek-V4-Pro']) {
+        assert.throws(() => resolveLlmAgentConfig({ provider, model }, {}), /Unsupported IMPECCABLE_E2E_LLM_MODEL/);
+        assert.throws(() => resolveLlmAgentConfig({ provider }, { IMPECCABLE_E2E_LLM_MODEL: model }), /Unsupported IMPECCABLE_E2E_LLM_MODEL/);
+      }
+    }
+    assert.equal(resolveLlmAgentConfig({ provider: 'minimax', model: 'MiniMax-M3' }, { IMPECCABLE_E2E_LLM_MODEL: 'deepseek-v4-flash' }).model, 'MiniMax-M3');
+  });
+
+  it('routes only Inception through the Chat Completions API', () => {
+    assert.equal(requiresChatCompletionsApi('inception'), true);
+    assert.equal(requiresChatCompletionsApi('openai'), false);
+    assert.equal(requiresChatCompletionsApi('anthropic'), false);
+    assert.equal(requiresChatCompletionsApi('minimax'), false);
+  });
 });
 
 describe('live-e2e LLM agent createLlmAgent', () => {
+  it('validates pre-resolved provider and model choices before reading credentials', async () => {
+    const unreadableCredentials = { get apiKey() { throw new Error('credentials must not be read'); } };
+    for (const provider of ['openai', 'anthropic', 'minimax', 'inception']) {
+      for (const model of ['deepseek-v4-flash', 'DeepSeek-V4-Pro']) {
+        const config = Object.assign(Object.create(unreadableCredentials), { provider, model });
+        await assert.rejects(createLlmAgent({ config }), /Unsupported IMPECCABLE_E2E_LLM_MODEL/);
+      }
+    }
+    for (const provider of ['deepseek', 'other']) {
+      const config = Object.assign(Object.create(unreadableCredentials), { provider, model: 'custom-model' });
+      await assert.rejects(createLlmAgent({ config }), /Unsupported IMPECCABLE_E2E_LLM_PROVIDER/);
+    }
+  });
+
   it('uses an explicit opts.config without re-reading env', async () => {
     const agent = await createLlmAgent({
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
       config: {
         provider: 'anthropic',
         model: 'test-model',
@@ -143,14 +270,36 @@ describe('live-e2e LLM agent createLlmAgent', () => {
   it('returns null when the resolved config has no apiKey', async () => {
     const agent = await createLlmAgent({
       config: {
-        provider: 'deepseek',
-        model: 'deepseek-v4-flash',
+        provider: 'minimax',
+        model: 'MiniMax-M3',
         apiKey: undefined,
-        baseURL: 'https://api.deepseek.com/anthropic',
-        requiredEnv: 'DEEPSEEK_API_KEY',
+        baseURL: 'https://api.minimax.io/anthropic',
+        requiredEnv: 'MINIMAX_API_KEY',
       },
     });
     assert.equal(agent, null);
+  });
+
+  it('logs a pre-resolved keyHelperError before returning null', async () => {
+    // Mirrors the real runner shape: resolveLlmAgentConfig() ran earlier
+    // without a logger, then createLlmAgent() is called with that config
+    // plus the runner's diagnostic logger.
+    const messages = [];
+    const agent = await createLlmAgent({
+      config: {
+        provider: 'inception',
+        model: 'mercury-2',
+        apiKey: undefined,
+        requiredEnv: 'INCEPTION_API_KEY',
+        keyHelperError: 'inception key helper "false" failed: Command failed: false',
+      },
+      log: (m) => messages.push(m),
+    });
+    assert.equal(agent, null);
+    assert.ok(
+      messages.some((m) => m.includes('helper "false" failed')),
+      `expected the helper failure to be logged, got: ${JSON.stringify(messages)}`,
+    );
   });
 });
 
@@ -162,7 +311,7 @@ describe('live-e2e LLM agent provider replay', () => {
     }
 
     const config = resolveLlmAgentConfig({
-      provider: process.env.IMPECCABLE_E2E_LLM_PROVIDER || 'deepseek',
+      provider: process.env.IMPECCABLE_E2E_LLM_PROVIDER || 'minimax',
       model: process.env.IMPECCABLE_E2E_LLM_MODEL,
     });
     const agent = await createLlmAgent({ config, log: (msg) => t.diagnostic(msg) });
@@ -199,7 +348,7 @@ describe('live-e2e LLM agent provider replay', () => {
     }
 
     const config = resolveLlmAgentConfig({
-      provider: process.env.IMPECCABLE_E2E_LLM_PROVIDER || 'deepseek',
+      provider: process.env.IMPECCABLE_E2E_LLM_PROVIDER || 'minimax',
       model: process.env.IMPECCABLE_E2E_LLM_MODEL,
     });
     const agent = await createLlmAgent({ config, log: (msg) => t.diagnostic(msg) });

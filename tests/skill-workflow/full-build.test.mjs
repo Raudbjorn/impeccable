@@ -131,7 +131,7 @@ for (const modelId of process.env.IMPECCABLE_SKILL_BEHAVIOR_MODELS ? resolveMode
   const provider = detectProvider(modelId);
   const keyPresent = hasKey(provider);
 
-  describe(`skill workflow contract :: ${modelId}`, () => {
+  describe(`skill workflow contract :: ${modelId}`, { concurrency: 2 }, () => {
     if (!keyPresent) {
       it(`skipped — ${PROVIDERS[provider].envKey} is unset`, { skip: true }, () => {});
       return;

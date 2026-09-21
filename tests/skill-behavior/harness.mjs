@@ -27,9 +27,11 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { getProviderOptions } from './providers.mjs';
+import { turnTimeoutMs } from './budgets.mjs';
 import { ENGINE_MISSING_MESSAGE, findEngineBinary } from '../lib/engine-bin.mjs';
 import { readSourceFiles, compileProviderBlocks, replacePlaceholders, stripRuleMarkers } from '../../scripts/lib/utils.js';
 import { createTransformer } from '../../scripts/lib/transformers/factory.js';
+import { imageSource } from '../../skill/scripts/image-analyze.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -184,9 +186,16 @@ function execBash(workspace, command, timeoutMs = 20_000, extraEnv = {}) {
     // Real decision pages have browser E2E; this suite has a structured user.
     const shellEnv = Object.fromEntries(Object.entries({ ...process.env, ...extraEnv })
       .filter(([name]) => !/(?:^|_)(?:API_KEY|AUTH_TOKEN|ACCESS_TOKEN)$/.test(name)));
-    const proc = spawn('bash', ['-lc', command], {
+    // Model-authored shell commands must not kill host browsers or write outside the fixture.
+    const proc = spawn('bwrap', [
+      '--ro-bind', '/', '/', '--bind', workspace, workspace,
+      '--dev', '/dev', '--proc', '/proc', '--tmpfs', '/tmp',
+      ...(ENGINE_BIN ? ['--ro-bind', ENGINE_BIN, ENGINE_BIN] : []),
+      '--unshare-pid', '--die-with-parent', '--', 'bash', '-c', command,
+    ], {
       cwd: workspace,
-      env: { ...shellEnv, ...(ENGINE_BIN ? { IMPECCABLE_BIN: ENGINE_BIN } : {}), IMPECCABLE_QUESTION_DISABLED: '1' },
+      env: { ...shellEnv, ...(ENGINE_BIN ? { IMPECCABLE_BIN: ENGINE_BIN } : {}), IMPECCABLE_QUESTION_DISABLED: '1',
+        TMPDIR: '/tmp', XDG_CONFIG_HOME: '/tmp/config', XDG_CACHE_HOME: '/tmp/cache' },
     });
     let stdout = '';
     let stderr = '';
@@ -233,11 +242,16 @@ function execBash(workspace, command, timeoutMs = 20_000, extraEnv = {}) {
 function defaultSimulatedAnswer(question) {
   const text = String(question?.question ?? '').toLowerCase();
   const options = Array.isArray(question?.options) ? question.options : [];
-  const firstOption = options.find((option) => typeof option?.label === 'string')?.label;
+  // The fixture user wants the requested work in this workspace. A model's
+  // first option can instead cancel it. ponytail: English fixture labels only;
+  // use simulatedUser.answer for other intent or deliberate cancellation.
+  const firstOption = options.find((option) => typeof option?.label === 'string'
+    && !/^(?:cancel|stop|abort)\b|\b(?:wrong|different|another)\s+(?:workspace|directory|folder)\b/i.test(option.label.trim()))?.label;
 
   // Option labels are model-authored and therefore the most faithful answer
   // when the agent is asking the user to choose a proposed world or concept.
   if (firstOption) return firstOption;
+  if (/workspace|directory|folder/.test(text)) return 'This is the intended workspace. Continue with the requested work here; ask for any missing product context.';
   if (/platform|web|ios|android|adaptive/.test(text)) return 'Web.';
   if (/who|audience|user|people/.test(text)) return 'Night-shift ferry dispatchers working from noisy control rooms.';
   if (/purpose|job|problem|outcome|success/.test(text)) return 'Help dispatchers resolve berth conflicts before they delay the overnight crossing.';
@@ -301,6 +315,7 @@ export function makeTools(workspace, extraEnv = {}, simulatedUser = {}, { contex
         }
         const before = snapshotWorkspaceFiles(workspace);
         const res = await execBash(workspace, command, 20_000, extraEnv);
+        call.contextLoaded = res.exitCode === 0 && isContextOnlyCommand(workspace, command);
         call.mutatedPaths = changedPaths(before, snapshotWorkspaceFiles(workspace));
         call.loadedFiles = references.filter(({ content }) => content && res.stdout.includes(content))
           .map(({ file }) => `.claude/skills/impeccable/reference/${file}`);
@@ -312,7 +327,7 @@ export function makeTools(workspace, extraEnv = {}, simulatedUser = {}, { contex
       },
     }),
     read: tool({
-      description: 'Read a file from the workspace. Path must be workspace-relative.',
+      description: 'Read text or view a PNG, JPEG, GIF, or WEBP image from the workspace. Path must be workspace-relative.',
       inputSchema: z.object({
         path: z.string().describe('Workspace-relative file path.'),
       }),
@@ -324,14 +339,19 @@ export function makeTools(workspace, extraEnv = {}, simulatedUser = {}, { contex
         if (!fs.existsSync(resolved)) return `File not found: ${p}`;
         const stat = fs.statSync(resolved);
         if (stat.isDirectory()) return `Path is a directory: ${p}. Use list instead.`;
-        const contents = fs.readFileSync(resolved, 'utf8');
+        const contents = /\.(png|jpe?g|gif|webp)$/i.test(p)
+          ? await imageSource(p, { root: workspace })
+          : fs.readFileSync(resolved, 'utf8');
         call.succeeded = true;
         call.loadedFiles = [p];
         return contents;
       },
+      toModelOutput: ({ output }) => typeof output === 'string'
+        ? { type: 'json', value: output }
+        : { type: 'content', value: [{ type: 'file', data: { type: 'data', data: output.data }, mediaType: output.media_type }] },
     }),
     write: tool({
-      description: 'Write or overwrite a file in the workspace. Creates parent directories as needed.',
+      description: 'Write or overwrite a workspace-relative file (e.g. index.html). Absolute paths are rejected. Creates parent directories as needed.',
       inputSchema: z.object({
         path: z.string().describe('Workspace-relative file path.'),
         contents: z.string().describe('Full file contents.'),
@@ -406,19 +426,10 @@ export function makeTools(workspace, extraEnv = {}, simulatedUser = {}, { contex
  * `priorMessages` lets multi-turn scenarios chain context from a previous
  * call (append the SDK's response messages between turns).
  */
-// A single turn (generateText) can drive up to ~30 tool-use steps against a
-// frontier model; the thorough path was measured near 580s. generateText
-// takes no timeout of its own, so a provider socket that stalls mid-stream
-// keeps the fetch — and therefore the whole node process — alive indefinitely,
-// past node's own `--test-timeout` (which cancels the test but not the open
-// handle). We attach a real AbortSignal instead: on expiry the underlying
-// fetch is aborted, the socket closes, the turn throws, and the scenario
-// fails-and-continues so the sweep still produces a per-provider tally. The
-// cap sits just under the 900s per-test timeout so a genuine slow-but-correct
-// run is never killed. The timer is unref'd (it must not keep the loop alive
-// after a healthy turn) and cleared on completion.
-const TURN_TIMEOUT_MS = Number(process.env.IMPECCABLE_SKILL_BEHAVIOR_TURN_TIMEOUT_MS) || 840_000;
-export async function runTurn({ workspace, model, userPrompt, priorMessages = [], maxSteps = 8, env = {}, simulatedUser = {}, timeoutMs = TURN_TIMEOUT_MS, contextOnlyBash = false, denyBash = false, stopAfter, additionalTools, environment = '' }) {
+// Abort the provider request before the runner's test cap, so stalled calls
+// close their sockets and retain a per-turn diagnostic. Budgets scale with
+// maxSteps; callers can still give full browser workflows an explicit limit.
+export async function runTurn({ workspace, model, userPrompt, priorMessages = [], maxSteps = 8, env = {}, simulatedUser = {}, timeoutMs = turnTimeoutMs(maxSteps), contextOnlyBash = false, denyBash = false, stopAfter, additionalTools, environment = '' }) {
   const { tools, trace } = makeTools(workspace, env, simulatedUser, { contextOnlyBash, denyBash });
   if (additionalTools) Object.assign(tools, additionalTools(trace));
   const messages = [
@@ -427,10 +438,13 @@ export async function runTurn({ workspace, model, userPrompt, priorMessages = []
   ];
   const traceDir = process.env.IMPECCABLE_SKILL_BEHAVIOR_TRACE_DIR;
   const tracePath = traceDir && path.join(traceDir, `${path.basename(workspace)}-${crypto.randomUUID()}.json`);
+  const startedAt = Date.now();
   const saveTrace = (details) => {
     if (!tracePath) return;
     fs.mkdirSync(traceDir, { recursive: true });
-    fs.writeFileSync(tracePath, JSON.stringify({ model: model.modelId, userPrompt, trace, ...details }, null, 2));
+    fs.writeFileSync(tracePath, JSON.stringify({ model: model.modelId, userPrompt,
+      startedAt: new Date(startedAt).toISOString(), elapsedMs: Date.now() - startedAt,
+      maxSteps, timeoutMs, trace, ...details }, null, 2));
   };
   let result;
   const controller = new AbortController();
@@ -453,10 +467,9 @@ export async function runTurn({ workspace, model, userPrompt, priorMessages = []
       // Real client-side deadline on the provider call: without it a stalled
       // stream wedges the whole sweep with no tally.
       abortSignal: controller.signal,
-      // The Anthropic-compatible adapter does not recognize DeepSeek and
-      // otherwise caps each response at 4096 tokens, truncating valid tool
-      // continuations. Keep an explicit ceiling; length remains a test failure.
-      maxOutputTokens: model?.modelId?.startsWith('deepseek-') ? 16_384 : undefined,
+      // Compatible models need explicit budgets instead of the SDK's 4096 default.
+      // MiniMax exhausted 16k with finishReason=length before emitting an edit.
+      maxOutputTokens: model?.modelId?.startsWith('MiniMax-') ? 32_768 : undefined,
       // Resolved from the model object so the 21 runTurn call sites stay
       // unchanged. Reasoning models run at the provider default otherwise,
       // which is not the tier this suite is meant to measure.
@@ -470,6 +483,8 @@ export async function runTurn({ workspace, model, userPrompt, priorMessages = []
     clearTimeout(timer);
   }
   const generatedResponseMessages = result.responseMessages ?? result.response?.messages ?? [];
+  trace.finishReason = result.finishReason;
+  trace.usage = result.usage;
   const responseMessages = [...messages, ...generatedResponseMessages];
   const outcome = stopAfter?.(trace) ? 'checkpoint'
     : result.finishReason === 'length' ? 'output-limit'
@@ -512,8 +527,15 @@ export function fileLoaded(trace, filename) {
   return trace.toolCalls.some((call) => callLoadedFile(call, filename));
 }
 
+export function referenceLoadedWithContext(trace, filename, contextAlreadyLoaded = false) {
+  return fileLoaded(trace, filename)
+    && (contextAlreadyLoaded || trace.toolCalls.some((call) => call.contextLoaded));
+}
+
 export function summarizeTrace(trace) {
   return {
+    finishReason: trace.finishReason,
+    usage: trace.usage,
     totalCalls: trace.toolCalls.length,
     byName: trace.toolCalls.reduce((acc, c) => ((acc[c.name] = (acc[c.name] ?? 0) + 1), acc), {}),
     bashCommands: trace.bashCommands,

@@ -8,25 +8,24 @@
 # named `impeccable`, and exec'ing it would fail every verb with
 # "Unknown command". Trusted candidates (IMPECCABLE_BIN, the sibling binary,
 # the version-pinned cache) are exec'd without a probe: hooks run them on
-# every edit and must stay fast.
+# every edit and must stay fast. The sibling is trusted because nothing can
+# stage one at the wrong version: `bun run build` refuses to run when the
+# Cargo workspace version and ENGINE_VERSION disagree.
 set -eu
 
 # True when the candidate answers the engine handshake (prints
-# "impeccable-engine <version>", exit 0). Quiet and fast (<100ms).
+# "impeccable-engine <pinned version>", exit 0). Quiet and fast (<100ms).
 # IMPECCABLE_LAUNCHER_PROBE marks the child as a probe: a copy of this
 # launcher reached recursively (e.g. symlinked onto PATH as `impeccable`)
 # then skips its own probes and refuses to download, so probing stays cheap
 # and can never loop.
 probe_ok() {
-  case "$(IMPECCABLE_LAUNCHER_PROBE=1 "$1" engine-probe 2>/dev/null || true)" in
-    impeccable-engine*) return 0 ;;
-  esac
-  return 1
+  probe_output=$(IMPECCABLE_LAUNCHER_PROBE=1 "$1" engine-probe 2>/dev/null) || return 1
+  [ "$probe_output" = "impeccable-engine $version" ]
 }
 probing=${IMPECCABLE_LAUNCHER_PROBE:-}
 
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-
 # What the binary needs to know about its home: the skill directory (for
 # reference/*.md and command-metadata.json) and how to name itself in the
 # commands it prints. Exported BEFORE any exec below, including the
@@ -38,46 +37,57 @@ dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 : "${IMPECCABLE_SELF:=$0}"
 export IMPECCABLE_SKILL_DIR IMPECCABLE_SELF
 
-if [ -n "${IMPECCABLE_BIN:-}" ] && [ -x "${IMPECCABLE_BIN}" ]; then
-  exec "${IMPECCABLE_BIN}" "$@"
-fi
-
 case "$(uname -s 2>/dev/null || echo unknown)" in
-  Darwin) os=darwin ;;
   Linux) os=linux ;;
-  MINGW*|MSYS*|CYGWIN*|Windows_NT) os=windows ;;
   *) os=unknown ;;
 esac
 case "$(uname -m 2>/dev/null || echo unknown)" in
-  arm64|aarch64) arch=arm64 ;;
   x86_64|amd64) arch=x64 ;;
   *) arch=unknown ;;
 esac
 
-bin="$dir/bin/$os-$arch/impeccable"
-[ "$os" = windows ] && bin="$bin.exe"
+if [ "$os" != linux ] || [ "$arch" != x64 ]; then
+  echo "impeccable: unsupported platform $os-$arch; supported: linux-x64." >&2
+  exit 127
+fi
 
+# IMPECCABLE_BIN is trusted and does not need the pinned version: the caller
+# vouched for it. Check it before the VERSION guard so the documented override
+# still works when VERSION is missing or blank; the recovery message points the
+# user here.
+if [ -n "${IMPECCABLE_BIN:-}" ] && [ -x "${IMPECCABLE_BIN}" ]; then
+  exec "${IMPECCABLE_BIN}" "$@"
+fi
+
+# Every version-dependent path below (the probe comparison, the cache dir, the
+# download URL) degrades into nonsense on an empty version: a `bin//impeccable`
+# cache path and an `engine-v` tag that cannot exist. A VERSION that is missing
+# or blank means the install is incomplete, so say that instead.
+version=""
+[ -f "$dir/VERSION" ] && version=$(tr -d '[:space:]' < "$dir/VERSION")
+if [ -z "$version" ]; then
+  echo "impeccable: $dir/VERSION is missing or empty, so the engine version this skill pins is unknown." >&2
+  echo "Reinstall the skill." >&2
+  exit 1
+fi
+
+bin="$dir/bin/$os-$arch/impeccable"
+
+if [ -f "$bin" ] && [ ! -x "$bin" ]; then
+  # Lost the executable bit in transit (zip extraction, some copiers).
+  chmod +x "$bin" 2>/dev/null || true
+fi
 if [ -x "$bin" ]; then
   exec "$bin" "$@"
 fi
-if [ -f "$bin" ]; then
-  # Lost the executable bit in transit (zip extraction, some copiers).
-  chmod +x "$bin" 2>/dev/null && exec "$bin" "$@"
-fi
-# On Windows (an MSYS/Git Bash shell) the cached names carry .exe so this
-# launcher and impeccable.cmd share one cache.
-exe=""
-[ "$os" = windows ] && exe=".exe"
-home_bin="${HOME:-/nonexistent}/.impeccable/bin/impeccable$exe"
+home_bin="${HOME:-/nonexistent}/.impeccable/bin/impeccable"
 if [ -z "$probing" ] && [ -x "$home_bin" ] && probe_ok "$home_bin"; then
   exec "$home_bin" "$@"
 fi
 # Version-pinned user cache, filled by the download below or by `impeccable update`.
-version=""
-[ -f "$dir/VERSION" ] && version=$(tr -d '[:space:]' < "$dir/VERSION")
 cache_root="${IMPECCABLE_HOME:-${HOME:-/nonexistent}/.impeccable}"
-cached="$cache_root/bin/$version/impeccable$exe"
-if [ -n "$version" ] && [ -x "$cached" ]; then
+cached="$cache_root/bin/$version/impeccable"
+if [ -x "$cached" ]; then
   exec "$cached" "$@"
 fi
 if [ -z "$probing" ] && command -v impeccable >/dev/null 2>&1 && probe_ok impeccable; then
@@ -119,9 +129,8 @@ if [ -n "$probing" ]; then
   exit 127
 fi
 if [ -n "$version" ] && [ "$os" != unknown ] && [ "$arch" != unknown ]; then
-  base="${IMPECCABLE_DOWNLOAD_BASE:-https://github.com/pbakaus/impeccable/releases/download}"
+  base="${IMPECCABLE_DOWNLOAD_BASE:-https://github.com/Raudbjorn/impeccable/releases/download}"
   asset="impeccable-$os-$arch"
-  [ "$os" = windows ] && asset="$asset.exe"
   url="$base/engine-v$version/$asset"
   tmp="$cache_root/bin/$version/.impeccable.part.$$"
   if ! mkdir -p "$cache_root/bin/$version" 2>/dev/null; then
@@ -139,10 +148,6 @@ if [ -n "$version" ] && [ "$os" != unknown ] && [ "$arch" != unknown ]; then
   fetched=0
   if fetch_url "$url"; then
     fetched=1
-  elif [ "$os" = windows ] && [ "$arch" = arm64 ]; then
-    # Windows on ARM runs x64 binaries; fall back when no arm64 asset exists.
-    url="$base/engine-v$version/impeccable-windows-x64.exe"
-    fetch_url "$url" && fetched=1
   fi
   if [ "$fetched" = 1 ]; then
     check_download
@@ -202,5 +207,5 @@ if [ -n "$version" ] && [ "$os" != unknown ] && [ "$arch" != unknown ]; then
 fi
 
 echo "impeccable: no engine binary for $os-$arch found (looked in $bin, $cached, PATH)." >&2
-echo "Download impeccable-$os-$arch from https://github.com/pbakaus/impeccable/releases (tag engine-v$version) into $cache_root/bin/$version/impeccable$exe (then chmod +x), or set IMPECCABLE_BIN to a preinstalled engine binary. Docs: https://impeccable.style" >&2
+echo "Download impeccable-$os-$arch from https://github.com/Raudbjorn/impeccable/releases (tag engine-v$version) into $cache_root/bin/$version/impeccable (then chmod +x), or set IMPECCABLE_BIN to a preinstalled engine binary. Docs: https://impeccable.style" >&2
 exit 127

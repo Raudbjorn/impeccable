@@ -2,7 +2,7 @@
 
 Adapt an existing design to a different context: another screen size, device, platform, or use case. The trap is treating adaptation as scaling. The job is rethinking the experience for the new context.
 
-**Web only** (mobile web included). Native platforms (`ios` / `android` / `adaptive`) route to [adapt.native.md](adapt.native.md) instead; if the project is native, switch to it now.
+**Web only** (mobile web included). Native platforms (`android` / `adaptive`) route to [adapt.native.md](adapt.native.md) instead; if the project is native, switch to it now.
 
 ---
 
@@ -183,7 +183,7 @@ Test thoroughly across contexts:
 - **Real devices**: Test on actual phones, tablets, desktops
 - **Different orientations**: Portrait and landscape
 - **Different browsers**: Safari, Chrome, Firefox, Edge
-- **Different OS**: iOS, Android, Windows, macOS
+- **Different OS**: Android
 - **Different input methods**: Touch, mouse, keyboard
 - **Edge cases**: Very small screens (320px), very large screens (4K)
 - **Slow connections**: Test on throttled network

@@ -44,11 +44,7 @@ fn public_repo() -> Option<PathBuf> {
 
 fn find_on_path(name: &str) -> Option<PathBuf> {
     let path = std::env::var_os("PATH")?;
-    let exe = if cfg!(windows) {
-        format!("{name}.exe")
-    } else {
-        name.to_string()
-    };
+    let exe = name;
     std::env::split_paths(&path)
         .map(|d| d.join(&exe))
         .find(|p| p.is_file())

@@ -16,9 +16,9 @@ The hook runs locally after supported file edits, checks changed UI files for kn
 - Long description: Create, critique, and refine frontend interfaces with your coding agent. Impeccable provides 23 focused design commands, live browser iteration for exploring visual directions, and automatic checks that flag common design anti-patterns as you work.
 - Category: Creativity
 - Website: https://impeccable.style
-- Support: https://github.com/pbakaus/impeccable/issues
+- Support: https://github.com/Raudbjorn/impeccable/issues
 - Privacy policy: https://impeccable.style/privacy
-- Terms: https://github.com/pbakaus/impeccable/blob/main/LICENSE
+- Terms: https://github.com/Raudbjorn/impeccable/blob/main/LICENSE
 - Logo: `dist/openai/impeccable/assets/icon.png`
 
 Use the verified Renaissance Geek Inc business identity. The generated manifest uses the same publisher name in both `author.name` and `interface.developerName`.
@@ -36,28 +36,28 @@ Use the verified Renaissance Geek Inc business identity. The generated manifest 
 - User prompt: `audit demos/landing-demo/index.html for accessibility, responsive behavior, and performance problems.`
 - Expected behavior: Invoke Impeccable, load the audit and brand references, inspect the existing HTML, CSS, PRODUCT.md, and DESIGN.md, then run the bundled detector where applicable.
 - Expected result: A prioritized audit with evidence, affected selectors or files, severity, and concrete fixes. Do not change files unless the user also asks for fixes.
-- Fixture data: The public `demos/landing-demo/` folder in `pbakaus/impeccable`.
+- Fixture data: The public `demos/landing-demo/` folder in `Raudbjorn/impeccable`.
 
 ### 2. Final polish pass
 
 - User prompt: `polish demos/landing-demo/index.html and fix the rough edges without changing the brand.`
 - Expected behavior: Invoke Impeccable, load the polish and brand references, preserve the existing design tokens, inspect the page in a browser when available, and make scoped edits.
 - Expected result: Updated frontend files plus a concise summary of visual, responsive, and accessibility improvements and the validation performed.
-- Fixture data: The public `demos/landing-demo/` folder in `pbakaus/impeccable`.
+- Fixture data: The public `demos/landing-demo/` folder in `Raudbjorn/impeccable`.
 
 ### 3. Layout correction
 
 - User prompt: `The landing page spacing and hierarchy feel flat. Fix the layout.`
 - Expected behavior: Route to the layout workflow, inspect the existing design system, identify the marketing register, and adjust spacing, rhythm, alignment, and hierarchy without replacing unrelated styles.
 - Expected result: Scoped HTML or CSS changes that preserve content and brand, followed by responsive verification.
-- Fixture data: The public `demos/landing-demo/` folder in `pbakaus/impeccable`.
+- Fixture data: The public `demos/landing-demo/` folder in `Raudbjorn/impeccable`.
 
 ### 4. Bolder visual direction
 
 - User prompt: `make this landing page bolder, but keep it recognizable and avoid familiar AI design patterns.`
 - Expected behavior: Route to the bolder workflow, inspect PRODUCT.md and DESIGN.md, keep the established identity, and strengthen the composition, typography, color commitment, and motion where useful.
 - Expected result: Production-ready frontend changes with reduced-motion handling and a short explanation of the chosen direction.
-- Fixture data: The public `demos/landing-demo/` folder in `pbakaus/impeccable`.
+- Fixture data: The public `demos/landing-demo/` folder in `Raudbjorn/impeccable`.
 
 ### 5. UX copy clarification
 

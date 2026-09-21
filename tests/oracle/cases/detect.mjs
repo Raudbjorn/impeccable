@@ -29,6 +29,12 @@ export default function cases() {
     out.push({
       id: `detect-fixture-text-${id}`,
       verb: 'detect',
+      // Local port occupancy is environmental; keep the fixture's detection output stable.
+      normalize: id === 'framework-vite' ? [[
+        'Port 8080 is in use by another service\\. Start the Vite dev server and scan via URL for best results\\.',
+        '',
+        'Start the dev server and scan via URL for best results:\n  npx impeccable detect http://localhost:8080',
+      ]] : [],
       args: ['--no-config', `<REPO>/${rel}`],
       isolateHome: false,
     });

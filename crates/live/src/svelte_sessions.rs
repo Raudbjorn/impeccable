@@ -25,40 +25,17 @@ pub fn deferred_accepts_path(cwd: &str, env: &Env) -> String {
 
 /// `os.tmpdir()`
 pub fn tmpdir(env: &Env) -> String {
-    #[cfg(windows)]
-    {
-        // Node: TEMP || TMP || (SystemRoot || windir) + '\\temp', then one
-        // trailing backslash dropped unless it is a drive root (`C:\`).
-        let mut path = ["TEMP", "TMP"]
-            .iter()
-            .find_map(|k| env.get(*k).filter(|v| !v.is_empty()).cloned())
-            .unwrap_or_else(|| {
-                let root = env
-                    .get("SystemRoot")
-                    .or_else(|| env.get("windir"))
-                    .cloned()
-                    .unwrap_or_default();
-                format!("{}\\temp", root)
-            });
-        if path.len() > 1 && path.ends_with('\\') && !path.ends_with(":\\") {
-            path.pop();
+    for k in ["TMPDIR", "TMP", "TEMP"] {
+        if let Some(v) = env.get(k).filter(|v| !v.is_empty()) {
+            let t = if v.len() > 1 && v.ends_with('/') {
+                v.trim_end_matches('/').to_string()
+            } else {
+                v.clone()
+            };
+            return t;
         }
-        path
     }
-    #[cfg(not(windows))]
-    {
-        for k in ["TMPDIR", "TMP", "TEMP"] {
-            if let Some(v) = env.get(k).filter(|v| !v.is_empty()) {
-                let t = if v.len() > 1 && v.ends_with('/') {
-                    v.trim_end_matches('/').to_string()
-                } else {
-                    v.clone()
-                };
-                return t;
-            }
-        }
-        "/tmp".to_string()
-    }
+    "/tmp".to_string()
 }
 
 fn js_str(v: &Value) -> String {

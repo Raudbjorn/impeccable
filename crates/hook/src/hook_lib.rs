@@ -165,11 +165,7 @@ fn hook_state_dir(cwd: &str) -> String {
     let mut root = impeccable_core::js::trim(&raw).to_string();
     if root.starts_with("~/") || root.starts_with("~\\") || root == "~" {
         // JS: os.homedir() || '' — HOME on unix, USERPROFILE on Windows.
-        let home = if cfg!(windows) {
-            std::env::var("USERPROFILE").unwrap_or_default()
-        } else {
-            std::env::var("HOME").unwrap_or_default()
-        };
+        let home = std::env::var("HOME").unwrap_or_default();
         root = if home.is_empty() {
             String::new()
         } else {
@@ -218,8 +214,6 @@ pub struct Runtime<'a> {
     /// (JS: `node '<abs>/hook-admin.mjs'`; here `'<self>' hooks`).
     pub hook_admin_command: String,
     pub html: &'a dyn HtmlEngine,
-    /// `process.platform === 'win32'` (command-arg quoting).
-    pub win32: bool,
     canonical_cache: std::cell::RefCell<HashMap<String, String>>,
 }
 
@@ -231,14 +225,12 @@ impl<'a> Runtime<'a> {
         self_cmd: &str,
         html: &'a dyn HtmlEngine,
     ) -> Self {
-        let win32 = cfg!(windows);
         Runtime {
             proc_cwd,
             env,
             impeccable_command,
-            hook_admin_command: format!("{} hooks", quote_command_arg(self_cmd, win32)),
+            hook_admin_command: format!("{} hooks", quote_command_arg(self_cmd)),
             html,
-            win32,
             canonical_cache: std::cell::RefCell::new(HashMap::new()),
         }
     }
@@ -1097,7 +1089,7 @@ pub fn remember_findings(
 // ── rendering ─────────────────────────────────────────────────────────────
 
 /// JS: quoteCommandArg(value)
-pub fn quote_command_arg(value: &str, win32: bool) -> String {
+pub fn quote_command_arg(value: &str) -> String {
     let text = js::trim(value);
     if !text.is_empty()
         && text
@@ -1105,9 +1097,6 @@ pub fn quote_command_arg(value: &str, win32: bool) -> String {
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b':' | b'-'))
     {
         return text.to_string();
-    }
-    if win32 {
-        return format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""));
     }
     format!("'{}'", text.replace('\'', "'\\''"))
 }
@@ -1237,7 +1226,7 @@ fn clean_ignore_value_display(value: &str) -> String {
 }
 
 /// JS: formatFindingIgnoreHint(finding)
-fn format_finding_ignore_hint(rt: &Runtime, f: &Finding) -> String {
+fn format_finding_ignore_hint(f: &Finding) -> String {
     let rule = normalize_ignore_rule(&f.antipattern);
     if rule.is_empty() {
         return String::new();
@@ -1246,12 +1235,12 @@ fn format_finding_ignore_hint(rt: &Runtime, f: &Finding) -> String {
     if normalized.is_empty() {
         return String::new();
     }
-    let value_arg = quote_command_arg(&extract_finding_ignore_value_raw(f, &rule), rt.win32);
+    let value_arg = quote_command_arg(&extract_finding_ignore_value_raw(f, &rule));
     format!("ignore-value {rule} {value_arg}")
 }
 
 /// JS: formatFindingLine(f, { compact })
-fn format_finding_line(rt: &Runtime, f: &Finding, compact: bool) -> String {
+fn format_finding_line(f: &Finding, compact: bool) -> String {
     let prefix = if f.line > 0.0 {
         format!("- L{}", js::number_to_string(f.line))
     } else {
@@ -1268,7 +1257,7 @@ fn format_finding_line(rt: &Runtime, f: &Finding, compact: bool) -> String {
     } else {
         format!("{}.", TRAILING_DOTS_RE.replacen(name, 1, ""))
     };
-    let hint = format_finding_ignore_hint(rt, f);
+    let hint = format_finding_ignore_hint(f);
     let ignore_segment = if hint.is_empty() {
         String::new()
     } else {
@@ -1281,13 +1270,13 @@ fn format_finding_line(rt: &Runtime, f: &Finding, compact: bool) -> String {
 }
 
 /// JS: formatDedupedFindingLine(finding, seenRules)
-fn format_deduped_finding_line(rt: &Runtime, f: &Finding, seen_rules: &mut Vec<String>) -> String {
+fn format_deduped_finding_line(f: &Finding, seen_rules: &mut Vec<String>) -> String {
     let rule = normalize_ignore_rule(&f.antipattern);
     let compact = !rule.is_empty() && seen_rules.contains(&rule);
     if !rule.is_empty() && !compact {
         seen_rules.push(rule);
     }
-    format_finding_line(rt, f, compact)
+    format_finding_line(f, compact)
 }
 
 /// JS: directiveFooter({ mode })
@@ -1373,7 +1362,7 @@ pub fn render_template(
     let mut seen_rules: Vec<String> = Vec::new();
     let lines: Vec<String> = shown
         .iter()
-        .map(|f| format_deduped_finding_line(rt, f, &mut seen_rules))
+        .map(|f| format_deduped_finding_line(f, &mut seen_rules))
         .collect();
     let more = if remaining > 0 {
         Some(format!(
@@ -1512,7 +1501,7 @@ pub fn render_grouped_template(
         let remaining_cap = cap.saturating_sub(shown_count);
         let shown = &group.findings[..group.findings.len().min(remaining_cap)];
         for f in shown {
-            lines.push(format_deduped_finding_line(rt, f, &mut seen_rules));
+            lines.push(format_deduped_finding_line(f, &mut seen_rules));
         }
         shown_count += shown.len();
         let hidden = group.findings.len() - shown.len();

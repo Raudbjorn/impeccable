@@ -630,7 +630,7 @@ fn install(flags: &[String], io: &mut Io) -> R<()> {
             }
 
             let written_hook_targets = if !missing_hook_targets.is_empty() {
-                copy_provider_hooks(&sys, &bdir, &hook_root, &missing_hook_targets, false, Some(&install_root))?
+                copy_provider_hooks(&sys, &bdir, &hook_root, &missing_hook_targets, false, Some(&install_root), scope_opt)?
             } else {
                 Vec::new()
             };
@@ -692,7 +692,7 @@ fn install(flags: &[String], io: &mut Io) -> R<()> {
         let agents = bundle::copy_provider_agents(&sys, &bundle_dir, &install_root, &targets, scope_opt)?;
         bundle::copy_provider_commands(&sys, &bundle_dir, &install_root, &targets, scope_opt);
         let hooks = if want_hooks {
-            copy_provider_hooks(&sys, &bundle_dir, &hook_root, &targets, force, Some(&install_root))?
+            copy_provider_hooks(&sys, &bundle_dir, &hook_root, &targets, force, Some(&install_root), scope_opt)?
         } else {
             Vec::new()
         };
@@ -821,7 +821,7 @@ fn update(flags: &[String], io: &mut Io) -> R<()> {
             hook_manifest::repair_stale_hook_manifests(&sys, &root, &copy_providers, None).map_err(Flow::Throw)?;
             let want_hooks = install_hooks && decide_hook_install(&mut prompt, io, &root, &copy_providers, yes)?;
             let hook_targets = if want_hooks {
-                copy_provider_hooks(&sys, &tmp_dir, &root, &copy_providers, force, None).map_err(Flow::Throw)?
+                copy_provider_hooks(&sys, &tmp_dir, &root, &copy_providers, force, None, agent_scope).map_err(Flow::Throw)?
             } else {
                 Vec::new()
             };
@@ -877,7 +877,7 @@ fn update(flags: &[String], io: &mut Io) -> R<()> {
         hook_manifest::repair_stale_hook_manifests(&sys, &root, &copy_providers, None).map_err(Flow::Throw)?;
         let want_hooks = install_hooks && decide_hook_install(&mut prompt, io, &root, &providers, yes)?;
         let hook_targets = if want_hooks {
-            copy_provider_hooks(&sys, &tmp_dir, &root, &providers, force, None).map_err(Flow::Throw)?
+            copy_provider_hooks(&sys, &tmp_dir, &root, &providers, force, None, agent_scope).map_err(Flow::Throw)?
         } else {
             Vec::new()
         };

@@ -173,8 +173,7 @@ pub fn browser_primary_font(stack: &str) -> String {
     if stack.is_empty() || VAR_RE.is_match(stack) {
         return String::new();
     }
-    stack
-        .split(',')
+    crate::fonts::split_font_family_list(stack).into_iter()
         .map(normalize_browser_font_name)
         .find(|font| !font.is_empty() && !crate::constants::GENERIC_FONTS.contains(&font.as_str()))
         .unwrap_or_default()
@@ -1509,6 +1508,7 @@ mod tests {
         assert_eq!(browser_primary_font("system-ui, sans-serif"), "");
         assert_eq!(browser_primary_font("system-ui, Roboto"), "roboto");
         assert_eq!(browser_primary_font("var(--font)"), "");
+        assert_eq!(browser_primary_font(r#""Arial, Custom Brand", sans-serif"#), "arial, custom brand");
         assert_eq!(normalize_browser_font_name("  'Space+Grotesk'  "), "space grotesk");
     }
 

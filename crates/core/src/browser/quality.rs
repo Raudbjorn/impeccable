@@ -614,6 +614,46 @@ pub fn check_quality(dom: &dyn Dom, q: &QualityInput) -> Vec<RuleHit> {
         }
     }
 
+    // --- Small UI text with oversized line-height ---
+    // Matches the label/control element itself (`matches_or_false`, not
+    // `matches_or_closest`) so a plain text descendant inside a matching
+    // ancestor isn't also independently evaluated as its own candidate —
+    // that duplicated findings for one control. Requires non-empty
+    // rendered text and applies the same non-rendered / visually-hidden
+    // guards the neighboring text-size rules use.
+    if font_size > 0.0
+        && font_size <= 13.0
+        && !is_non_rendered_text(dom, el, tag)
+        && !is_visually_hidden(dom, el)
+    {
+        if let Some(lh) = q.line_height_px {
+            let ratio = lh / font_size;
+            let is_ui_label = tag == "label"
+                || tag == "button"
+                || matches_or_false(
+                    dom,
+                    el,
+                    "[role=\"button\"], [class*=\"badge\" i], [class*=\"chip\" i], [class*=\"pill\" i], [class*=\"tag\" i], [class*=\"label\" i]",
+                );
+            if is_ui_label && ratio > 1.7 {
+                let raw = js::trim(&dom.text_content(el)).to_string();
+                let text = collapse_ws(&raw);
+                let text = slice_utf16_prefix(text.trim_matches('"'), 30);
+                if !text.is_empty() {
+                    findings.push(RuleHit::new(
+                        "label-line-height",
+                        format!(
+                            "{}px text with {}x line-height \"{}\"",
+                            number_to_string(font_size),
+                            to_fixed(ratio, 2),
+                            text
+                        ),
+                    ));
+                }
+            }
+        }
+    }
+
     // --- All-caps body text ---
     if has_direct_text && text_len > 30 && st("textTransform") == "uppercase" && !is_heading {
         findings.push(RuleHit::new(
@@ -891,6 +931,46 @@ mod tests {
         d.set_style(s, "fontSize", "9px");
         d.add_selector(s, SR_ONLY_SELECTOR);
         assert!(check_element_quality_dom(&d, s, &BrowserConfig::default()).is_empty());
+    }
+
+    #[test]
+    fn label_line_height_matches_self_and_strips_quotes() {
+        let mut d = FakeDom::new();
+        let (_h, body) = d.with_page();
+        // A badge whose own text carries literal quote marks: the snippet
+        // should show them once, not doubled, and the badge itself (not a
+        // wrapping ancestor) is the reported element.
+        let badge = text_el(&mut d, body, "span", "\"Badge 10px / 20px\"", "10px");
+        d.add_selector(badge, "[class*=\"badge\" i]");
+        d.set_style(badge, "lineHeight", "20px");
+        let hits = check_element_quality_dom(&d, badge, &BrowserConfig::default());
+        let hit = hits
+            .iter()
+            .find(|h| h.id == "label-line-height")
+            .unwrap_or_else(|| panic!("expected a label-line-height finding, got {hits:?}"));
+        assert_eq!(
+            hit.snippet,
+            "10px text with 2.00x line-height \"Badge 10px / 20px\""
+        );
+
+        // A plain-text child inside a matching ancestor is not an
+        // independent candidate: only the ancestor's own finding fires.
+        let wrapper = text_el(&mut d, body, "span", "", "10px");
+        d.add_selector(wrapper, "[class*=\"badge\" i]");
+        d.set_style(wrapper, "lineHeight", "20px");
+        let inner = text_el(&mut d, wrapper, "span", "Inner text", "10px");
+        d.set_style(inner, "lineHeight", "20px");
+        let wrapper_hits = check_element_quality_dom(&d, wrapper, &BrowserConfig::default());
+        assert_eq!(
+            wrapper_hits.iter().filter(|h| h.id == "label-line-height").count(),
+            1,
+            "{wrapper_hits:?}"
+        );
+        let inner_hits = check_element_quality_dom(&d, inner, &BrowserConfig::default());
+        assert!(
+            inner_hits.iter().all(|h| h.id != "label-line-height"),
+            "{inner_hits:?}"
+        );
     }
 
     #[test]

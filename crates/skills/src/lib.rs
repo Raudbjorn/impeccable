@@ -12,8 +12,7 @@
 //!    the base URL) with `.sha256` verification, so the installed skill is
 //!    self-contained. See `engine_binary`.
 //! 2. Hook manifests are rewritten to invoke the launcher
-//!    (`"<skill>/scripts/impeccable" hook`, `impeccable.cmd` in the Codex
-//!    `commandWindows` sibling) instead of `node "<skill>/scripts/hook.mjs"`.
+//!    (`"<skill>/scripts/impeccable" hook`) instead of `node "<skill>/scripts/hook.mjs"`.
 //!    The command forms match what `impeccable hooks on`
 //!    (`impeccable_hook::admin`) writes, and both paths recognize a manifest
 //!    entry as ours through `impeccable_context::hook_markers`, so the two

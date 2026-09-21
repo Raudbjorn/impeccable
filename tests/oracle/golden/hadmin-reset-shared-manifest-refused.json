@@ -1,0 +1,28 @@
+{
+  "steps": [
+    {
+      "stdout": "Design hook enabled for this project (wrote .impeccable/config.json). Recorded local hook consent in .impeccable/config.local.json. Installed or repaired hook manifests for: .cursor.\n",
+      "stderr": "",
+      "exit": 0,
+      "signal": null
+    },
+    {
+      "stdout": "",
+      "stderr": "Error: Remove the shared hook entry from .claude/settings.json before resetting; hook config was preserved.\n",
+      "exit": 1,
+      "signal": null
+    },
+    {
+      "stdout": "Impeccable design hook\n  state:        enabled\n  shared file:  .impeccable/config.json\n  local file:   .impeccable/config.local.json\n  ignoreRules:  (none)\n  ignoreFiles:  (none)\n  ignoreValues: (none)\n  maxFindings:  5\n  maxChars:     8000\n  env override: unset\n  cache file:   .impeccable/hook.cache.json (not present)\n",
+      "stderr": "",
+      "exit": 0,
+      "signal": null
+    }
+  ],
+  "files": {
+    ".claude/settings.json": "{\n  \"hooks\": {\n    \"PostToolUse\": [\n      {\n        \"matcher\": \"Edit\",\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"\\\"${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/impeccable\\\" hook\"\n          }\n        ]\n      }\n    ]\n  }\n}\n",
+    ".cursor/hooks.json": "{\n  \"version\": 1,\n  \"hooks\": {\n    \"preToolUse\": [\n      {\n        \"command\": \"\\\".cursor/skills/impeccable/scripts/impeccable\\\" hook-before-edit\",\n        \"timeout\": 5\n      }\n    ]\n  }\n}\n",
+    ".impeccable/config.json": "{\n  \"hook\": {\n    \"enabled\": true,\n    \"limits\": {\n      \"maxFindings\": 5,\n      \"maxChars\": 8000\n    }\n  }\n}\n",
+    ".impeccable/config.local.json": "{\n  \"hook\": {\n    \"consent\": \"accepted\"\n  }\n}\n"
+  }
+}

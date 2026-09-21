@@ -1,0 +1,7 @@
+{
+  "stdout": "",
+  "stderr": "generate-image: --min 0.8x is not a finite number\n",
+  "exit": 1,
+  "signal": null,
+  "files": {}
+}

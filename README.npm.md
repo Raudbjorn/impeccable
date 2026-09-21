@@ -1,10 +1,12 @@
 # Impeccable CLI
 
-Detect UI anti-patterns and design quality issues from the command line, and install the Impeccable design skill into your AI coding harness. The detector scans HTML, CSS, JSX, TSX, Vue, and Svelte files for 61 deterministic rules, including AI-generated UI tells, accessibility violations, and general design quality problems.
+Detect UI anti-patterns and design quality issues from the command line, and install the Impeccable design skill into your AI coding harness. The detector scans HTML, CSS, JSX, TSX, Vue, and Svelte files for 62 deterministic rules, including AI-generated UI tells, accessibility violations, and general design quality problems.
 
 The npm package is a small launcher. It runs the `impeccable` engine binary for your platform, installed alongside it as an optional dependency (`@impeccable/cli-<os>-<arch>`), and falls back to a per-user cache or a one-time download when that package is missing.
 
 ## Quick Start
+
+To select this fork, use `npx --package=github:Raudbjorn/impeccable impeccable <command>` in place of `npx impeccable` in the examples below. The unqualified npm package still belongs to upstream.
 
 ```bash
 # Install skills into your AI harness (Claude, Cursor, Gemini, etc.)
@@ -57,7 +59,7 @@ npx impeccable detect --json src/
 
 **Quality**: tiny body text, cramped padding, long line lengths, small touch targets
 
-61 deterministic detector rules in total. See the full catalog at [impeccable.style/slop](https://impeccable.style/slop).
+62 deterministic detector rules in total. See the full catalog at [impeccable.style/slop](https://impeccable.style/slop).
 
 ## Exit Codes
 
@@ -83,12 +85,14 @@ impeccable detect [options] [file-or-dir-or-url...]
 - For URL scans, an installed Chrome, Chromium, or Edge (set `IMPECCABLE_BROWSER` to point at one).
 - Behind a TLS-inspecting proxy, downloads trust your OS certificate store as well as the bundled Mozilla roots. Set `SSL_CERT_FILE` or `SSL_CERT_DIR` to use a specific CA bundle instead.
 
-Binary lookup order: `IMPECCABLE_BIN`, the platform package, `~/.impeccable/bin/<version>/`, then a download of the pinned version into that cache. Set `IMPECCABLE_BIN` to a local build to skip all of that.
+Binary lookup order: `IMPECCABLE_BIN`, a platform package matching the fork's repository and pinned engine version, `~/.impeccable/bin/<version>/`, then a download from the fork's GitHub Releases into that cache. Set `IMPECCABLE_BIN` to a local build to skip all of that.
 
 ## Part of Impeccable
 
-This CLI is part of [Impeccable](https://impeccable.style), a cross-provider design skill pack for AI-powered development tools. The full suite includes 24 commands for Claude, Cursor, GitHub Copilot, Gemini, Codex, Hermes Agent, Veto, and more.
+This CLI is part of [Impeccable](https://impeccable.style), a cross-provider design skill pack for AI-powered development tools. The full suite includes 26 commands for Claude, GitHub Copilot, Gemini, Codex, Veto, and more.
 
 ## License
 
-[Apache 2.0](https://github.com/pbakaus/impeccable/blob/main/LICENSE)
+[Apache 2.0](https://github.com/Raudbjorn/impeccable/blob/main/LICENSE)
+
+Supported engine host: Linux x64 (x86_64) only. The published binary requires glibc 2.39 or newer.

@@ -1898,7 +1898,7 @@ export async function runAgentLoop({
         });
         let toast = 'Hero marked';
         if (typeof agent.handleSteer === 'function') {
-          const result = await agent.handleSteer(event, steerContext);
+          const result = await agent.handleSteer(event, { ...steerContext, signal });
           toast = result?.message || toast;
         } else {
           await handleSteerDeterministic(steerContext);
@@ -1981,7 +1981,7 @@ export async function runAgentLoop({
         // the request for the remaining variants completes.
         trace('agent.generate.start', { id: event.id, count: event.count });
         let output = normalizeVariantOutput(
-          await agent.generateVariants(event, { wrapTarget, wrapInfo, tmp }),
+          await agent.generateVariants(event, { wrapTarget, wrapInfo, tmp, signal }),
           wrapInfo,
         );
         if (atomicDelayMs > 0) {
@@ -2102,7 +2102,7 @@ export async function runAgentLoop({
           throw new Error('agent does not implement applyManualEdits');
         }
         log("Using source hints first; I'll only touch the hinted copy.");
-        const result = await agent.applyManualEdits(event, { tmp, engineBin });
+        const result = await agent.applyManualEdits(event, { tmp, engineBin, signal });
         if (process.env.IMPECCABLE_E2E_DEBUG) {
           log(`manual_edit_apply result: ${JSON.stringify(result)}`);
         }

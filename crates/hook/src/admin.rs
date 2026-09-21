@@ -54,19 +54,6 @@ fn command_hook(command: &str, timeout: i64, status: &str) -> Value {
     ])
 }
 
-/// A command hook with the `commandWindows` sibling Codex 0.146.0+ selects
-/// on Windows (`command_windows.unwrap_or(command)`), pointing at the
-/// launcher's `.cmd` shim so the same `.codex/hooks.json` runs on every OS.
-fn command_hook_with_windows(command: &str, windows: &str, timeout: i64, status: &str) -> Value {
-    obj(vec![
-        ("type", Value::from("command")),
-        ("command", Value::from(command)),
-        ("commandWindows", Value::from(windows)),
-        ("timeout", Value::from(timeout)),
-        ("statusMessage", Value::from(status)),
-    ])
-}
-
 /// JS: stopManifestEntry(command)
 fn stop_manifest_entry(command: &str) -> Value {
     obj(vec![(
@@ -79,24 +66,13 @@ fn stop_manifest_entry(command: &str) -> Value {
     )])
 }
 
-fn stop_manifest_entry_with_windows(command: &str, windows: &str) -> Value {
-    obj(vec![(
-        "hooks",
-        Value::Array(vec![command_hook_with_windows(
-            command,
-            windows,
-            STOP_TIMEOUT_SECONDS,
-            STOP_STATUS_MESSAGE,
-        )]),
-    )])
-}
+
 
 /// The launcher paths the manifests invoke, per harness. Project-relative
 /// (or `${CLAUDE_PROJECT_DIR}` / repo-root anchored) so a committed manifest
 /// resolves on every teammate's checkout.
 const CLAUDE_HOOK_COMMAND: &str = "\"${CLAUDE_PROJECT_DIR}/.claude/skills/impeccable/scripts/impeccable\" hook";
 const AGENTS_HOOK_COMMAND: &str = "\".agents/skills/impeccable/scripts/impeccable\" hook";
-const AGENTS_HOOK_COMMAND_WINDOWS: &str = "\".agents/skills/impeccable/scripts/impeccable.cmd\" hook";
 const CURSOR_HOOK_COMMAND: &str = "\".cursor/skills/impeccable/scripts/impeccable\" hook-before-edit";
 const GITHUB_HOOK_COMMAND: &str = "\"$(git rev-parse --show-toplevel)/.github/skills/impeccable/scripts/impeccable\" hook";
 
@@ -135,7 +111,6 @@ fn claude_manifest() -> Value {
 
 fn agents_manifest() -> Value {
     let cmd = AGENTS_HOOK_COMMAND;
-    let win = AGENTS_HOOK_COMMAND_WINDOWS;
     obj(vec![(
         "hooks",
         obj(vec![
@@ -145,11 +120,11 @@ fn agents_manifest() -> Value {
                     ("matcher", Value::from("Edit|Write|apply_patch")),
                     (
                         "hooks",
-                        Value::Array(vec![command_hook_with_windows(cmd, win, TIMEOUT_SECONDS, STATUS_MESSAGE)]),
+                        Value::Array(vec![command_hook(cmd, TIMEOUT_SECONDS, STATUS_MESSAGE)]),
                     ),
                 ])]),
             ),
-            ("Stop", Value::Array(vec![stop_manifest_entry_with_windows(cmd, win)])),
+            ("Stop", Value::Array(vec![stop_manifest_entry(cmd)])),
         ]),
     )])
 }
@@ -692,6 +667,23 @@ fn repair_hook_manifests(cwd: &str) -> Result<Repaired, String> {
         already: vec![],
         backups: vec![],
     };
+    if exists(&jsp::join(&[cwd, ".omp/skills/impeccable"])) {
+        let dest = jsp::join(&[cwd, ".omp/hooks/post/impeccable.js"]);
+        let current = safe_read(&dest);
+        let fresh = impeccable_context::provider::OMP_HOOK_MODULE;
+        if current.as_deref() == Some(fresh) {
+            result.already.push(".omp".into());
+        } else {
+            if current.is_some() {
+                let backup = format!("{dest}.bak");
+                std::fs::copy(&dest, &backup).map_err(|e| e.to_string())?;
+                result.backups.push(backup);
+            }
+            std::fs::create_dir_all(jsp::dirname(&dest)).map_err(|e| e.to_string())?;
+            std::fs::write(&dest, fresh).map_err(|e| e.to_string())?;
+            result.written.push(".omp".into());
+        }
+    }
     for target in HOOK_MANIFEST_TARGETS {
         if !exists(&jsp::join(&[cwd, target.skill_rel])) {
             continue;
@@ -790,6 +782,13 @@ fn file_has_impeccable_hook_marker(path: &str) -> bool {
     let Some(parsed) = safe_read(path).and_then(|t| serde_json::from_str::<Value>(&t).ok()) else {
         return false;
     };
+    manifest_value_has_impeccable_hook_marker(&parsed)
+}
+
+/// The parsed-manifest half of `fileHasImpeccableHookMarker`, split out so a
+/// caller that already holds the parsed value (`reset`, to check malformed
+/// and marker from one read) doesn't reread and reparse the file.
+fn manifest_value_has_impeccable_hook_marker(parsed: &Value) -> bool {
     let Value::Object(o) = parsed else {
         return false;
     };
@@ -1191,7 +1190,42 @@ fn add_ignore_value(rt: &Runtime, cwd: &str, args: &[String]) -> Result<String, 
 }
 
 /// JS: reset(cwd)
-fn reset(rt: &Runtime, cwd: &str) -> String {
+fn reset(rt: &Runtime, cwd: &str) -> Result<String, String> {
+    let mut pruned: Vec<String> = Vec::new();
+    for target in HOOK_MANIFEST_TARGETS {
+        if let Some(shared) = target.shared_dest_rel {
+            let shared_path = jsp::join(&[cwd, shared]);
+            // One read, reused for both checks below: `file_has_impeccable_
+            // hook_marker` parses the file as JSON and returns `false` when
+            // it doesn't parse, the same "unreadable reads as unwired" trap
+            // the `dest_rel` malformed check further down exists to close.
+            // Without this, a corrupted-but-wired shared manifest let reset
+            // delete the disabling config while the shared entry stayed
+            // wired: the hook re-arms with no kill switch (#512-class bug,
+            // shared-manifest side). Reading once (instead of the malformed
+            // check and the marker check each rereading the file) also
+            // means there's nothing for a concurrent write to race between.
+            let shared_raw = read_raw_config_file(&shared_path);
+            if shared_raw.exists && shared_raw.malformed {
+                return Err(format!("Cannot reset malformed shared hook manifest {shared_path}; hook config was preserved."));
+            }
+            if shared_raw.raw.as_ref().is_some_and(manifest_value_has_impeccable_hook_marker) {
+                return Err(format!("Remove the shared hook entry from {shared} before resetting; hook config was preserved."));
+            }
+        }
+        let dest = jsp::join(&[cwd, target.dest_rel]);
+        if exists(&dest) && read_raw_config_file(&dest).malformed {
+            return Err(format!("Cannot reset malformed hook manifest {dest}; hook config was preserved."));
+        }
+        if prune_impeccable_hook_from_manifest(&dest)? {
+            pruned.push(target.provider.to_string());
+        }
+    }
+    let omp = jsp::join(&[cwd, ".omp/hooks/post/impeccable.js"]);
+    if safe_read(&omp).is_some_and(|s| s.contains("export default function impeccableHook(")) {
+        std::fs::remove_file(&omp).map_err(|e| e.to_string())?;
+        pruned.push(".omp".into());
+    }
     let mut removed: Vec<String> = Vec::new();
     for file_path in [get_config_path(cwd), get_local_config_path(cwd)] {
         let raw = read_raw_config_file(&file_path).raw;
@@ -1222,22 +1256,6 @@ fn reset(rt: &Runtime, cwd: &str) -> String {
             removed.push(rel_or(rt, cwd, &file_path));
         }
     }
-    // JS #668: `on` writes three things: config, consent, and hook entries in
-    // the provider manifests. Reset must undo all three (issue #512), or a
-    // leftover manifest entry keeps invoking the hook after the config was
-    // deleted. destRel only (the local manifest `on` writes); never the
-    // team-shared sharedDestRel. No skill-folder gate: a reset mid-uninstall is
-    // exactly the case that needs the prune. The manifest entries are the
-    // launcher-era shape the engine writes (`impeccable hook ...`), not the old
-    // `node hook.mjs` form; prune_impeccable_hook_from_manifest keys on the
-    // impeccable marker, so it removes whichever form is present.
-    let mut pruned: Vec<String> = Vec::new();
-    for target in HOOK_MANIFEST_TARGETS {
-        let dest = jsp::join(&[cwd, target.dest_rel]);
-        if let Ok(true) = prune_impeccable_hook_from_manifest(&dest) {
-            pruned.push(target.provider.to_string());
-        }
-    }
     let mut parts: Vec<String> = Vec::new();
     if !removed.is_empty() {
         parts.push(format!(
@@ -1249,9 +1267,9 @@ fn reset(rt: &Runtime, cwd: &str) -> String {
         parts.push(format!("Removed hook entries from: {}.", pruned.join(", ")));
     }
     if parts.is_empty() {
-        "No hook config or cache to remove. Already at defaults.".to_string()
+        Ok("No hook config or cache to remove. Already at defaults.".to_string())
     } else {
-        parts.join(" ")
+        Ok(parts.join(" "))
     }
 }
 
@@ -1279,7 +1297,7 @@ pub fn run(rt: &Runtime, args: &[String], io: &mut impeccable_common::Io) -> i32
         "ignore-rule" => add_ignore_rule(rt, &cwd, &rest),
         "ignore-file" => add_ignore_file(rt, &cwd, &rest),
         "ignore-value" => add_ignore_value(rt, &cwd, &rest),
-        "reset" => Ok(reset(rt, &cwd)),
+        "reset" => reset(rt, &cwd),
         _ => Ok(String::new()),
     };
     match out {

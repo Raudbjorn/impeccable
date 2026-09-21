@@ -4,7 +4,6 @@
  * Build System for Cross-Provider Design Skills
  *
  * Transforms source skills into provider-specific formats:
- * - Cursor: .cursor/skills/
  * - Claude Code: .claude/skills/
  * - Gemini: .gemini/skills/
  * - Codex: dist/codex/ only (OpenAI-metadata bundle; not synced to repo root)
@@ -23,6 +22,7 @@ import { readSourceFiles, readPatterns, stashPerProjectArtifacts, restorePerProj
 import { syncRootCommands } from './lib/root-commands-sync.mjs';
 import { createTransformer, PROVIDERS } from './lib/transformers/index.js';
 import { hooksJsonFor, buildClaudePluginHooksManifest } from './lib/transformers/hooks.js';
+import { DEPRECATED_LOCAL_SKILLS } from './lib/generated-paths.mjs';
 import { createAllZips, createProviderZip } from './lib/zip.js';
 import { collectPluginVersions } from './lib/validate-plugin-versions.js';
 import { collectPluginManifestFindings } from './lib/validate-plugin-manifest.js';
@@ -33,7 +33,6 @@ import {
   verifyPluginAgentRewrite,
 } from './lib/plugin-paths.js';
 import { stageOpenAIPlugin } from './lib/openai-plugin.js';
-import { stageCursorPlugin } from './lib/cursor-plugin.js';
 import { stageVSCodeExtension } from './lib/vscode-extension.js';
 import { ENGINE_TARGETS, binaryName, main as fetchEngineMain, readEngineVersion } from './fetch-engine.mjs';
 // Sub-page generation is now handled by Astro content collections.
@@ -540,8 +539,9 @@ function syncRootHookManifests(rootDir) {
     if (!manifest) continue;
     const rel = config.hooksManifestRel || path.join('hooks', 'hooks.json');
     const dest = path.join(rootDir, config.configDir, rel);
+    const content = manifest.isModule ? manifest.content : JSON.stringify(manifest, null, 2) + '\n';
     fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.writeFileSync(dest, JSON.stringify(manifest, null, 2) + '\n');
+    fs.writeFileSync(dest, content);
     synced.push(path.join(config.configDir, rel).split(path.sep).join('/'));
   }
   return synced;
@@ -589,6 +589,21 @@ function syncEngineVersionFile(rootDir) {
   const version = readEngineVersion(rootDir);
   if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version)) {
     throw new Error(`ENGINE_VERSION must be a semver string, got "${version}"`);
+  }
+  // The launcher trusts the binary staged beside it, and `impeccable update`
+  // trusts the one it caches, on the strength of this pin alone. The binary
+  // answers `engine-probe` from CARGO_PKG_VERSION, so a Cargo workspace that
+  // has drifted from ENGINE_VERSION ships an engine that disagrees with the
+  // version every install path just resolved. Nothing else compares the two.
+  const cargo = fs.readFileSync(path.join(rootDir, 'Cargo.toml'), 'utf-8');
+  const workspace = cargo.split(/^\[/m).find(s => s.startsWith('workspace.package]')) || '';
+  const cargoVersion = workspace.match(/^version\s*=\s*"([^"]+)"/m)?.[1];
+  if (cargoVersion !== version) {
+    throw new Error(
+      `Cargo.toml [workspace.package] version "${cargoVersion}" does not match ENGINE_VERSION "${version}". `
+      + 'The engine reports the Cargo version through engine-probe, and the launcher rejects a binary '
+      + 'whose answer disagrees with the pin. Bump both together.',
+    );
   }
   const dest = path.join(rootDir, 'skill', 'scripts', 'VERSION');
   const current = fs.existsSync(dest) ? fs.readFileSync(dest, 'utf-8') : null;
@@ -641,7 +656,6 @@ https://impeccable.style
 
 This folder contains skills for all supported tools:
 
-  .cursor/    -> Cursor
   .claude/    -> Claude Code
   .dsh/       -> DeepSeek Harness
   .gemini/    -> Gemini CLI
@@ -649,17 +663,12 @@ This folder contains skills for all supported tools:
   .agents/    -> Codex CLI
   .agent/     -> Antigravity
   .github/    -> GitHub Copilot
-  .grok/      -> Grok Build
-  .hermes/    -> Hermes Agent
   .kiro/      -> Kiro
   .opencode/  -> OpenCode
   .pi/        -> Pi
-  .trae-cn/   -> Trae China
-  .trae/      -> Trae International
-  .rovodev/   -> Rovo Dev
   .vibe/      -> Mistral Vibe
+  .omp/       -> oh-my-pi
   .veto/      -> Veto model-routing harness
-  .qoder/     -> Qoder
 
 To install, copy the relevant folder(s) into your project root.
 For Codex, repo and user skill installs come from .agents/skills.
@@ -768,16 +777,12 @@ async function build() {
     // Remove deprecated skill stubs from local harness dirs. They exist
     // in dist/ so the cleanup script can redirect users, but they should
     // not clutter the repo's own skill directories.
-    const deprecatedLocalSkills = [
-      'frontend-design', 'teach-impeccable',
-      'arrange', 'normalize', 'onboard', 'extract',
-      // v3.0 consolidation: standalone skills -> /impeccable sub-commands
-      'adapt', 'animate', 'audit', 'bolder', 'clarify', 'colorize',
-      'critique', 'delight', 'distill', 'harden', 'layout', 'optimize',
-      'overdrive', 'polish', 'quieter', 'shape', 'typeset',
-    ];
+    // The list lives in lib/generated-paths.mjs, shared with the
+    // check:generated gate: a path this loop deletes has to be one that gate
+    // classifies as build-owned, or the deletion is filtered out of its
+    // staleness diff and a dirty tree reports as in sync.
     for (const { configDir } of syncConfigs) {
-      for (const name of deprecatedLocalSkills) {
+      for (const name of DEPRECATED_LOCAL_SKILLS) {
         const p = path.join(ROOT_DIR, configDir, 'skills', name);
         if (fs.existsSync(p)) fs.rmSync(p, { recursive: true, force: true });
       }
@@ -788,24 +793,20 @@ async function build() {
     // Build the shared plugin subtree at ./plugin/.
     // Claude Code marketplace is configured with `source: "./plugin"`, so the
     // plugin cache only copies this slim directory (~0.3 MB) instead of the
-    // entire monorepo. Grok Build installs the same subtree via
-    // `grok plugin install pbakaus/impeccable#plugin --trust` (or the
-    // marketplace source). The harness dirs above stay where they are because
-    // `npx skills add pbakaus/impeccable` reads them from the GitHub repo.
+    // entire monorepo. The harness dirs above stay where they are because
+    // `npx skills add Raudbjorn/impeccable` reads them from the GitHub repo.
     const pluginRoot = path.join(ROOT_DIR, 'plugin');
     const pluginManifestDir = path.join(pluginRoot, '.claude-plugin');
-    const grokPluginManifestDir = path.join(pluginRoot, '.grok-plugin');
     const pluginSkillsDir = path.join(pluginRoot, 'skills');
     const pluginAgentsDir = path.join(pluginRoot, 'agents');
     const pluginHooksDir = path.join(pluginRoot, 'hooks');
     if (fs.existsSync(pluginManifestDir)) fs.rmSync(pluginManifestDir, { recursive: true });
-    if (fs.existsSync(grokPluginManifestDir)) fs.rmSync(grokPluginManifestDir, { recursive: true });
     if (fs.existsSync(pluginSkillsDir)) fs.rmSync(pluginSkillsDir, { recursive: true });
     if (fs.existsSync(pluginAgentsDir)) fs.rmSync(pluginAgentsDir, { recursive: true });
     if (fs.existsSync(pluginHooksDir)) fs.rmSync(pluginHooksDir, { recursive: true });
-    // Clean up the short-lived mixed-provider subtree from early OpenAI plugin
-    // development. The canonical Codex preview now lives in dist/openai/.
-    for (const staleRel of ['.codex-plugin', 'assets']) {
+    // Clean up removed Grok packaging and the early mixed-provider OpenAI
+    // subtree. The canonical Codex preview now lives in dist/openai/.
+    for (const staleRel of ['.codex-plugin', '.grok-plugin', 'assets']) {
       const stalePath = path.join(pluginRoot, staleRel);
       if (fs.existsSync(stalePath)) fs.rmSync(stalePath, { recursive: true });
     }
@@ -828,26 +829,6 @@ async function build() {
     fs.writeFileSync(
       path.join(pluginManifestDir, 'plugin.json'),
       JSON.stringify(pluginManifest, null, 2) + '\n',
-    );
-
-    // Native Grok plugin manifest. Grok also reads `.claude-plugin/`; dual
-    // manifests keep both marketplaces and `grok plugin validate` happy when
-    // Claude compat is disabled.
-    // https://docs.x.ai/build/features/skills-plugins-marketplaces
-    const grokPluginManifest = {
-      name: pluginManifest.name,
-      version: pluginManifest.version,
-      description: pluginManifest.description,
-      author: pluginManifest.author,
-      homepage: pluginManifest.homepage,
-      repository: pluginManifest.repository,
-      license: pluginManifest.license || 'MIT',
-      keywords: ['design', 'frontend', 'ui', 'ux', 'skills', 'hooks'],
-    };
-    fs.mkdirSync(grokPluginManifestDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(grokPluginManifestDir, 'plugin.json'),
-      JSON.stringify(grokPluginManifest, null, 2) + '\n',
     );
 
     const claudeSkillsSrc = path.join(DIST_DIR, 'claude-code', '.claude', 'skills', 'impeccable');
@@ -875,9 +856,8 @@ async function build() {
       }
     }
 
-    // Ship the design detector as a plugin-packaged hook. Claude Code and
-    // Grok Build both auto-discover `hooks/hooks.json` at the plugin root
-    // (Grok aliases CLAUDE_PLUGIN_ROOT → GROK_PLUGIN_ROOT), so marketplace /
+    // Ship the design detector as a plugin-packaged hook. Claude Code
+    // auto-discovers `hooks/hooks.json` at the plugin root, so marketplace /
     // plugin-install users get PostToolUse + Stop without merging into project
     // settings (that path remains the CLI's job for project-scoped installs).
     fs.mkdirSync(pluginHooksDir, { recursive: true });
@@ -886,7 +866,20 @@ async function build() {
       JSON.stringify(buildClaudePluginHooksManifest(), null, 2) + '\n',
     );
 
-    console.log('📦 Built Claude Code / Grok Build plugin subtree at ./plugin/');
+    // oh-my-pi reads this same subtree via its .claude-plugin/plugin.json
+    // fallback (docs/HARNESSES.md), but it discovers hooks as files under
+    // hooks/pre|post rather than a hooks.json manifest. Without this, a
+    // marketplace-installed omp plugin loads the skill but never runs the
+    // detector hook.
+    const ompHooks = hooksJsonFor('omp', { configDir: PROVIDERS.omp.configDir });
+    if (ompHooks?.isModule) {
+      const ompHookRel = PROVIDERS.omp.hooksManifestRel || path.join('hooks', 'post', 'impeccable.js');
+      const ompHookDest = path.join(pluginHooksDir, ompHookRel.replace(/^hooks[\\/]/, ''));
+      fs.mkdirSync(path.dirname(ompHookDest), { recursive: true });
+      fs.writeFileSync(ompHookDest, ompHooks.content);
+    }
+
+    console.log('📦 Built Claude Code plugin subtree at ./plugin/');
   } else {
     console.log('📋 Skipped root harness and plugin sync (--skip-root-sync)');
   }
@@ -896,13 +889,6 @@ async function build() {
   // upload ZIP and local preview directory cannot drift behind provider output.
   const openAiPluginRoot = stageOpenAIPlugin(ROOT_DIR, DIST_DIR);
   await createProviderZip(openAiPluginRoot, DIST_DIR, 'openai-plugin');
-
-  const cursorPluginRoot = stageCursorPlugin(ROOT_DIR, DIST_DIR);
-  if (BUILD_OPTIONS.syncRootOutputs) {
-    const destination = path.join(ROOT_DIR, 'cursor-plugin');
-    fs.rmSync(destination, { recursive: true, force: true });
-    fs.cpSync(cursorPluginRoot, destination, { recursive: true });
-  }
 
   // Declarative Marketplace skill bundle: no editor runtime or project hooks.
   // Staged before optional engine bundling to keep the VSIX launcher-only.

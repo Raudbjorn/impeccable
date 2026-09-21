@@ -6,7 +6,7 @@
   "homepage": "https://impeccable.style",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pbakaus/impeccable.git"
+    "url": "git+https://github.com/Raudbjorn/impeccable.git"
   },
   "os": ["linux"],
   "cpu": ["x64"],

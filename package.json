@@ -21,7 +21,7 @@
   "homepage": "https://impeccable.style",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pbakaus/impeccable.git"
+    "url": "git+https://github.com/Raudbjorn/impeccable.git"
   },
   "engines": {
     "node": ">=22.18.0"
@@ -39,6 +39,7 @@
     "build:skills:release": "bun run scripts/build.js",
     "build": "bun run build:skills && mkdir -p build/_data && rm -rf build/_data/dist && cp -R dist build/_data/dist",
     "build:release": "bun run build:skills:release && mkdir -p build/_data && rm -rf build/_data/dist && cp -R dist build/_data/dist",
+    "check:generated": "node scripts/check-generated.mjs",
     "build:extension": "node scripts/build-extension.js",
     "package:vscode": "bun run build:skills && cd dist/vscode && bunx --package @vscode/vsce@3.9.2 vsce package --no-dependencies",
     "fetch:engine": "node scripts/fetch-engine.mjs",
@@ -60,7 +61,7 @@
     "test:live-e2e-agent": "node scripts/run-tests.mjs live-e2e-agent",
     "test:skill-behavior": "node scripts/run-tests.mjs skill-behavior",
     "test:skill-workflow": "node scripts/run-tests.mjs skill-workflow",
-    "test:live-svelte-adapter-deepseek": "node scripts/run-tests.mjs live-svelte-adapter-deepseek",
+    "test:live-svelte-adapter-minimax": "node scripts/run-tests.mjs live-svelte-adapter-minimax",
     "smoke:hooks": "node scripts/smoke-provider-hooks.mjs",
     "audit": "bun audit --audit-level=moderate",
     "prepack": "cp README.md README.repo.md && cp README.npm.md README.md",
@@ -73,11 +74,7 @@
     "check:engine-release": "node scripts/check-engine-release.mjs"
   },
   "optionalDependencies": {
-    "@impeccable/cli-darwin-arm64": "0.1.5",
-    "@impeccable/cli-darwin-x64": "0.1.5",
-    "@impeccable/cli-linux-x64": "0.1.5",
-    "@impeccable/cli-linux-arm64": "0.1.5",
-    "@impeccable/cli-windows-x64": "0.1.5"
+    "@impeccable/cli-linux-x64": "0.1.5-omp.1"
   },
   "devDependencies": {
     "@ai-sdk/anthropic": "^4.0.7",
@@ -88,6 +85,7 @@
     "@babel/parser": "^8.0.4",
     "ai": "^7.0.14",
     "archiver": "^8.0.0",
+    "astro": "^7.0.0",
     "playwright": "^1.59.1",
     "puppeteer": "^25.1.0",
     "svelte": "^5",

@@ -1,0 +1,80 @@
+{
+  "heuristic_id": "amd",
+  "heuristic_name": "Aesthetic and Minimalist Design",
+  "nielsen_index": 8,
+  "short_description": "Interfaces should not contain irrelevant or rarely needed information. Every element should serve a purpose.",
+  "catalog": {
+    "positive": [
+      {
+        "id": "amd-pos-clear-hierarchy",
+        "impact": 3,
+        "definition": "Visual hierarchy clearly directs attention to the primary action or information",
+        "evidence_required": "name the surface and the hierarchy elements"
+      },
+      {
+        "id": "amd-pos-purposeful-color",
+        "impact": 2,
+        "definition": "Color is used purposefully to communicate state or hierarchy, not decoration",
+        "evidence_required": "name the color use and what it communicates"
+      },
+      {
+        "id": "amd-pos-progressive-disclosure",
+        "impact": 2,
+        "definition": "Complex options are hidden behind progressive disclosure rather than dumped on the user",
+        "evidence_required": "name the surface and the disclosed control"
+      },
+      {
+        "id": "amd-pos-confident-whitespace",
+        "impact": 2,
+        "definition": "Layout uses generous whitespace that lets primary content breathe",
+        "evidence_required": "name the surface and the whitespace"
+      },
+      {
+        "id": "amd-pos-distinctive-style",
+        "impact": 1,
+        "definition": "Visual style has personality or distinct point of view (does not look generic)",
+        "evidence_required": "name what makes it distinctive"
+      }
+    ],
+    "negative": [
+      {
+        "id": "amd-neg-cluttered-interface",
+        "impact": -3,
+        "definition": "Surface is dense with controls or content competing for attention with no clear focus",
+        "evidence_required": "name the surface and the competing elements"
+      },
+      {
+        "id": "amd-neg-decorative-color",
+        "impact": -1,
+        "definition": "Color is used for decoration with no relationship to information or state",
+        "evidence_required": "name where decorative color appears"
+      },
+      {
+        "id": "amd-neg-equal-weight",
+        "impact": -2,
+        "definition": "All elements have equal visual weight so nothing reads as primary",
+        "evidence_required": "name the surface"
+      },
+      {
+        "id": "amd-neg-cramped-layout",
+        "impact": -2,
+        "definition": "Padding and spacing are cramped, making the surface feel airless",
+        "evidence_required": "name the cramped section"
+      },
+      {
+        "id": "amd-neg-generic-aesthetic",
+        "impact": -1,
+        "definition": "Layout looks like the default of an AI template (no distinct point of view)",
+        "evidence_required": "name what feels generic"
+      }
+    ],
+    "critical_negative": [
+      {
+        "id": "amd-neg-overwhelming",
+        "impact": -5,
+        "definition": "Density and visual noise are so high a first-time user cannot find the primary action",
+        "evidence_required": "name the surface"
+      }
+    ]
+  }
+}

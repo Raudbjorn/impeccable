@@ -1,0 +1,74 @@
+{
+  "heuristic_id": "ucf",
+  "heuristic_name": "User Control and Freedom",
+  "nielsen_index": 3,
+  "short_description": "Users need a clear emergency exit from unwanted states without extended dialogue.",
+  "catalog": {
+    "positive": [
+      {
+        "id": "ucf-pos-undo",
+        "impact": 3,
+        "definition": "Destructive actions are reversible via undo or trash with a recovery window",
+        "evidence_required": "name the action and the undo affordance"
+      },
+      {
+        "id": "ucf-pos-cancel-on-modal",
+        "impact": 1,
+        "definition": "Modals and forms have a clearly visible cancel or close affordance",
+        "evidence_required": "name the modal and the close control"
+      },
+      {
+        "id": "ucf-pos-back-navigation",
+        "impact": 2,
+        "definition": "Multi-step flows preserve back-navigation that does not lose user input",
+        "evidence_required": "name the flow and what survives a back navigation"
+      },
+      {
+        "id": "ucf-pos-clear-filters",
+        "impact": 1,
+        "definition": "Active filters or selections can be cleared with a single visible control",
+        "evidence_required": "name the filter set and the clear control"
+      },
+      {
+        "id": "ucf-pos-escape-key",
+        "impact": 1,
+        "definition": "Escape key dismisses modals, dropdowns, and overlays",
+        "evidence_required": "name the surface and the keyboard behavior"
+      }
+    ],
+    "negative": [
+      {
+        "id": "ucf-neg-confirmless-destruction",
+        "impact": -3,
+        "definition": "Destructive action runs without confirmation and without undo",
+        "evidence_required": "name the action and the lack of confirmation or recovery"
+      },
+      {
+        "id": "ucf-neg-trapped-modal",
+        "impact": -2,
+        "definition": "Modal has no visible close affordance and ignores escape key",
+        "evidence_required": "name the modal and how a user could exit"
+      },
+      {
+        "id": "ucf-neg-back-loses-data",
+        "impact": -2,
+        "definition": "Browser back or in-app back loses entered data without warning",
+        "evidence_required": "name the form and the lost field"
+      },
+      {
+        "id": "ucf-neg-filter-stuck",
+        "impact": -1,
+        "definition": "Active filters cannot be cleared without page reload or per-filter manipulation",
+        "evidence_required": "name the filter and the missing clear control"
+      }
+    ],
+    "critical_negative": [
+      {
+        "id": "ucf-neg-no-exit",
+        "impact": -5,
+        "definition": "User can be trapped in a state with no exit other than browser refresh",
+        "evidence_required": "name the trap state and the missing exit"
+      }
+    ]
+  }
+}

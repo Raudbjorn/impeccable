@@ -17,7 +17,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { basename, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { ENGINE_MISSING_MESSAGE, engineEnv, findEngineBinary } from './lib/engine-bin.mjs';
@@ -59,8 +59,6 @@ function stageFixture(name) {
     try {
       symlinkSync(repoSvelte, join(tmp, 'node_modules', 'svelte'), 'dir');
     } catch {
-      // Windows without Developer Mode cannot symlink; copying is slower but
-      // keeps the suite runnable there.
       cpSync(repoSvelte, join(tmp, 'node_modules', 'svelte'), { recursive: true });
     }
   }
@@ -275,11 +273,17 @@ describe('detect-csp — Next.js proxy placement', { skip: ENGINE_BIN ? false : 
     for (const [relPath, expectedShape, markers = []] of [
       ['proxy.ts', 'middleware'],
       ['src/proxy.ts', 'middleware'],
-      ['apps/web/proxy.ts', 'middleware', ['apps/web/app']],
-      ['apps/docs/src/proxy.ts', 'middleware', ['apps/docs/src/pages']],
+      ['apps/web/proxy.ts', 'middleware', ['apps/web/package.json']],
+      ['apps/docs/src/proxy.ts', 'middleware', ['apps/docs/next.config.mjs']],
       ['apps/store/proxy.ts', 'middleware', ['apps/store/package.json']],
       ['lib/network/proxy.ts', null],
-      ['apps/web/lib/proxy.ts', null, ['apps/web/app']],
+      ['apps/web/lib/proxy.ts', null, ['apps/web/package.json']],
+      // next.config.cjs/.cts are not Next.js config filenames; a nested
+      // proxy.ts next to one is not a Next.js project and must not be
+      // classified as middleware.
+      ['apps/legacy/proxy.ts', null, ['apps/legacy/next.config.cjs']],
+      ['apps/legacy-ts/proxy.ts', null, ['apps/legacy-ts/next.config.cts']],
+      ['apps/non-next/src/proxy.ts', null, ['apps/non-next/src/pages']],
     ]) {
       const tmp = mkdtempSync(join(tmpdir(), 'impeccable-proxy-placement-'));
       try {
@@ -288,6 +292,9 @@ describe('detect-csp — Next.js proxy placement', { skip: ENGINE_BIN ? false : 
           if (marker.endsWith('package.json')) {
             mkdirSync(dirname(join(tmp, marker)), { recursive: true });
             writeFileSync(join(tmp, marker), JSON.stringify({ dependencies: { next: '^16.0.0' } }));
+          } else if (basename(marker).startsWith('next.config.')) {
+            mkdirSync(dirname(join(tmp, marker)), { recursive: true });
+            writeFileSync(join(tmp, marker), 'export default {};\n');
           } else {
             mkdirSync(join(tmp, marker), { recursive: true });
           }

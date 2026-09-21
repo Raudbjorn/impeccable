@@ -1,0 +1,74 @@
+{
+  "heuristic_id": "fey",
+  "heuristic_name": "Flexibility and Efficiency of Use",
+  "nielsen_index": 7,
+  "short_description": "Accelerators that are invisible to novices speed up expert interaction.",
+  "catalog": {
+    "positive": [
+      {
+        "id": "fey-pos-keyboard-shortcuts",
+        "impact": 2,
+        "definition": "Common actions have keyboard shortcuts (cmd+s, cmd+k, cmd+/) and they are documented",
+        "evidence_required": "name the action and the shortcut"
+      },
+      {
+        "id": "fey-pos-bulk-actions",
+        "impact": 2,
+        "definition": "List views support multi-select and bulk operations",
+        "evidence_required": "name the list and the bulk affordance"
+      },
+      {
+        "id": "fey-pos-customizable",
+        "impact": 1,
+        "definition": "User can customize the interface (rearrange, theme, save views)",
+        "evidence_required": "name the customization"
+      },
+      {
+        "id": "fey-pos-quick-switcher",
+        "impact": 2,
+        "definition": "Cmd+k command palette or quick switcher exists with discoverable entry",
+        "evidence_required": "name the affordance and how it opens"
+      },
+      {
+        "id": "fey-pos-saved-filters",
+        "impact": 1,
+        "definition": "Frequent filter or query combinations can be saved and recalled",
+        "evidence_required": "name the affordance"
+      }
+    ],
+    "negative": [
+      {
+        "id": "fey-neg-no-shortcuts",
+        "impact": -2,
+        "definition": "Common, repetitive actions have no keyboard shortcut",
+        "evidence_required": "name the action"
+      },
+      {
+        "id": "fey-neg-one-at-a-time",
+        "impact": -2,
+        "definition": "List operations require selecting and acting on each item individually with no bulk affordance",
+        "evidence_required": "name the list and the per-item action"
+      },
+      {
+        "id": "fey-neg-rigid-layout",
+        "impact": -1,
+        "definition": "Layout offers no customization where personalization would clearly help",
+        "evidence_required": "name the surface and what users would change"
+      },
+      {
+        "id": "fey-neg-deep-clickpath",
+        "impact": -2,
+        "definition": "Common task takes 5+ clicks where 1-2 would suffice with a power-user shortcut",
+        "evidence_required": "name the task and count the clicks"
+      }
+    ],
+    "critical_negative": [
+      {
+        "id": "fey-neg-only-mouse",
+        "impact": -5,
+        "definition": "Critical surface is unusable without a pointer device (no keyboard fallback at all)",
+        "evidence_required": "name the surface and the keyboard gap"
+      }
+    ]
+  }
+}
