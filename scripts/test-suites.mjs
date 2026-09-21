@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { SCENARIO_TIMEOUT_MS } from '../tests/skill-behavior/budgets.mjs';
 
 export const DEFAULT_SUITES = ['core', 'oracle', 'detector', 'live', 'framework', 'plugin-e2e'];
 export const OPT_IN_SUITES = [
@@ -9,7 +10,7 @@ export const OPT_IN_SUITES = [
   'new-work-e2e',
   'skill-behavior',
   'skill-workflow',
-  'live-svelte-adapter-deepseek',
+  'live-svelte-adapter-minimax',
 ];
 
 const COMMON_INFRA_PATTERNS = [
@@ -17,6 +18,7 @@ const COMMON_INFRA_PATTERNS = [
   /^bun\.lock$/,
   /^scripts\/run-tests\.mjs$/,
   /^scripts\/test-suites\.mjs$/,
+  /^tests\/skill-behavior\/budgets\.mjs$/,
   /^scripts\/lib\/(live-server-processes|process-group|test-orphan-reaper)\.mjs$/,
   /^tests\/lib\/live-servers\.mjs$/,
 ];
@@ -75,6 +77,7 @@ export const SUITES = {
           'tests/compose.test.mjs',
           'tests/visual-cues.test.mjs',
           'tests/image-analyze.test.mjs',
+          'tests/web-search.test.mjs',
           'tests/omp-hook-module.test.mjs',
           'tests/omp-plugin-layout.test.mjs',
           'tests/prompt-budget.test.mjs',
@@ -282,8 +285,8 @@ export const SUITES = {
     ],
     commands: [{
       runner: 'node',
-      timeoutMs: 240000,
-      wallClockMs: 1_800_000,
+      timeoutMs: SCENARIO_TIMEOUT_MS,
+      wallClockMs: Math.max(1_800_000, SCENARIO_TIMEOUT_MS + 60_000),
       files: ['tests/skill-behavior/scenarios.test.mjs'],
     }],
   },
@@ -318,21 +321,21 @@ export const SUITES = {
       },
     ],
   },
-  'live-svelte-adapter-deepseek': {
-    description: 'Provider-backed Svelte adapter browser sweep (DeepSeek by default).',
+  'live-svelte-adapter-minimax': {
+    description: 'Provider-backed Svelte adapter browser sweep (MiniMax by default).',
     optIn: true,
     needsPlaywright: true,
     triggers: [
       ...COMMON_INFRA_PATTERNS,
       /^ENGINE_VERSION$/,
       /^tests\/framework-fixtures\/vite8-sveltekit-stateful\//,
-      /^tests\/live-svelte-adapter-deepseek\.test\.mjs$/,
+      /^tests\/live-svelte-adapter-minimax\.test\.mjs$/,
     ],
     commands: [
       {
         runner: 'node',
         timeoutMs: 1200000,
-        files: ['tests/live-svelte-adapter-deepseek.test.mjs'],
+        files: ['tests/live-svelte-adapter-minimax.test.mjs'],
       },
     ],
   },

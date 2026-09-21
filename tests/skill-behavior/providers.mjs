@@ -44,7 +44,6 @@ export const PROVIDERS = {
   anthropic: { envKey: 'ANTHROPIC_API_KEY', label: 'Anthropic' },
   openai: { envKey: 'OPENAI_API_KEY', label: 'OpenAI' },
   google: { envKey: 'GOOGLE_CLOUD_API_KEY', label: 'Google' },
-  deepseek: { envKey: 'DEEPSEEK_API_KEY', label: 'DeepSeek' },
   minimax: { envKey: 'MINIMAX_API_KEY', label: 'MiniMax' },
 };
 
@@ -53,7 +52,6 @@ export function detectProvider(modelId) {
   if (modelId.startsWith('gpt-')) return 'openai';
   if (modelId.startsWith('gemini-')) return 'google';
   if (modelId.startsWith('MiniMax-')) return 'minimax';
-  if (modelId.startsWith('deepseek-')) return 'deepseek';
   throw new Error(`Unsupported model id: "${modelId}"`);
 }
 
@@ -82,16 +80,6 @@ export function getModel(modelId) {
       apiKey: process.env.MINIMAX_API_KEY,
       name: 'minimax.anthropic',
     })(modelId);
-  }
-  if (provider === 'deepseek') {
-    // DeepSeek's official Claude Code integration exposes an Anthropic-
-    // compatible endpoint authenticated with a Bearer token.
-    const deepseek = createAnthropic({
-      baseURL: 'https://api.deepseek.com/anthropic',
-      authToken: process.env.DEEPSEEK_API_KEY,
-      name: 'deepseek.anthropic',
-    });
-    return deepseek(modelId);
   }
   throw new Error(`Unsupported provider: ${provider}`);
 }
@@ -123,19 +111,7 @@ export function getProviderOptions(modelId) {
 }
 
 /**
- * Default model lineup. Frontier tiers only.
- *
- * gpt-5.6-luna and deepseek-v4-flash were dropped in 2026-08: below the
- * frontier tier, they fail scenarios for reasons that are model-floor behavior
- * rather than skill-text defects (stopping mid-run, archiving a report without
- * ever stating it), and a permanently red suite teaches everyone to ignore it.
- *
- * They stay selectable, and running a wider sweep deliberately is still worth
- * doing when Setup or routing text changes in a way that could go wrong in an
- * unfamiliar direction. Divergence between families is what surfaces the
- * non-obvious failures; the cheap tier just could not tell divergence from
- * its own floor:
- *   IMPECCABLE_SKILL_BEHAVIOR_MODELS=gpt-5.6-luna,deepseek-v4-flash
+ * Default model lineup. Override with IMPECCABLE_SKILL_BEHAVIOR_MODELS.
  */
 export const DEFAULT_MODELS = ['claude-sonnet-5', 'gpt-5.6-terra', 'gemini-3.7-flash', 'MiniMax-M3'];
 

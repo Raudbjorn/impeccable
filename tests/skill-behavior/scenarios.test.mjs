@@ -22,6 +22,7 @@ import {
   bashCommandsMatching,
   readsMatching,
   fileLoaded,
+  referenceLoadedWithContext,
   callLoadedFile,
   summarizeTrace,
   ENGINE_BIN,
@@ -42,10 +43,10 @@ import {
 } from './fixtures.mjs';
 
 // Protocol-only shell access; successful checkpoints end observation, not the task.
-async function runTurn({ checkpoint, ...options }) {
-  return runHarnessTurn({ contextOnlyBash: true, timeoutMs: 180000, ...options,
+async function runTurn({ checkpoint, contextAlreadyLoaded = false, ...options }) {
+  return runHarnessTurn({ contextOnlyBash: true, ...options,
     stopAfter: typeof checkpoint === 'function' ? checkpoint
-      : checkpoint ? (trace) => fileLoaded(trace, checkpoint) : undefined });
+      : checkpoint ? (trace) => referenceLoadedWithContext(trace, checkpoint, contextAlreadyLoaded) : undefined });
 }
 
 const CRAFT_PROMPT = '/impeccable craft a landing page for the project in this workspace';
@@ -279,7 +280,7 @@ for (const modelId of resolveModelList()) {
         // Turn 1: prime the conversation so impeccable context gets run and its
         // output enters the message history.
         const turn1 = await runTurn({
-          checkpoint: (trace) => trace.bashOutputs.some((output) => output.startsWith('exit=0\n')),
+          checkpoint: (trace) => trace.toolCalls.some((call) => call.contextLoaded),
           workspace,
           model,
           userPrompt: PRIMER_PROMPT,
@@ -288,7 +289,7 @@ for (const modelId of resolveModelList()) {
         logTrace('S4-T1', 'primer', modelId, turn1.trace, { textSample: turn1.text.slice(0, 200) });
         const turn1Loads = bashCommandsMatching(turn1.trace, 'impeccable context');
         assert.ok(
-          turn1Loads.length >= 1,
+          turn1Loads.length >= 1 && turn1.trace.toolCalls.some((call) => call.contextLoaded),
           `primer turn should have run impeccable context. bash: ${JSON.stringify(turn1.trace.bashCommands, null, 2)}`,
         );
 
@@ -296,6 +297,7 @@ for (const modelId of resolveModelList()) {
         // loaded it". Verify the agent honors that.
         const turn2 = await runTurn({
           checkpoint: 'new-work.md',
+          contextAlreadyLoaded: true,
           workspace,
           model,
           userPrompt: 'Now, /impeccable craft a landing page based on what you saw.',
@@ -622,7 +624,7 @@ for (const modelId of resolveModelList()) {
       });
       try {
         const { trace, text } = await runTurn({
-          checkpoint: 'ios.md',
+          checkpoint: 'android.md',
           workspace,
           model,
           userPrompt: '/impeccable craft a tide detail screen for the project in this workspace',

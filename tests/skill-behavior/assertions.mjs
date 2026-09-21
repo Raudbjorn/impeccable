@@ -35,8 +35,10 @@ export function assertWorkflowAdvice(trace, text, { missingContext = false } = {
 export function assertCommandComparison(trace, text) {
   assertAdviceOnly(trace, text);
   const advice = normalizedAdvice(text);
-  assert.match(advice, /critique[^.!?\n]{0,120}(?:review|assess|evaluat|report|findings)/, 'comparison must explain critique as assessment');
-  assert.match(advice, /polish[^.!?\n]{0,120}(?:fix|refin|implement|edit)/, 'comparison must explain polish as implementation');
+  // Filenames and the next sentence may contain dots. Stop at the other
+  // command instead, so its description cannot satisfy the wrong mapping.
+  assert.match(advice, /\bcritique\b(?:(?!\bpolish\b)[^\n]){0,120}(?:review|assess|evaluat|report|findings)/, 'comparison must explain critique as assessment');
+  assert.match(advice, /\bpolish\b(?:(?!\bcritique\b)[^\n]){0,120}(?:fix|refin|implement|edit|improv)/, 'comparison must explain polish as implementation');
   assert.match(advice, /critique\s+(?:is\s+)?(?:isn't|is not|not)\s+(?:required|necessary)|critique[^.!?\n]{0,50}\boptional\b|polish[^.!?\n]{0,100}(?:directly|without\s+(?:a\s+)?critique|independent)/,
     'comparison must explain that critique is optional before polish');
   assert.doesNotMatch(advice, /(?:must|need to|have to)\s+(?:run\s+)?critique[^.!?\n]{0,80}before\s+(?:run(?:ning)?\s+)?polish|critique\s+(?:is\s+)?(?:required|mandatory|necessary)\s+before\s+polish|polish\s+(?:requires|cannot run without)\s+(?:a\s+)?critique/,

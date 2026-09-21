@@ -2,8 +2,8 @@
 
 LLM-backed scenarios that verify how the impeccable skill drives context,
 command-reference, new-work, and native-platform loading. Each scenario runs
-against the default Anthropic, OpenAI, Google, and MiniMax models. DeepSeek
-remains available through `IMPECCABLE_SKILL_BEHAVIOR_MODELS`.
+against the default Anthropic, OpenAI, Google, and MiniMax models. MiniMax M3
+replaces the former DeepSeek API provider.
 
 These are the tests you re-run when you refactor anything in SKILL.md's
 `## Setup` section. They fail when the agent stops following the loading
@@ -21,7 +21,7 @@ IMPECCABLE_SKILL_BEHAVIOR_MODELS=MiniMax-M3 bun run test:skill-behavior
 ```
 
 Requires `.env` at repo root with at least one of `ANTHROPIC_API_KEY`,
-`OPENAI_API_KEY`, `GOOGLE_CLOUD_API_KEY`, `DEEPSEEK_API_KEY`, `MINIMAX_API_KEY`. Providers without a key are
+`OPENAI_API_KEY`, `GOOGLE_CLOUD_API_KEY`, `MINIMAX_API_KEY`. Providers without a key are
 skipped, not failed.
 
 Shell tools require Linux with `bwrap` (Bubblewrap). Commands run with their own
@@ -220,6 +220,21 @@ Each scenario:
 
 The trace is the source of truth, not the model's free-form reply.
 
+Reference checkpoints wait for both the requested reference and a successful
+context-loader call, in either order. S4's follow-up reuses its verified prior
+context instead. A checkpoint only establishes this routing evidence; it does
+not establish task completion. The simulated user continues in the intended
+workspace, skipping cancellation/wrong-directory options unless a scenario
+explicitly supplies that answer.
+
+Turn deadlines allow 60 seconds for startup/thinking plus 30 seconds per
+`maxSteps`: six-step routing gets 240 seconds; the fourteen-step palette edit
+gets 480 seconds. Node's per-test cap is 510 seconds, covering both six-step
+S4 turns plus cleanup. The suite wall-clock cap remains 30 minutes. Setting
+`IMPECCABLE_SKILL_BEHAVIOR_TURN_TIMEOUT_MS` replaces each default turn budget;
+the runner expands its caps to keep the client deadline inside the test cap.
+Full browser workflows keep their explicit 840-second turn budgets.
+
 File tools are workspace-scoped; bash is a real host shell, **not a security
 sandbox**. Use disposable synthetic fixtures. Shell helpers do not inherit
 provider API keys/auth tokens; model calls still use the parent's keys. The
@@ -228,7 +243,8 @@ decision pages cannot wait for a nonexistent browser user. The engine returns
 its genuine structured-question fallback; browser decisions have separate E2E.
 
 Set `IMPECCABLE_SKILL_BEHAVIOR_TRACE_DIR=<directory>` to retain per-turn JSON
-with model, prompt, tool results, response ordering, usage, and finish reason.
+with model, prompt, start time, elapsed time, step/time budgets, tool results,
+response ordering, usage, and finish reason.
 Progress and failed turns retain their tool traces too; only completed turns
 carry the full response sequence and final usage.
 These are local diagnostic artifacts; inspect before sharing. Successful reads
@@ -408,7 +424,7 @@ Keep #744 open; evaluate activation separately with #375.
 To repeat only these cases (provider keys and an engine binary required):
 
 ```sh
-IMPECCABLE_SKILL_BEHAVIOR_MODELS=claude-sonnet-5,gpt-5.6-terra,gemini-3.7-flash,deepseek-v4-flash \
+IMPECCABLE_SKILL_BEHAVIOR_MODELS=claude-sonnet-5,gpt-5.6-terra,gemini-3.7-flash,MiniMax-M3 \
   node --test --test-name-pattern='scenario 19:' tests/skill-behavior/scenarios.test.mjs
 ```
 
@@ -465,8 +481,9 @@ anything.
 they fail scenarios by stopping mid-run or archiving a report without stating
 it, which is model-floor behavior rather than a skill-text defect. Their columns
 stay here because they are the record of what a weaker model does with this text,
-and that is the useful part. Reproduce with
-`IMPECCABLE_SKILL_BEHAVIOR_MODELS=gpt-5.6-luna,deepseek-v4-flash`.
+and that is the useful part. DeepSeek results below are historical: that API
+provider has since been replaced by MiniMax. GPT-5.6 Luna remains selectable
+through `IMPECCABLE_SKILL_BEHAVIOR_MODELS=gpt-5.6-luna`.
 
 Against the current default lineup, two cells are the known floor:
 `redesign replaces DESIGN` is flaky on every model, and `critique closes` is
@@ -617,13 +634,13 @@ Both files honor `--test-name-pattern`, which is much cheaper than a full sweep
 when bisecting one scenario:
 
 ```bash
-IMPECCABLE_QUESTION_DISABLED=1 CI=1 IMPECCABLE_SKILL_BEHAVIOR_MODELS=deepseek-v4-flash \
-  node --test --test-timeout=300000 --test-force-exit \
+IMPECCABLE_QUESTION_DISABLED=1 CI=1 IMPECCABLE_SKILL_BEHAVIOR_MODELS=MiniMax-M3 \
+  node --test --test-timeout=900000 --test-force-exit \
   --test-name-pattern="bolder refinement" tests/skill-workflow/full-build.test.mjs
 ```
 
-Use the suite's current 900000ms timeout for full workflow cases; the 300000ms
-example above is historical. The harness now disables decision pages itself.
+Use the suite's current 900000ms timeout for full workflow cases.
+The harness disables decision pages itself.
 Pipe
 to a file rather than `tail`; node prints the failing-test summary at the end,
 and truncating it costs you the per-model attribution.
@@ -670,8 +687,10 @@ For paid live checks with MiniMax:
 ```sh
 export MINIMAX_API_KEY="$(minimax-api-key)"
 IMPECCABLE_E2E_AGENT=llm IMPECCABLE_E2E_LLM_PROVIDER=minimax bun run test:live-e2e
-IMPECCABLE_E2E_LLM_PROVIDER=minimax bun run test:live-e2e-accept-cleanup
-IMPECCABLE_E2E_LLM_PROVIDER=minimax bun run test:live-svelte-adapter-deepseek
+bun run test:live-e2e-accept-cleanup
+bun run test:live-svelte-adapter-minimax
 ```
 
-The last command retains its existing name for compatibility; its provider is selectable. MiniMax receives annotated screenshots automatically as base64 image blocks. Unannotated requests remain text-only.
+The cleanup and Svelte suites default to MiniMax; override their provider with `IMPECCABLE_E2E_LLM_PROVIDER`. The Svelte suite uses `IMPECCABLE_SVELTE_MINIMAX_ARTIFACT_DIR` for an explicit evidence directory. MiniMax receives annotated screenshots automatically as base64 image blocks. Unannotated requests remain text-only.
+
+The integration uses the installed Anthropic SDKs and MiniMax's [Anthropic-compatible API](https://platform.minimax.io/docs/api-reference/text-anthropic-api). Live tests read `MINIMAX_API_KEY` and default to `MiniMax-M3`; override the model with `IMPECCABLE_E2E_LLM_MODEL` and the endpoint with `MINIMAX_API_BASE_URL` (default `https://api.minimax.io/anthropic`).
