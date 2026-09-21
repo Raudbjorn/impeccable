@@ -50,7 +50,7 @@ describe('live-e2e accept cleanup regression', () => {
   it('cleans accepted LLM DOM wrappers after carbonize cleanup', async (t) => {
     const fixture = readFixture(FIXTURE_NAME);
     const llmConfig = resolveLlmAgentConfig({
-      provider: process.env.IMPECCABLE_E2E_LLM_PROVIDER || 'deepseek',
+      provider: process.env.IMPECCABLE_E2E_LLM_PROVIDER || 'minimax',
     });
     const agent = await createLlmAgent({
       config: llmConfig,

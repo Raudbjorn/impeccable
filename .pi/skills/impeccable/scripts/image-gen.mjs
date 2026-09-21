@@ -10,6 +10,7 @@
 //   bfl     FLUX (Black Forest Labs). No ref: flux-pro-1.1 text-to-image;
 //           with ref: flux-kontext-max image-to-image, aspect ratio 1:1.
 //   gemini  Google Nano Banana (Gemini image models), always square 1:1.
+//   minimax image-01 text-to-image; --character-ref supplies a portrait.
 //   <else>  delegates to a project-local .impeccable/image-gen.mjs that
 //           implements this same CLI (see image-api.md for the contract).
 // When the provider line is missing it is inferred from the key's shape
@@ -29,7 +30,7 @@ import os from "node:os";
 import path from "node:path";
 import dns from "node:dns";
 import { execFileSync, spawnSync } from "node:child_process";
-import { isPng } from "./lib/png.mjs";
+import { isPng, decodePng } from "./lib/png.mjs";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -317,11 +318,11 @@ async function generateBfl({ apiKey, prompt, ref, width, height, out }) {
 // misreading the bytes rather than erroring, so the type sent must match
 // the actual bytes, sniffed from the format signature rather than trusted
 // from the file extension.
-function sniffImageMime(buf) {
+function sniffImageMime(buf, label = "--ref file") {
   if (isPng(buf)) return "image/png";
   if (buf.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) return "image/jpeg";
   if (buf.subarray(0, 4).toString("ascii") === "RIFF" && buf.subarray(8, 12).toString("ascii") === "WEBP") return "image/webp";
-  fail("--ref file is not a recognized image format (expected PNG, JPEG, or WebP signature)");
+  throw new Error(`${label} is not a recognized image format (expected PNG, JPEG, or WebP signature)`);
 }
 
 async function generateGemini({ apiKey, prompt, ref, out }) {
@@ -376,6 +377,65 @@ async function generateGemini({ apiKey, prompt, ref, out }) {
   writeAsPng(Buffer.from(imgPart.inlineData?.data || imgPart.inline_data.data, "base64"), out);
 }
 
+// -------------------------------------------------------------- minimax
+
+async function generateMinimax({ apiKey, prompt, ref, characterRef, width, height, out }) {
+  if (!prompt.trim() || Array.from(prompt).length > 1500) {
+    throw new Error("MiniMax requires a non-empty prompt of at most 1500 characters; shorten the asset brief without dropping its constraints");
+  }
+  for (const [label, value] of [["width", width], ["height", height]]) {
+    if (!Number.isInteger(value) || value < 512 || value > 2048 || value % 8 !== 0) {
+      throw new Error(`${label} ${value} out of range: MiniMax takes 512-2048 in multiples of 8`);
+    }
+  }
+  if (ref !== undefined || process.argv.includes("--ref")) {
+    throw new Error("MiniMax does not support general image editing through --ref; use --character-ref for portrait consistency, or bfl/gemini for edits");
+  }
+  const body = { model: "image-01", prompt, width, height, n: 1, response_format: "base64", prompt_optimizer: false };
+  if (characterRef) {
+    const stat = fs.statSync(characterRef);
+    if (!stat.isFile() || stat.size >= 10 * 1024 * 1024) throw new Error("--character-ref must be a local PNG or JPEG smaller than 10 MB");
+    const bytes = fs.readFileSync(characterRef);
+    const mime = sniffImageMime(bytes, "--character-ref file");
+    if (mime !== "image/png" && mime !== "image/jpeg") throw new Error("MiniMax character references support PNG and JPEG only");
+    body.subject_reference = [{ type: "character", image_file: `data:${mime};base64,${bytes.toString("base64")}` }];
+  }
+  let response;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      response = await curlJson("https://api.minimax.io/v1/image_generation", {
+        method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+    } catch {
+      response = { status: 0, json: null };
+    }
+    const code = response.json?.base_resp?.status_code;
+    if (response.status === 200 && code === 0 && !response.json.error) break;
+    if ([401, 403].includes(response.status) || [1004, 2049].includes(code)) throw new Error("MiniMax rejected the key; check MINIMAX_API_KEY or IMAGE_GEN_API_KEY");
+    if (response.status === 402 || code === 1008) throw new Error("MiniMax account is out of credits; add credits before retrying");
+    if (code === 1026) throw new Error("MiniMax moderated the prompt; revise it before retrying");
+    const transient = response.status === 0 || response.status === 429 || response.status >= 500 || code === 1002;
+    if (!transient || attempt >= 2) throw new Error(`MiniMax generation failed (HTTP ${response.status}, API code ${code ?? "missing"}) after ${attempt + 1} attempt(s)`);
+    await sleep(response.status === 429 || code === 1002 ? 10000 : 2000 * (attempt + 1));
+  }
+  const images = response.json.data?.image_base64;
+  if (!Array.isArray(images) || images.length !== 1 || typeof images[0] !== "string" || !images[0]) throw new Error("MiniMax returned no single base64 image");
+  const bytes = Buffer.from(images[0], "base64");
+  if (!bytes.length || bytes.toString("base64") !== images[0]) throw new Error("MiniMax returned invalid base64 image data");
+  sniffImageMime(bytes, "MiniMax response");
+  // Convert and validate beside the destination so a failed response cannot
+  // replace an existing asset, and successful publication is one rename.
+  const temporary = fs.mkdtempSync(path.join(path.dirname(out), ".image-gen-"));
+  try {
+    const staged = path.join(temporary, "image.png");
+    writeAsPng(bytes, staged);
+    decodePng(fs.readFileSync(staged));
+    fs.renameSync(staged, out);
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+}
+
 // Writes image bytes to `out` as a real PNG. PNG input passes through;
 // anything else (JPEG, WebP) is converted with the first available system
 // tool: sips ships with macOS, ImageMagick and ffmpeg cover Linux.
@@ -402,12 +462,12 @@ function writeAsPng(buf, out) {
     for (const [cmd, args] of converters) {
       try {
         execFileSync(cmd, args, { stdio: "ignore" });
-        if (fs.existsSync(out) && fs.statSync(out).size > 0) return;
+        if (fs.existsSync(out) && isPng(fs.readFileSync(out))) return;
       } catch {
         // tool missing or failed; try the next one
       }
     }
-    fail("Provider returned non-PNG image bytes and no converter is available (tried sips, magick, convert, ffmpeg); install one and re-run");
+    throw new Error("Provider returned non-PNG image bytes and no converter succeeded (tried sips, magick, convert, ffmpeg); install one and re-run");
   } finally {
     if (tmpCreated) fs.rmSync(tmp, { force: true });
   }
@@ -418,10 +478,11 @@ function writeAsPng(buf, out) {
 const prompt = getArg("prompt");
 const out = getArg("out");
 const ref = getArg("ref");
+const characterRef = getArg("character-ref");
 // 1408 is the default square: comfortably under BFL's 1440 cap and
 // divisible by 32. Gemini ignores it (aspect ratio 1:1 pins its square).
-const width = parseInt(getArg("width", "1408"), 10);
-const height = parseInt(getArg("height", "1408"), 10);
+const width = Number(getArg("width", "1408"));
+const height = Number(getArg("height", "1408"));
 const apiKey = loadEnv("IMAGE_GEN_API_KEY", "IMAGE_API_KEY");
 // Users and earlier runs write provider names loosely ("flux" for bfl,
 // "nano-banana" for gemini); normalize the known spellings instead of
@@ -430,20 +491,21 @@ const apiKey = loadEnv("IMAGE_GEN_API_KEY", "IMAGE_API_KEY");
 const PROVIDER_ALIASES = {
   bfl: "bfl", flux: "bfl", "black-forest-labs": "bfl",
   gemini: "gemini", google: "gemini", "nano-banana": "gemini", nanobanana: "gemini",
+  minimax: "minimax",
 };
 const looksGoogle = apiKey?.startsWith("AIza") || apiKey?.startsWith("AQ.");
 const rawProvider = (loadEnv("IMAGE_GEN_PROVIDER") || (looksGoogle ? "gemini" : "bfl")).toLowerCase();
 const provider = PROVIDER_ALIASES[rawProvider] || rawProvider;
 
-if (!prompt || !out) fail("Usage: --prompt <p> --out <abs path> [--ref <abs path>] [--width n] [--height n]");
+if (!prompt || !out) fail("Usage: --prompt <p> --out <abs path> [--ref <abs path>] [--character-ref <portrait path>] [--width n] [--height n]");
 
-if (provider !== "bfl" && provider !== "gemini") {
+if (provider !== "bfl" && provider !== "gemini" && provider !== "minimax") {
   // Unknown provider: hand the same argv to a project-local wrapper that
   // implements this CLI. The env guard stops a copied shipped script from
   // delegating to itself forever.
   const custom = path.join(process.cwd(), ".impeccable", "image-gen.mjs");
   if (process.env.IMPECCABLE_IMAGE_GEN_DELEGATED || !fs.existsSync(custom)) {
-    fail(`Unknown IMAGE_GEN_PROVIDER "${provider}" and no ${custom}; supported providers are bfl and gemini, or write that file implementing the same CLI (see reference/image-api.md)`);
+    fail(`Unknown IMAGE_GEN_PROVIDER "${provider}" and no ${custom}; supported providers are bfl, gemini, and minimax, or write that file implementing the same CLI (see reference/image-api.md)`);
   }
   const child = spawnSync(process.execPath, [custom, ...process.argv.slice(2)], {
     stdio: "inherit",
@@ -452,9 +514,17 @@ if (provider !== "bfl" && provider !== "gemini") {
   process.exit(child.status ?? 1);
 }
 
-if (!apiKey) fail("Missing IMAGE_GEN_API_KEY (environment or ./.impeccable/.env)");
+const providerKey = provider === "minimax" ? loadEnv("MINIMAX_API_KEY") || apiKey : apiKey;
+if (!providerKey) fail(`Missing ${provider === "minimax" ? "MINIMAX_API_KEY or " : ""}IMAGE_GEN_API_KEY (environment or ./.impeccable/.env)`);
+if (process.argv.includes("--character-ref") && (!characterRef || characterRef.startsWith("--"))) fail("--character-ref requires a local portrait path");
+if (characterRef && provider !== "minimax") fail("--character-ref is only supported by MiniMax; use --ref with bfl/gemini");
 
-fs.mkdirSync(path.dirname(out), { recursive: true });
-if (provider === "gemini") await generateGemini({ apiKey, prompt, ref, out });
-else await generateBfl({ apiKey, prompt, ref, width, height, out });
+try {
+  fs.mkdirSync(path.dirname(out), { recursive: true });
+  if (provider === "minimax") await generateMinimax({ apiKey: providerKey, prompt, ref, characterRef, width, height, out });
+  else if (provider === "gemini") await generateGemini({ apiKey: providerKey, prompt, ref, out });
+  else await generateBfl({ apiKey: providerKey, prompt, ref, width, height, out });
+} catch (error) {
+  fail(error.message);
+}
 console.log(path.resolve(out));

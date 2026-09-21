@@ -9,10 +9,9 @@
  * orchestrator handles wrap, write, accept, and carbonize cleanup
  * deterministically.
  *
- * Primary provider/model: Anthropic + Claude Haiku 4.5. DeepSeek V4 Flash is
- * a secondary cheap fallback used only when ANTHROPIC_API_KEY is absent and
- * DEEPSEEK_API_KEY is present, or when explicitly forced with
- * IMPECCABLE_E2E_LLM_PROVIDER=deepseek. Inception Mercury is a fourth option,
+ * Primary provider/model: OpenAI + gpt-5.6-terra. Anthropic and MiniMax M3
+ * are fallbacks when their API keys are present, or can be selected with
+ * IMPECCABLE_E2E_LLM_PROVIDER. Inception Mercury is a fourth option,
  * explicit-only unless INCEPTION_API_KEY is in the environment. Override the
  * model via { model } when constructing, or via IMPECCABLE_E2E_LLM_MODEL at
  * the call site.
@@ -47,9 +46,6 @@ const LIVE_MD_PATH = path.join(REPO_ROOT, 'skill', 'reference', 'live.md');
 const DEFAULT_OPENAI_MODEL = 'gpt-5.6-terra';
 const DEFAULT_OPENAI_REASONING_EFFORT = 'medium';
 const DEFAULT_ANTHROPIC_MODEL = 'claude-haiku-4-5';
-// DeepSeek model list: https://api-docs.deepseek.com/api/list-models
-const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
-const DEFAULT_DEEPSEEK_API_BASE_URL = 'https://api.deepseek.com/anthropic';
 // Inception Labs' Mercury is a diffusion LLM: it drafts a whole response and
 // refines it, rather than emitting left to right, which makes it fast and
 // makes it a different failure shape from the autoregressive providers above.
@@ -217,7 +213,7 @@ const STEER_SYSTEM_INSTRUCTIONS = [
 
 /**
  * @typedef {object} LlmAgentOptions
- * @property {'openai' | 'anthropic' | 'deepseek' | 'inception' | 'minimax'=} provider Override IMPECCABLE_E2E_LLM_PROVIDER.
+ * @property {'openai' | 'anthropic' | 'inception' | 'minimax'=} provider Override IMPECCABLE_E2E_LLM_PROVIDER.
  * @property {string=} apiKey  Override the selected provider's API key env var.
  * @property {string=} model   Override the selected provider's default model.
  * @property {string=} baseURL Override the provider API base URL.
@@ -250,13 +246,24 @@ function inceptionKeyFromHelper(env) {
   }
 }
 
+function validateLlmSelection(provider, model) {
+  if (!['openai', 'anthropic', 'minimax', 'inception'].includes(provider)) {
+    throw new Error(`Unsupported IMPECCABLE_E2E_LLM_PROVIDER: ${provider}`);
+  }
+  if (/^deepseek(?:[-/]|$)/i.test(String(model || '').trim())) {
+    throw new Error(`Unsupported IMPECCABLE_E2E_LLM_MODEL: ${model}; use MiniMax-M3 for MiniMax`);
+  }
+}
+
 export function resolveLlmAgentConfig(opts = {}, env = process.env) {
   const provider = resolveProvider(opts, env);
+  const model = opts.model || env.IMPECCABLE_E2E_LLM_MODEL;
+  validateLlmSelection(provider, model);
 
   if (provider === 'openai') {
     return {
       provider,
-      model: opts.model || env.IMPECCABLE_E2E_LLM_MODEL || DEFAULT_OPENAI_MODEL,
+      model: model || DEFAULT_OPENAI_MODEL,
       apiKey: opts.apiKey || env.OPENAI_API_KEY,
       requiredEnv: 'OPENAI_API_KEY',
       baseURL: opts.baseURL || env.OPENAI_BASE_URL,
@@ -267,7 +274,7 @@ export function resolveLlmAgentConfig(opts = {}, env = process.env) {
   if (provider === 'anthropic') {
     return {
       provider,
-      model: opts.model || env.IMPECCABLE_E2E_LLM_MODEL || DEFAULT_ANTHROPIC_MODEL,
+      model: model || DEFAULT_ANTHROPIC_MODEL,
       apiKey: opts.apiKey || env.ANTHROPIC_API_KEY,
       requiredEnv: 'ANTHROPIC_API_KEY',
       baseURL: opts.baseURL || env.ANTHROPIC_BASE_URL,
@@ -277,20 +284,10 @@ export function resolveLlmAgentConfig(opts = {}, env = process.env) {
   if (provider === 'minimax') {
     return {
       provider,
-      model: opts.model || env.IMPECCABLE_E2E_LLM_MODEL || 'MiniMax-M3',
+      model: model || 'MiniMax-M3',
       apiKey: opts.apiKey || env.MINIMAX_API_KEY,
       requiredEnv: 'MINIMAX_API_KEY',
       baseURL: opts.baseURL || env.MINIMAX_API_BASE_URL || 'https://api.minimax.io/anthropic',
-    };
-  }
-
-  if (provider === 'deepseek') {
-    return {
-      provider,
-      model: opts.model || env.IMPECCABLE_E2E_LLM_MODEL || DEFAULT_DEEPSEEK_MODEL,
-      apiKey: opts.apiKey || env.DEEPSEEK_API_KEY,
-      requiredEnv: 'DEEPSEEK_API_KEY',
-      baseURL: opts.baseURL || env.DEEPSEEK_API_BASE_URL || DEFAULT_DEEPSEEK_API_BASE_URL,
     };
   }
 
@@ -304,7 +301,7 @@ export function resolveLlmAgentConfig(opts = {}, env = process.env) {
     }
     return {
       provider,
-      model: opts.model || env.IMPECCABLE_E2E_LLM_MODEL || DEFAULT_INCEPTION_MODEL,
+      model: model || DEFAULT_INCEPTION_MODEL,
       apiKey,
       requiredEnv: 'INCEPTION_API_KEY',
       baseURL: opts.baseURL || env.INCEPTION_API_BASE_URL || DEFAULT_INCEPTION_API_BASE_URL,
@@ -312,8 +309,6 @@ export function resolveLlmAgentConfig(opts = {}, env = process.env) {
       keyHelperError,
     };
   }
-
-  throw new Error(`Unsupported IMPECCABLE_E2E_LLM_PROVIDER: ${provider}`);
 }
 
 function resolveProvider(opts, env) {
@@ -321,25 +316,16 @@ function resolveProvider(opts, env) {
   if (explicit) return String(explicit).trim().toLowerCase();
   if (env.OPENAI_API_KEY) return 'openai';
   if (env.ANTHROPIC_API_KEY) return 'anthropic';
-  if (env.DEEPSEEK_API_KEY) return 'deepseek';
+  if (env.MINIMAX_API_KEY) return 'minimax';
   // Only an explicit env var auto-selects Inception. The key helper is never
   // consulted here: a helper sitting on PATH should not silently take over a
   // run the caller did not ask for.
   if (env.INCEPTION_API_KEY) return 'inception';
-  if (env.MINIMAX_API_KEY) return 'minimax';
   return 'openai';
 }
 
 export function llmRequestSettings(provider) {
-  if (provider === 'minimax') return { thinking: { type: 'adaptive' } };
-  // DeepSeek defaults to high-effort thinking, which can consume the entire
-  // bounded response before emitting the JSON these edit tests exercise.
-  // Low effort retains planning for the full live spec without inheriting
-  // the provider's high-effort default.
-  // https://api-docs.deepseek.com/guides/thinking_mode/
-  return provider === 'deepseek'
-    ? { thinking: { type: 'enabled' }, output_config: { effort: 'low' } }
-    : {};
+  return provider === 'minimax' ? { thinking: { type: 'adaptive' } } : {};
 }
 
 /**
@@ -404,6 +390,7 @@ async function createOpenAiShim({ apiKey, baseURL, reasoningEffort, useChatCompl
  */
 export async function createLlmAgent(opts = {}) {
   const config = opts.config || resolveLlmAgentConfig(opts);
+  validateLlmSelection(config.provider, config.model);
   const log = opts.log || (() => {});
   if (!config.apiKey) {
     // The runners resolve the config before a diagnostic logger exists, so a
@@ -727,7 +714,7 @@ export async function createLlmAgent(opts = {}) {
         max_tokens: 4096,
         system: systemBlocks(STEER_SYSTEM_INSTRUCTIONS),
         messages: [{ role: 'user', content: userMessage }],
-      }, ['deepseek', 'minimax'].includes(provider)
+      }, provider === 'minimax'
         ? requestOptions(manualTimeout, context.signal)
         : { signal: context.signal });
 

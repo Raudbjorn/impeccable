@@ -134,6 +134,8 @@ Light the scene to reveal color, not to set a mood. In a dim, dusky, or nocturna
 
 The neutral's ground pays the highest price for shading. The compile step snaps each role to the pixels the hero actually rendered and shows the snapped value, so a nominally off-white linen that renders in mid-gray shadow ships a mid-gray surface color to the user. Describe the neutral's material as pale in the prompt ("pale unbleached linen, near-white in even light") and keep its field lit edge to edge, so the rendered ground stays as pale as the composed hex. Fill every `[bracketed]` slot; never leave template language in the prompt.
 
+When the selected API provider is MiniMax, the finished prompt must fit within 1500 characters. Condense the skeleton into direct scene instructions: preserve the product-specific subject, four color carriers and their proportions, pale evenly lit ground, tight framing, deep focus, bright light, and wordless plain materials. Remove repetition, not constraints, and count the finished prompt before calling. Carry this limit in the specialist brief's tool slot; the wrapper rejects an oversized prompt without spending a request.
+
 ```text
 One full-bleed photograph, square format, framed close: [one scene from
 the product's world: subject and what it is doing, setting], the subject
@@ -247,7 +249,8 @@ generation tooling.
    or into an anchor you do not own, is a failure to fix now, not one
    to ship.
 
-4. Build the hero prompt from the HERO PROMPT skeleton below and
+4. Build the hero prompt from the HERO PROMPT skeleton below, within
+   the selected provider's prompt limit, and
    generate the HERO image at 1500x1500 or the nearest supported
    square. The image must be square: a size line inside the prompt
    does not pin the canvas, so whenever the tool accepts a size or

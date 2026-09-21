@@ -27,6 +27,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { getProviderOptions } from './providers.mjs';
+import { turnTimeoutMs } from './budgets.mjs';
 import { ENGINE_MISSING_MESSAGE, findEngineBinary } from '../lib/engine-bin.mjs';
 import { readSourceFiles, compileProviderBlocks, replacePlaceholders, stripRuleMarkers } from '../../scripts/lib/utils.js';
 import { createTransformer } from '../../scripts/lib/transformers/factory.js';
@@ -241,11 +242,16 @@ function execBash(workspace, command, timeoutMs = 20_000, extraEnv = {}) {
 function defaultSimulatedAnswer(question) {
   const text = String(question?.question ?? '').toLowerCase();
   const options = Array.isArray(question?.options) ? question.options : [];
-  const firstOption = options.find((option) => typeof option?.label === 'string')?.label;
+  // The fixture user wants the requested work in this workspace. A model's
+  // first option can instead cancel it. ponytail: English fixture labels only;
+  // use simulatedUser.answer for other intent or deliberate cancellation.
+  const firstOption = options.find((option) => typeof option?.label === 'string'
+    && !/^(?:cancel|stop|abort)\b|\b(?:wrong|different|another)\s+(?:workspace|directory|folder)\b/i.test(option.label.trim()))?.label;
 
   // Option labels are model-authored and therefore the most faithful answer
   // when the agent is asking the user to choose a proposed world or concept.
   if (firstOption) return firstOption;
+  if (/workspace|directory|folder/.test(text)) return 'This is the intended workspace. Continue with the requested work here; ask for any missing product context.';
   if (/platform|web|ios|android|adaptive/.test(text)) return 'Web.';
   if (/who|audience|user|people/.test(text)) return 'Night-shift ferry dispatchers working from noisy control rooms.';
   if (/purpose|job|problem|outcome|success/.test(text)) return 'Help dispatchers resolve berth conflicts before they delay the overnight crossing.';
@@ -309,6 +315,7 @@ export function makeTools(workspace, extraEnv = {}, simulatedUser = {}, { contex
         }
         const before = snapshotWorkspaceFiles(workspace);
         const res = await execBash(workspace, command, 20_000, extraEnv);
+        call.contextLoaded = res.exitCode === 0 && isContextOnlyCommand(workspace, command);
         call.mutatedPaths = changedPaths(before, snapshotWorkspaceFiles(workspace));
         call.loadedFiles = references.filter(({ content }) => content && res.stdout.includes(content))
           .map(({ file }) => `.claude/skills/impeccable/reference/${file}`);
@@ -344,7 +351,7 @@ export function makeTools(workspace, extraEnv = {}, simulatedUser = {}, { contex
         : { type: 'content', value: [{ type: 'file', data: { type: 'data', data: output.data }, mediaType: output.media_type }] },
     }),
     write: tool({
-      description: 'Write or overwrite a file in the workspace. Creates parent directories as needed.',
+      description: 'Write or overwrite a workspace-relative file (e.g. index.html). Absolute paths are rejected. Creates parent directories as needed.',
       inputSchema: z.object({
         path: z.string().describe('Workspace-relative file path.'),
         contents: z.string().describe('Full file contents.'),
@@ -419,19 +426,10 @@ export function makeTools(workspace, extraEnv = {}, simulatedUser = {}, { contex
  * `priorMessages` lets multi-turn scenarios chain context from a previous
  * call (append the SDK's response messages between turns).
  */
-// A single turn (generateText) can drive up to ~30 tool-use steps against a
-// frontier model; the thorough path was measured near 580s. generateText
-// takes no timeout of its own, so a provider socket that stalls mid-stream
-// keeps the fetch — and therefore the whole node process — alive indefinitely,
-// past node's own `--test-timeout` (which cancels the test but not the open
-// handle). We attach a real AbortSignal instead: on expiry the underlying
-// fetch is aborted, the socket closes, the turn throws, and the scenario
-// fails-and-continues so the sweep still produces a per-provider tally. The
-// cap sits just under the 900s per-test timeout so a genuine slow-but-correct
-// run is never killed. The timer is unref'd (it must not keep the loop alive
-// after a healthy turn) and cleared on completion.
-const TURN_TIMEOUT_MS = Number(process.env.IMPECCABLE_SKILL_BEHAVIOR_TURN_TIMEOUT_MS) || 840_000;
-export async function runTurn({ workspace, model, userPrompt, priorMessages = [], maxSteps = 8, env = {}, simulatedUser = {}, timeoutMs = TURN_TIMEOUT_MS, contextOnlyBash = false, denyBash = false, stopAfter, additionalTools, environment = '' }) {
+// Abort the provider request before the runner's test cap, so stalled calls
+// close their sockets and retain a per-turn diagnostic. Budgets scale with
+// maxSteps; callers can still give full browser workflows an explicit limit.
+export async function runTurn({ workspace, model, userPrompt, priorMessages = [], maxSteps = 8, env = {}, simulatedUser = {}, timeoutMs = turnTimeoutMs(maxSteps), contextOnlyBash = false, denyBash = false, stopAfter, additionalTools, environment = '' }) {
   const { tools, trace } = makeTools(workspace, env, simulatedUser, { contextOnlyBash, denyBash });
   if (additionalTools) Object.assign(tools, additionalTools(trace));
   const messages = [
@@ -440,10 +438,13 @@ export async function runTurn({ workspace, model, userPrompt, priorMessages = []
   ];
   const traceDir = process.env.IMPECCABLE_SKILL_BEHAVIOR_TRACE_DIR;
   const tracePath = traceDir && path.join(traceDir, `${path.basename(workspace)}-${crypto.randomUUID()}.json`);
+  const startedAt = Date.now();
   const saveTrace = (details) => {
     if (!tracePath) return;
     fs.mkdirSync(traceDir, { recursive: true });
-    fs.writeFileSync(tracePath, JSON.stringify({ model: model.modelId, userPrompt, trace, ...details }, null, 2));
+    fs.writeFileSync(tracePath, JSON.stringify({ model: model.modelId, userPrompt,
+      startedAt: new Date(startedAt).toISOString(), elapsedMs: Date.now() - startedAt,
+      maxSteps, timeoutMs, trace, ...details }, null, 2));
   };
   let result;
   const controller = new AbortController();
@@ -468,8 +469,7 @@ export async function runTurn({ workspace, model, userPrompt, priorMessages = []
       abortSignal: controller.signal,
       // Compatible models need explicit budgets instead of the SDK's 4096 default.
       // MiniMax exhausted 16k with finishReason=length before emitting an edit.
-      maxOutputTokens: model?.modelId?.startsWith('MiniMax-') ? 32_768
-        : model?.modelId?.startsWith('deepseek-') ? 16_384 : undefined,
+      maxOutputTokens: model?.modelId?.startsWith('MiniMax-') ? 32_768 : undefined,
       // Resolved from the model object so the 21 runTurn call sites stay
       // unchanged. Reasoning models run at the provider default otherwise,
       // which is not the tier this suite is meant to measure.
@@ -525,6 +525,11 @@ export function callLoadedFile(call, filename) {
 
 export function fileLoaded(trace, filename) {
   return trace.toolCalls.some((call) => callLoadedFile(call, filename));
+}
+
+export function referenceLoadedWithContext(trace, filename, contextAlreadyLoaded = false) {
+  return fileLoaded(trace, filename)
+    && (contextAlreadyLoaded || trace.toolCalls.some((call) => call.contextLoaded));
 }
 
 export function summarizeTrace(trace) {

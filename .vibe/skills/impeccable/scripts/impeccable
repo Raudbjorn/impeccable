@@ -8,25 +8,24 @@
 # named `impeccable`, and exec'ing it would fail every verb with
 # "Unknown command". Trusted candidates (IMPECCABLE_BIN, the sibling binary,
 # the version-pinned cache) are exec'd without a probe: hooks run them on
-# every edit and must stay fast.
+# every edit and must stay fast. The sibling is trusted because nothing can
+# stage one at the wrong version: `bun run build` refuses to run when the
+# Cargo workspace version and ENGINE_VERSION disagree.
 set -eu
 
 # True when the candidate answers the engine handshake (prints
-# "impeccable-engine <version>", exit 0). Quiet and fast (<100ms).
+# "impeccable-engine <pinned version>", exit 0). Quiet and fast (<100ms).
 # IMPECCABLE_LAUNCHER_PROBE marks the child as a probe: a copy of this
 # launcher reached recursively (e.g. symlinked onto PATH as `impeccable`)
 # then skips its own probes and refuses to download, so probing stays cheap
 # and can never loop.
 probe_ok() {
-  case "$(IMPECCABLE_LAUNCHER_PROBE=1 "$1" engine-probe 2>/dev/null || true)" in
-    impeccable-engine*) return 0 ;;
-  esac
-  return 1
+  probe_output=$(IMPECCABLE_LAUNCHER_PROBE=1 "$1" engine-probe 2>/dev/null) || return 1
+  [ "$probe_output" = "impeccable-engine $version" ]
 }
 probing=${IMPECCABLE_LAUNCHER_PROBE:-}
 
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-
 # What the binary needs to know about its home: the skill directory (for
 # reference/*.md and command-metadata.json) and how to name itself in the
 # commands it prints. Exported BEFORE any exec below, including the
@@ -43,39 +42,52 @@ case "$(uname -s 2>/dev/null || echo unknown)" in
   *) os=unknown ;;
 esac
 case "$(uname -m 2>/dev/null || echo unknown)" in
-  arm64|aarch64) arch=arm64 ;;
   x86_64|amd64) arch=x64 ;;
   *) arch=unknown ;;
 esac
 
-if [ "$os" != linux ] || [ "$arch" = unknown ]; then
-  echo "impeccable: unsupported platform $os-$arch; supported: linux-x64, linux-arm64." >&2
+if [ "$os" != linux ] || [ "$arch" != x64 ]; then
+  echo "impeccable: unsupported platform $os-$arch; supported: linux-x64." >&2
   exit 127
 fi
 
+# IMPECCABLE_BIN is trusted and does not need the pinned version: the caller
+# vouched for it. Check it before the VERSION guard so the documented override
+# still works when VERSION is missing or blank; the recovery message points the
+# user here.
 if [ -n "${IMPECCABLE_BIN:-}" ] && [ -x "${IMPECCABLE_BIN}" ]; then
   exec "${IMPECCABLE_BIN}" "$@"
 fi
 
+# Every version-dependent path below (the probe comparison, the cache dir, the
+# download URL) degrades into nonsense on an empty version: a `bin//impeccable`
+# cache path and an `engine-v` tag that cannot exist. A VERSION that is missing
+# or blank means the install is incomplete, so say that instead.
+version=""
+[ -f "$dir/VERSION" ] && version=$(tr -d '[:space:]' < "$dir/VERSION")
+if [ -z "$version" ]; then
+  echo "impeccable: $dir/VERSION is missing or empty, so the engine version this skill pins is unknown." >&2
+  echo "Reinstall the skill." >&2
+  exit 1
+fi
+
 bin="$dir/bin/$os-$arch/impeccable"
 
+if [ -f "$bin" ] && [ ! -x "$bin" ]; then
+  # Lost the executable bit in transit (zip extraction, some copiers).
+  chmod +x "$bin" 2>/dev/null || true
+fi
 if [ -x "$bin" ]; then
   exec "$bin" "$@"
-fi
-if [ -f "$bin" ]; then
-  # Lost the executable bit in transit (zip extraction, some copiers).
-  chmod +x "$bin" 2>/dev/null && exec "$bin" "$@"
 fi
 home_bin="${HOME:-/nonexistent}/.impeccable/bin/impeccable"
 if [ -z "$probing" ] && [ -x "$home_bin" ] && probe_ok "$home_bin"; then
   exec "$home_bin" "$@"
 fi
 # Version-pinned user cache, filled by the download below or by `impeccable update`.
-version=""
-[ -f "$dir/VERSION" ] && version=$(tr -d '[:space:]' < "$dir/VERSION")
 cache_root="${IMPECCABLE_HOME:-${HOME:-/nonexistent}/.impeccable}"
 cached="$cache_root/bin/$version/impeccable"
-if [ -n "$version" ] && [ -x "$cached" ]; then
+if [ -x "$cached" ]; then
   exec "$cached" "$@"
 fi
 if [ -z "$probing" ] && command -v impeccable >/dev/null 2>&1 && probe_ok impeccable; then

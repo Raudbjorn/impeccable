@@ -33,10 +33,10 @@ import { after, before, beforeEach, describe, it } from 'node:test';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PKG_PATH = path.join(REPO, 'package.json');
+const REPOSITORY = JSON.parse(fs.readFileSync(PKG_PATH, 'utf8')).repository;
 const VERSION = JSON.parse(fs.readFileSync(PKG_PATH, 'utf8'))
-  .optionalDependencies['@impeccable/cli-linux-arm64'];
-const TARGET = `${process.platform}`
-  + `-${{ arm64: 'arm64', x64: 'x64' }[process.arch] || process.arch}`;
+  .optionalDependencies['@impeccable/cli-linux-x64'];
+const TARGET = `${process.platform}-${process.arch}`;
 const PLATFORM_PKG = `@impeccable/cli-${TARGET}`;
 const ASSET = `impeccable-${TARGET}`;
 const ASSET_PATH = `/engine-v${VERSION}/${ASSET}`;
@@ -210,7 +210,7 @@ describe('npm shim download verification', () => {
     fs.mkdirSync(path.join(pkgDir, 'bin'), { recursive: true });
     fs.writeFileSync(
       path.join(pkgDir, 'package.json'),
-      `${JSON.stringify({ name: PLATFORM_PKG, version: VERSION }, null, 2)}\n`,
+      `${JSON.stringify({ name: PLATFORM_PKG, version: VERSION, repository: REPOSITORY }, null, 2)}\n`,
     );
     fs.writeFileSync(
       path.join(pkgDir, 'bin', 'impeccable'),
@@ -224,5 +224,28 @@ describe('npm shim download verification', () => {
     assert.match(res.stdout, /from-platform-package hi/);
     assert.deepEqual(requests, []);
     assert.deepEqual(cacheEntries(dir), []);
+  });
+
+  it('ignores upstream and stale platform packages and downloads the fork', async () => {
+    sidecar = { status: 200, body: `${DIGEST}  ${ASSET}\n` };
+    for (const metadata of [
+      { version: VERSION, repository: { url: 'git+https://github.com/pbakaus/impeccable.git' } },
+      { version: '0.1.5', repository: REPOSITORY },
+    ]) {
+      requests = [];
+      const { dir, shim } = stageShim();
+      const pkgDir = path.join(dir, 'node_modules', PLATFORM_PKG);
+      fs.mkdirSync(path.join(pkgDir, 'bin'), { recursive: true });
+      fs.writeFileSync(path.join(pkgDir, 'package.json'), JSON.stringify({ name: PLATFORM_PKG, ...metadata }));
+      fs.writeFileSync(path.join(pkgDir, 'bin/impeccable'), '#!/bin/sh\necho wrong-engine\n', { mode: 0o755 });
+      const env = { ...process.env, IMPECCABLE_HOME: dir, IMPECCABLE_DOWNLOAD_BASE: base };
+      delete env.IMPECCABLE_BIN;
+      const res = await run(shim, ['hi'], env);
+      assert.equal(res.status, 0, res.stderr);
+      assert.match(res.stdout, /fake-engine hi/);
+      assert.deepEqual(requests, [ASSET_PATH, `${ASSET_PATH}.sha256`]);
+      assert.deepEqual(cacheEntries(dir), [path.join(VERSION, 'impeccable')]);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

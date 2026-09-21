@@ -6,8 +6,8 @@ Loaded when a pipeline needs image generation and the harness has **no usable na
 
 ## The setup, already answered
 
-- **Key**: `IMAGE_GEN_API_KEY` in `.impeccable/.env` at the project root. The wrapper reads that file itself; never `source` it, never export the key by hand, never rename the variable. Never delete or truncate that file either, cleanup included: it is the user's stored credential, not run output, and a wiped key turns the next run's silent keyless path into a stalled question.
-- **Provider**: `IMAGE_GEN_PROVIDER` in the same file: `bfl` (FLUX / Black Forest Labs) or `gemini` (Google Nano Banana), both built into the wrapper; any other value routes to a custom wrapper (below). Loose spellings from earlier runs (`flux`, `google`, `nano-banana`) normalize to the built-ins, and a missing provider line is inferred from the key's shape (Google keys start with `AIza` or `AQ.`; anything else runs as `bfl`), so a misworded or absent line is never a reason to stop and ask.
+- **Key**: `IMAGE_GEN_API_KEY` in the environment or `.impeccable/.env` at the project root. MiniMax also accepts `MINIMAX_API_KEY` from either location and prefers it over the generic generation key. The wrapper reads that file itself; never `source` it, never export the key by hand, never rename the variable. Never delete or truncate that file either, cleanup included: it is the user's stored credential, not run output, and a wiped key turns the next run's silent keyless path into a stalled question.
+- **Provider**: `IMAGE_GEN_PROVIDER` in the environment or the same file: `bfl` (FLUX / Black Forest Labs), `gemini` (Google Nano Banana), or `minimax` (`image-01`), all built into the wrapper; any other value routes to a custom wrapper (below). Loose spellings from earlier runs (`flux`, `google`, `nano-banana`) normalize to the built-ins. Set `minimax` explicitly; when the provider is missing, only the generic generation key's shape is used (Google keys start with `AIza` or `AQ.`; anything else runs as `bfl`). A `MINIMAX_API_KEY` alone does not switch providers.
 - **Wrapper**: `.vibe/skills/impeccable/scripts/image-gen.mjs`, shipped with the skill. Do **not** write a new wrapper for a built-in provider, edit this one, or fall back to raw `curl`/`fetch` calls; every known failure mode below is already handled inside it. Wrappers left by earlier runs under other names (`flux-gen.mjs`, project-local copies) are superseded by the shipped one.
 - **No smoke test.** A funded key plus the shipped wrapper is a working path; the first real generation is the test, and the wrapper turns transient failures into internal retries rather than failed calls.
 
@@ -17,10 +17,10 @@ One command regardless of provider; the provider switch happens inside the wrapp
 
 ```text
 node .vibe/skills/impeccable/scripts/image-gen.mjs --prompt "..." --out /abs/path.png \
-  [--ref /abs/reference.png] [--width 1408] [--height 1408]
+  [--ref /abs/reference.png] [--character-ref /abs/portrait.png] [--width 1408] [--height 1408]
 ```
 
-Run it from the project root (that is where it finds `.impeccable/.env`). It prints the absolute output path on success and exits non-zero with the error on stderr. `--ref` switches text-to-image to image-to-image where the provider supports it.
+Run it from the project root (that is where it finds `.impeccable/.env`). It prints the absolute output path on success and exits non-zero with the error on stderr. `--ref` switches text-to-image to image-to-image for BFL/Gemini. MiniMax accepts `--character-ref` for portrait consistency and rejects `--ref`; character consistency does not preserve an arbitrary layout or edit a supplied screenshot.
 
 ## Provider facts, so no one re-derives them
 
@@ -39,7 +39,15 @@ Run it from the project root (that is where it finds `.impeccable/.env`). It pri
 - **Protocol**: synchronous; one call returns the image inline, no polling. Moderation arrives as an imageless response, which the wrapper turns into a clear error, not as an HTTP failure.
 - **Text rendering**: Gemini paints text well and eagerly, so a prompt that mentions codes, numbers, or labels tends to get them rendered onto the image (hex codes come back as a printed swatch strip). The calling pipeline's prompt rules ([visual-cues.md](visual-cues.md)'s HERO PROMPT skeleton) keep those out of prompts; follow them, not looser habits from other models.
 
-**Any other provider**: the user names it, so the integration cannot be pre-shipped. Write `.impeccable/image-gen.mjs` implementing the same CLI (same flags, print the absolute output path on success, non-zero exit with the error on stderr, transient retries handled inside), set `IMAGE_GEN_PROVIDER` to the provider's name, and the shipped wrapper delegates to it automatically; calling pipelines keep using the shipped command unchanged. Build it from the provider's API docs, and give it square output; do **not** modify the shipped wrapper to add the provider inline.
+**minimax**:
+
+- **Model and protocol**: `image-01` at `/v1/image_generation`, one image per call. The wrapper requests base64 output, so no public hosting or CDN download is needed; JPEG/WebP output is converted to PNG with the existing system converter. The destination is replaced only after the staged PNG decodes successfully. See the [MiniMax API contract](https://platform.minimax.io/docs/api-reference/image-generation-t2i).
+- **Prompt**: at most 1500 characters. Write a concise prompt for this asset's product, purpose, composition, palette, lighting, and required exclusions. Condense the visual-cue skeleton before calling, preserving its constraints; never truncate a finished prompt mechanically. The wrapper submits the prompt unchanged with `prompt_optimizer: false`, and rejects oversized prompts before a request.
+- **Size**: 512-2048 px in multiples of 8, default `1408x1408`. Pass equal dimensions for visual cues. Explicit `--width` and `--height` are sent without an aspect-ratio override.
+- **Reference**: `--character-ref` accepts one local PNG/JPEG smaller than 10 MB, encoded as a data URL in `subject_reference`. It is for a character's appearance, ideally a front-facing portrait; use BFL/Gemini for general `--ref` edits. See [character references](https://platform.minimax.io/docs/api-reference/image-generation-i2i).
+- **Failures**: network failures, server errors, and rate limits retry up to three attempts. Authentication, credit, moderation, parameter, and malformed-image failures stop explicitly without replacing an existing asset.
+
+**Any other provider**: write `.impeccable/image-gen.mjs` implementing the same CLI (same flags, print the absolute output path on success, non-zero exit with the error on stderr, transient retries handled inside), set `IMAGE_GEN_PROVIDER` to the provider's name, and the shipped wrapper delegates to it automatically; calling pipelines keep using the shipped command unchanged. Build it from the provider's API docs, and give it square output; do **not** modify the shipped wrapper to add the provider inline.
 
 ## Failures and what they mean
 
@@ -47,7 +55,7 @@ The wrapper retries transient failures internally (DNS, network blips, 429 back-
 
 - **"out of credits"** (bfl, HTTP 402): a human must top up at dashboard.bfl.ai. Report it and stop this path; retrying is pointless, and so is asking the user to choose an alternative that does not exist.
 - **"quota or rate limit exhausted"** (gemini, HTTP 429 after the wrapper's own retries): the key's plan is out of headroom. Report it and stop this path; the fix is billing, not retries.
-- **"rejected the key"** (either provider): the key in `.impeccable/.env` is wrong or revoked. Report it; do not mint debugging sessions around a dead key.
+- **"rejected the key"**: the selected provider's key is wrong or revoked. Report it; do not mint debugging sessions around a dead key.
 - **Moderation** ("Content Moderated" / "Request Moderated" / "Prompt was moderated"): the prompt tripped the provider's filter; rewording the prompt is the fix, within the caller's normal generation budget.
 - **"cannot resolve"**: the wrapper already tried the system resolver, `dig`, Google, and Cloudflare. **Never debug DNS beyond this**: no `/etc/hosts` edits, no new resolvers, no rewriting the wrapper to use `fetch()` (sandboxed harnesses block the default resolver for these hosts; the wrapper pins IPs via `curl --resolve` for exactly that reason). Report the failure and let the parent decide.
 

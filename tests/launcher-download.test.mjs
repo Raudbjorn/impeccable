@@ -36,6 +36,19 @@ async function exercise(t, scenario) {
   }
   const tools = path.join(root, 'tools');
   fs.mkdirSync(tools);
+  if (scenario === 'stale-candidates') {
+    // Probed candidates: reached by name, so an engine from another
+    // distribution can be sitting there and must be declined.
+    for (const bin of [path.join(home, '.impeccable/bin/impeccable'), path.join(tools, 'impeccable')]) {
+      fs.mkdirSync(path.dirname(bin), { recursive: true });
+      fs.writeFileSync(bin, '#!/bin/sh\necho "impeccable-engine 0.1.5"\n', { mode: 0o755 });
+    }
+  }
+  if (scenario === 'stale-sibling') {
+    const bin = path.join(scripts, 'bin/linux-x64/impeccable');
+    fs.mkdirSync(path.dirname(bin), { recursive: true });
+    fs.writeFileSync(bin, '#!/bin/sh\necho "sibling-engine"\n', { mode: 0o755 });
+  }
   if (scenario === 'cache-write-failure') {
     // The POSIX staging name contains the launcher's PID, so intercept the
     // preceding mkdir to place a directory at precisely that file path.
@@ -99,7 +112,7 @@ async function exercise(t, scenario) {
     assert.equal(requests.length, requestCount, 'subsequent runs use the cached engine without network');
   }
   assert.equal(result.signal, null, JSON.stringify(result));
-  const cacheFailure = scenario.startsWith('cache-');
+  const cacheFailure = scenario.startsWith('cache-') || scenario === 'stale-sibling';
   assert.equal(requests.filter(url => !url.endsWith('.sha256')).length, cacheFailure ? 0 : 1,
     'cache failures do not attempt a download; other scenarios download once');
   return { ...result, files: fs.existsSync(cacheDir) ? fs.readdirSync(cacheDir) : [], requests, cacheDir };
@@ -134,6 +147,26 @@ test('launcher downloads and runs a verified executable', async t => {
   assert.equal(result.requests.length, 2);
 });
 
+test('launcher ignores stale home and PATH engines', async t => {
+  const result = await exercise(t, 'stale-candidates');
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /verified-engine/);
+  assert.deepEqual(result.files, ['impeccable']);
+  assert.equal(result.requests.length, 2);
+});
+
+test('launcher execs the sibling binary without probing it', async t => {
+  // The sibling is the fast path: the design hook runs the launcher on every
+  // edit, and a probe would double the process spawns per edit. What keeps a
+  // wrong-version sibling from existing is `bun run build`, which refuses when
+  // Cargo.toml and ENGINE_VERSION disagree, plus the SHA-256 verification in
+  // install_engine_binaries. Probing here would buy nothing and cost that.
+  const result = await exercise(t, 'stale-sibling');
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /sibling-engine/);
+  assert.doesNotMatch(result.stdout, /verified-engine/);
+});
+
 for (const scenario of ['removed', 'emptied', 'empty-download', 'no-sidecar', 'empty-sidecar', 'mismatch', 'hash-failure', 'removed-during-hash', 'removed-before-move', 'removed-after-move', 'emptied-after-move', 'move-failure']) {
   test(`launcher refuses ${scenario} with an accurate diagnostic`, async t => {
     const result = await exercise(t, scenario);
@@ -161,15 +194,18 @@ test('removed hosts cannot execute an override or attempt a download', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'impeccable-host-rejection-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.writeFileSync(path.join(root, 'uname'), '#!/bin/sh\nif [ "$1" = "-s" ]; then echo "$TEST_OS"; else echo "$TEST_ARCH"; fi\n', { mode: 0o755 });
-  for (const [platform, osName] of [['darwin', 'Darwin'], ['win32', 'Windows_NT']]) {
+  for (const [platform, osName] of [['linux', 'Linux'], ['darwin', 'Darwin'], ['win32', 'Windows_NT']]) {
     for (const arch of ['x64', 'arm64']) {
+      if (platform === 'linux' && arch === 'x64') continue;
       const env = { ...process.env, PATH: `${root}:/usr/bin:/bin`, TEST_OS: osName, TEST_ARCH: arch === 'x64' ? 'x86_64' : 'aarch64', IMPECCABLE_BIN: '/usr/bin/true' };
       const shell = spawnSync('/bin/sh', [path.join(ROOT, 'skill/scripts/impeccable')], { env, encoding: 'utf8' });
       assert.equal(shell.status, 127);
       assert.match(shell.stderr, /unsupported platform/);
+      assert.match(shell.stderr, /supported: linux-x64\./);
       const shim = spawnSync(process.execPath, ['--import', `data:text/javascript,Object.defineProperty(process,'platform',{value:'${platform}'});Object.defineProperty(process,'arch',{value:'${arch}'});`, path.join(ROOT, 'cli/bin/cli.js'), 'context'], { env, encoding: 'utf8' });
       assert.equal(shim.status, 127);
       assert.match(shim.stderr, /unsupported platform/);
+      assert.match(shim.stderr, /supported: linux-x64\./);
     }
   }
 });

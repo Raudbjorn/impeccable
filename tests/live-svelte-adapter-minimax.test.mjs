@@ -54,7 +54,7 @@ const artifactRoot = createArtifactRoot();
 let playwright;
 let browser;
 
-const provider = process.env.IMPECCABLE_E2E_LLM_PROVIDER || 'deepseek';
+const provider = process.env.IMPECCABLE_E2E_LLM_PROVIDER || 'minimax';
 const llmConfig = resolveLlmAgentConfig({ provider });
 // MiniMax's 32k thinking/output budget needs up to six minutes per attempt.
 const generationTimeoutMs = provider === 'minimax' ? 720_000 : 240_000;
@@ -270,7 +270,7 @@ async function runEditCopyFlow({ page, tmp, live, evidence }) {
   await waitForPendingDockCleared(live, { timeout: 240_000 });
   await waitForApplyDockHidden(page, { timeout: 60_000 });
   const sourceAfter = readFileSync(join(tmp, ROUTE_FILE), 'utf-8');
-  assert.match(sourceAfter, /Design snack approved/, 'DeepSeek Apply writes edited copy to source');
+  assert.match(sourceAfter, /Design snack approved/, 'MiniMax Apply writes edited copy to source');
   assert.doesNotMatch(sourceAfter, /contenteditable|data-impeccable-editable|data-impeccable-original-text|impeccable-variants/, 'manual Apply does not leak live scaffolding');
 }
 
@@ -854,9 +854,9 @@ function git(cwd, args) {
 }
 
 function createArtifactRoot() {
-  const explicit = process.env.IMPECCABLE_SVELTE_DEEPSEEK_ARTIFACT_DIR;
+  const explicit = process.env.IMPECCABLE_SVELTE_MINIMAX_ARTIFACT_DIR;
   if (explicit) return explicit;
-  const base = join(REPO_ROOT, 'tmp/svelte-live-adapter-deepseek');
+  const base = join(REPO_ROOT, 'tmp/svelte-live-adapter-minimax');
   for (const round of ['round-1', 'round-2']) {
     const candidate = join(base, round);
     if (!existsSync(candidate)) return candidate;

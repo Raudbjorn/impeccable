@@ -16,19 +16,9 @@ use crate::util::{self, jsp};
 
 pub const DEFAULT_DOWNLOAD_BASE: &str = "https://github.com/Raudbjorn/impeccable/releases/download";
 
-/// The `<os>-<arch>` tag the launcher computes (`linux` x
-/// `arm64|x64`); `None` on a platform without a release asset.
+/// The launcher's Linux x64 release target; `None` on unsupported hosts.
 pub fn platform_tag() -> Option<(&'static str, &'static str)> {
-    if !cfg!(target_os = "linux") { return None; }
-    let os = "linux";
-    let arch = if cfg!(target_arch = "aarch64") {
-        "arm64"
-    } else if cfg!(target_arch = "x86_64") {
-        "x64"
-    } else {
-        return None;
-    };
-    Some((os, arch))
+    cfg!(all(target_os = "linux", target_arch = "x86_64")).then_some(("linux", "x64"))
 }
 
 /// Where the binary for `(os, arch)` lives inside a skill directory.
@@ -162,8 +152,8 @@ mod tests {
     #[test]
     fn asset_naming_matches_launcher() {
         assert_eq!(
-            asset_url(DEFAULT_DOWNLOAD_BASE, "1.2.3", "linux", "arm64"),
-            "https://github.com/Raudbjorn/impeccable/releases/download/engine-v1.2.3/impeccable-linux-arm64"
+            asset_url(DEFAULT_DOWNLOAD_BASE, "1.2.3", "linux", "x64"),
+            "https://github.com/Raudbjorn/impeccable/releases/download/engine-v1.2.3/impeccable-linux-x64"
         );
         // The sibling binary path is joined with the host's path semantics
         // (backslashes on Windows); only the asset name is platform-keyed.

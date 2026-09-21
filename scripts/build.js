@@ -590,6 +590,21 @@ function syncEngineVersionFile(rootDir) {
   if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version)) {
     throw new Error(`ENGINE_VERSION must be a semver string, got "${version}"`);
   }
+  // The launcher trusts the binary staged beside it, and `impeccable update`
+  // trusts the one it caches, on the strength of this pin alone. The binary
+  // answers `engine-probe` from CARGO_PKG_VERSION, so a Cargo workspace that
+  // has drifted from ENGINE_VERSION ships an engine that disagrees with the
+  // version every install path just resolved. Nothing else compares the two.
+  const cargo = fs.readFileSync(path.join(rootDir, 'Cargo.toml'), 'utf-8');
+  const workspace = cargo.split(/^\[/m).find(s => s.startsWith('workspace.package]')) || '';
+  const cargoVersion = workspace.match(/^version\s*=\s*"([^"]+)"/m)?.[1];
+  if (cargoVersion !== version) {
+    throw new Error(
+      `Cargo.toml [workspace.package] version "${cargoVersion}" does not match ENGINE_VERSION "${version}". `
+      + 'The engine reports the Cargo version through engine-probe, and the launcher rejects a binary '
+      + 'whose answer disagrees with the pin. Bump both together.',
+    );
+  }
   const dest = path.join(rootDir, 'skill', 'scripts', 'VERSION');
   const current = fs.existsSync(dest) ? fs.readFileSync(dest, 'utf-8') : null;
   if (current !== `${version}\n`) fs.writeFileSync(dest, `${version}\n`);
