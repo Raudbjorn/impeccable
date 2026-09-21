@@ -26,18 +26,6 @@ probe_ok() {
 probing=${IMPECCABLE_LAUNCHER_PROBE:-}
 
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-# Every version-dependent path below (the probe comparison, the cache dir, the
-# download URL) degrades into nonsense on an empty version: a `bin//impeccable`
-# cache path and an `engine-v` tag that cannot exist. A VERSION that is missing
-# or blank means the install is incomplete, so say that instead.
-version=""
-[ -f "$dir/VERSION" ] && version=$(tr -d '[:space:]' < "$dir/VERSION")
-if [ -z "$version" ]; then
-  echo "impeccable: $dir/VERSION is missing or empty, so the engine version this skill pins is unknown." >&2
-  echo "Reinstall the skill, or set IMPECCABLE_BIN to a preinstalled engine binary." >&2
-  exit 1
-fi
-
 # What the binary needs to know about its home: the skill directory (for
 # reference/*.md and command-metadata.json) and how to name itself in the
 # commands it prints. Exported BEFORE any exec below, including the
@@ -63,8 +51,24 @@ if [ "$os" != linux ] || [ "$arch" != x64 ]; then
   exit 127
 fi
 
+# IMPECCABLE_BIN is trusted and does not need the pinned version: the caller
+# vouched for it. Check it before the VERSION guard so the documented override
+# still works when VERSION is missing or blank; the recovery message points the
+# user here.
 if [ -n "${IMPECCABLE_BIN:-}" ] && [ -x "${IMPECCABLE_BIN}" ]; then
   exec "${IMPECCABLE_BIN}" "$@"
+fi
+
+# Every version-dependent path below (the probe comparison, the cache dir, the
+# download URL) degrades into nonsense on an empty version: a `bin//impeccable`
+# cache path and an `engine-v` tag that cannot exist. A VERSION that is missing
+# or blank means the install is incomplete, so say that instead.
+version=""
+[ -f "$dir/VERSION" ] && version=$(tr -d '[:space:]' < "$dir/VERSION")
+if [ -z "$version" ]; then
+  echo "impeccable: $dir/VERSION is missing or empty, so the engine version this skill pins is unknown." >&2
+  echo "Reinstall the skill." >&2
+  exit 1
 fi
 
 bin="$dir/bin/$os-$arch/impeccable"
