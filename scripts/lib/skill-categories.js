@@ -38,6 +38,7 @@ export const SKILL_CATEGORIES = {
   extract: 'system',
   'design-context': 'system',
   live: 'system',
+  generate: 'system',
 };
 
 export const CATEGORY_ORDER = ['create', 'evaluate', 'refine', 'simplify', 'harden', 'system'];

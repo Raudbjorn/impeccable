@@ -35,7 +35,7 @@ pub fn finding(id: &str, artifact: &str, path: Option<String>, severity: &'stati
     Finding { id: id.to_string(), artifact: artifact.to_string(), path, severity, summary, fix }
 }
 
-const KNOWN_CONFIG_KEYS: [&str; 9] = [
+const KNOWN_CONFIG_KEYS: [&str; 10] = [
     "hook",
     "detector",
     "updateCheck",
@@ -43,6 +43,7 @@ const KNOWN_CONFIG_KEYS: [&str; 9] = [
     "projectRoots",
     "buildPath",
     "retrieval",
+    "browser",
     "$schema",
     "version",
 ];

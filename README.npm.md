@@ -89,7 +89,7 @@ Binary lookup order: `IMPECCABLE_BIN`, a platform package matching the fork's re
 
 ## Part of Impeccable
 
-This CLI is part of [Impeccable](https://impeccable.style), a cross-provider design skill pack for AI-powered development tools. The full suite includes 25 commands for Claude, GitHub Copilot, Gemini, Codex, Veto, and more.
+This CLI is part of [Impeccable](https://impeccable.style), a cross-provider design skill pack for AI-powered development tools. The full suite includes 26 commands for Claude, GitHub Copilot, Gemini, Codex, Veto, and more.
 
 ## License
 
