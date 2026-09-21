@@ -2,6 +2,12 @@
 
 These optional Node.js helpers use `MINIMAX_API_KEY` from the environment and default to `MiniMax-M3`. Keep the key out of arguments, chat, and logs. Each helper prints a JSON result; failures print `{ "ok": false, "error": "..." }` to stderr and exit 1.
 
+For **image generation**, the separate [image API helper](image-api.md) supports `IMAGE_GEN_PROVIDER=minimax` with `image-01` and the same `MINIMAX_API_KEY` (or `IMAGE_GEN_API_KEY`). It accepts an asset-specific prompt of at most 1500 characters, writes a local PNG, and prints its absolute path. It supports local portrait references through `--character-ref`; general `--ref` edits require BFL/Gemini. Native image tools retain the precedence described in that guide.
+
+```sh
+IMAGE_GEN_PROVIDER=minimax node ".kiro/skills/impeccable/scripts/image-gen.mjs" --prompt "A close, wordless botanical still life for the florist landing page, pale linen, deep green leaves and one vivid coral bloom, crisp focus and even daylight." --out "/absolute/path/hero.png"
+```
+
 ## Image analysis
 
 Use a supplied screenshot or image as evidence. The coding agent invokes this helper as a shell command; the browser and engine stage the screenshot and event without calling MiniMax. In live mode, follow [live.md](live.md): analyze `event.screenshotPath` only when present and compose the analysis task from the current request, target, and annotations.

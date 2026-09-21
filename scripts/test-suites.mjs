@@ -77,6 +77,7 @@ export const SUITES = {
           'tests/compose.test.mjs',
           'tests/visual-cues.test.mjs',
           'tests/image-analyze.test.mjs',
+          'tests/image-gen.test.mjs',
           'tests/web-search.test.mjs',
           'tests/omp-hook-module.test.mjs',
           'tests/omp-plugin-layout.test.mjs',
