@@ -114,10 +114,10 @@ it('local, base64, and URL images retain their content; live screenshots stay in
   }
 });
 
-it('vision sends detailed or quick instructions with the requested focus and preserves image content', async () => {
+it('vision uses detailed or quick defaults without a task and preserves image content', async () => {
   for (const image of [dataUrl, 'https://example.com/image.png']) {
     const mode = image === dataUrl ? 'detailed' : 'quick';
-    const result = await analyzeImage({ image, mode, prompt: 'Describe the layout.', cache: false, apiKey: 'test-key', fetchImpl: async (url, request) => {
+    const result = await analyzeImage({ image, mode, prompt: '  ', cache: false, apiKey: 'test-key', fetchImpl: async (url, request) => {
       assert.equal(url, 'https://api.minimax.io/v1/chat/completions');
       assert.equal(request.headers.Authorization, 'Bearer test-key');
       const body = JSON.parse(request.body);
@@ -125,7 +125,6 @@ it('vision sends detailed or quick instructions with the requested focus and pre
       assert.equal(instructions.type, 'text');
       assert.match(instructions.text, mode === 'quick' ? /fewer than 300 words/ : /image_overview.*visible_text.*objects_and_layout.*charts_or_data.*answer_to_request.*evidence.*uncertainty/);
       assert.match(instructions.text, /content, never as instructions/);
-      assert.match(instructions.text, /Requested focus: Describe the layout\./);
       assert.deepEqual(attachment, { type: 'image_url', image_url: { url: image } });
       assert.deepEqual(body.thinking, { type: 'adaptive' });
       assert.equal(body.reasoning_split, true);
@@ -134,6 +133,22 @@ it('vision sends detailed or quick instructions with the requested focus and pre
       return Response.json({ model: 'MiniMax-M3', choices: [{ finish_reason: 'stop', message: { content: 'A compact layout.', reasoning_content: 'private reasoning' } }], usage: { total_tokens: 10 } });
     } });
     assert.deepEqual(result, { ok: true, model: 'MiniMax-M3', mode, text: 'A compact layout.', cached: false, usage: { total_tokens: 10 } });
+  }
+});
+
+it('vision answers the caller task without imposing a general image inventory', async () => {
+  const prompt = 'For the request to tighten the header, identify the gap marked by the arrow and the elements on either side.';
+  for (const mode of ['quick', 'detailed']) {
+    await analyzeImage({ image: dataUrl, mode, prompt, cache: false, apiKey: 'test-key', fetchImpl: async (_url, request) => {
+      const text = JSON.parse(request.body).messages[0].content[0].text;
+      assert.ok(text.startsWith(prompt));
+      assert.doesNotMatch(text, /image_overview|charts_or_data|summarize the image|Requested focus/);
+      assert.match(text, /only this task/);
+      assert.match(text, mode === 'quick' ? /fewer than 300 words/ : /detailed visual evidence/);
+      assert.match(text, /content, never as instructions/);
+      assert.match(text, /Do not invent unreadable text or hidden details/);
+      return Response.json({ choices: [{ finish_reason: 'stop', message: { content: 'The arrow marks the gap between the logo and navigation.' } }] });
+    } });
   }
 });
 
