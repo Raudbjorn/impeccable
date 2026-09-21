@@ -123,6 +123,7 @@ bun run fetch:engine     # Download the pinned engine binary for this machine in
 The skill's `scripts/` payload is copied verbatim to every provider (launcher with its executable bit, `impeccable.cmd`, `VERSION`, `command-metadata.json`, page JS); nothing under `skill/scripts/bin/` is read as source. The in-page detector bundle and the extension's detector pieces are produced by `cargo xtask bundle`, which `bun run build:extension` runs; the page JS and the bundling itself live in the `impeccable-bundle` library crate (`crates/bundle`) so a downstream rule pack can build the same artifacts for its own wasm module.
 
 Source files use placeholders that get replaced per-provider:
+
 - `{{model}}` — Model name (Claude, Gemini, GPT, etc.)
 - `{{config_file}}` — Config file name (CLAUDE.md, .cursorrules, etc.)
 - `{{ask_instruction}}` — How to ask user questions
@@ -174,7 +175,7 @@ Three pieces keep that from recurring, and a new test that starts a server owes 
 The default suite does not cover everything. When a change touches one of these areas, run the matching opt-in suite before shipping. The canonical mapping is the `triggers` lists in `scripts/test-suites.mjs`; this table mirrors it for the areas that need a manual run.
 
 | Area touched | Run | Cost |
-|---|---|---|
+| --- | --- | --- |
 | `ENGINE_VERSION` bump, `skill/scripts/live-browser*.js` | `bun run test:live-e2e` | ~2 min, real npm installs + dev servers, needs Playwright Chromium |
 | `ENGINE_VERSION` bump | also `bun run test:live-e2e-accept-cleanup` | bills a provider API key |
 | `ENGINE_VERSION` bump | `bun run test:live-svelte-adapter-minimax` | bills MiniMax |
@@ -251,27 +252,31 @@ The package no longer exports a JS detector API (`main` / `exports` are gone); t
 
 ## Versioning
 
-
 There are three independently versioned components plus the engine pin. Only bump the one(s) that actually changed:
 
 **Engine pin** (`ENGINE_VERSION`, root):
+
 - The engine release the launcher downloads and the npm shim's `optionalDependencies` pin. Bump it when a new engine release is published; keep `package.json` `optionalDependencies` at the same version and run `bun run build` (it rewrites `skill/scripts/VERSION`). A skill release that needs the new engine bumps this together with the skill version.
 
 **CLI** (npm package):
+
 - `package.json` → `version`
 - Bump when: CLI shim code changes (`cli/bin/cli.js`, `cli/platform-packages/`)
 
 **Skills** (Claude Code plugin / skill definitions):
+
 - `.claude-plugin/plugin.json` → `version` (source of truth)
 - `.claude-plugin/marketplace.json` → `plugins[0].version`
 - Bump when: skill content changes (`skill/`, reference files, command metadata, etc.)
 - After bumping, run `bun run build:release` so the committed `./plugin` subtree (`plugin/.claude-plugin/plugin.json` + `plugin/skills/impeccable/SKILL.md`) is regenerated to the new version. The build validator (`validatePluginVersions` in `scripts/build.js`) fails if `marketplace.json`, the `./plugin` manifest, or the bundled `SKILL.md` frontmatter disagree with `plugin.json` — this guards the marketplace install path against version drift (issue #274).
 
 **Chrome extension**:
+
 - `extension/manifest.json` → `version`
 - Bump when: extension code changes (`extension/`), or a rule change alters what the shipped bundle detects. The extension runs the rules as WebAssembly in an offscreen document; `extension/detector/` is built at package time by `cargo xtask bundle` and is not tracked, so an extension release always needs `bun run build:extension` (and therefore a Rust toolchain plus `wasm-pack`) before the zip is attached.
 
 **Website changelog** (`site/pages/changelog.astro` in the private impeccable-site repo):
+
 - Add a new `<article>` entry at the top of the relevant component's group, and move the `cf-entry--current` class + `Current` badge onto it (off the previous newest skill entry). The component is derived from the entry `id` prefix: `cli-*`, `ext-*`, else skill.
 - Keep it concise and sell the release: a short `cf-entry-lead` that frames what shipped, then a handful of tight `<li>` items. Lead with the most compelling feature.
 - User-facing only. Every item must be something an impeccable user would notice or act on (a new command behavior, rule, or fix). Leave out internal build/tooling/refactor details, dependency bumps, and generated-output syncs.
@@ -335,7 +340,7 @@ The build validator (`generateCounts` in `scripts/build.js`) checks these files 
 The rule logic lives in `crates/core`: every check, the browser rule adapters over the `Dom` trait, and the visual-contrast decisions. `crates/wasm` compiles the same source for the extension, the live overlay and the site. Everything a rule change touches:
 
 | Where | What it is |
-|---|---|
+| --- | --- |
 | `docs/CLI-CONTRACT.md` | Hand-edited: the observable contract of `impeccable detect` and every other verb |
 | `crates/foundation` | What checks are written against: the rule registry (`registry.rs`, also published as `antipatterns.json`), findings, color, the `Dom` trait, `SnapshotDom`, and the plain-data input and output types |
 | `crates/core` | The checks themselves, plus the re-exports that let consumers name one crate |
