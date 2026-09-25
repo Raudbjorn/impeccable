@@ -77,9 +77,11 @@ const GITHUB_PROJECT_SCRIPTS = '$(git rev-parse --show-toplevel)/.github/skills/
 // Grok project hooks are relative to the git/workspace root. Claude tool names
 // in the matcher (Edit|Write|MultiEdit) alias to Grok's search_replace family.
 
-function buildClaudeCompatibleHooks(matcher, scriptsDir) {
+function buildClaudeCompatibleHooks(matcher, scriptsDir, { sessionIdentity = false } = {}) {
   const command = guardedLauncher(launcherIn(scriptsDir));
   return {
+    ...(sessionIdentity ? { SessionStart: [{ hooks: [{ type: 'command', command,
+      timeout: TIMEOUT_SECONDS, statusMessage: 'Preparing build session' }] }] } : {}),
     PostToolUse: [
       {
         matcher,
@@ -100,7 +102,7 @@ function buildClaudeCompatibleHooks(matcher, scriptsDir) {
 export function buildClaudeSettingsManifest() {
   return {
     description: 'Impeccable design detector: immediate-tier checks after Edit/Write on UI files, full-rule deep pass on Stop.',
-    hooks: buildClaudeCompatibleHooks('Edit|Write', CLAUDE_PROJECT_SCRIPTS),
+    hooks: buildClaudeCompatibleHooks('Edit|Write', CLAUDE_PROJECT_SCRIPTS, { sessionIdentity: true }),
   };
 }
 
@@ -112,7 +114,7 @@ export function buildClaudeSettingsManifest() {
 // than `hooks`, failing the whole manifest (issue #330).
 export function buildClaudePluginHooksManifest() {
   return {
-    hooks: buildClaudeCompatibleHooks('Edit|Write', CLAUDE_PLUGIN_SCRIPTS),
+    hooks: buildClaudeCompatibleHooks('Edit|Write', CLAUDE_PLUGIN_SCRIPTS, { sessionIdentity: true }),
   };
 }
 
@@ -185,6 +187,24 @@ export function buildOmpHookModule() {
   return readFileSync(new URL('../../../crates/context/assets/omp-hook.js', import.meta.url), 'utf8');
 }
 
+// Gemini's hook timeouts are milliseconds. BeforeTool carries the session id
+// into `build-phase` shell calls only; AfterAgent uses the engine's shared
+// completion check. Gemini substitutes `$GEMINI_PROJECT_DIR` in the command
+// text with an already shell-escaped path before `bash -c` runs it, so the
+// token stays bare: inside double quotes the escaping would turn literal.
+export function buildGeminiHooksManifest() {
+  const launcher = '$GEMINI_PROJECT_DIR/.gemini/skills/impeccable/scripts/impeccable';
+  const command = `[ ! -f ${launcher} ] || ${launcher} hook`;
+  return { hooks: {
+    BeforeTool: [{ matcher: '^run_shell_command$', hooks: [{
+      name: 'impeccable-session', type: 'command', command, timeout: 5000,
+    }] }],
+    AfterAgent: [{ hooks: [{
+      name: 'impeccable-completion', type: 'command', command, timeout: 30000,
+    }] }],
+  } };
+}
+
 export function hooksJsonFor(provider, options = {}) {
   switch (provider) {
     case 'claude':
@@ -195,6 +215,8 @@ export function hooksJsonFor(provider, options = {}) {
       return buildGitHubHooksManifest();
     case 'omp':
       return { isModule: true, content: buildOmpHookModule() };
+    case 'gemini':
+      return buildGeminiHooksManifest();
     default:
       return null;
   }

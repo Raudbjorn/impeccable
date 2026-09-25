@@ -715,7 +715,38 @@ fn run_plate(args: &[String], io: &mut Io, cwd: &str, env: &Env, plate_id: &str,
     }
 
     if env.get("IMPECCABLE_IMAGE_GEN_FAKE").map(|v| !v.is_empty()).unwrap_or(false) {
-        let up = impeccable_comp::raster::resize(&refimg, refimg.width as f64 * 2.0, refimg.height as f64 * 2.0);
+        // A resized copy of the reference crop is exactly the pixel/structure
+        // signature the plates gate's crop-identity check exists to catch
+        // (caller_supplied_fake_metadata_cannot_bypass_the_crop_check pins
+        // that the `impeccable:fake` tag alone must never bypass it), so fake
+        // mode perturbs the crop with a coarse checkerboard tint instead of
+        // resampling `refimg` untouched: the tint is large-scale enough to
+        // keep the region's overall composition (and its fidelity score)
+        // recognizable, while shifting every pixel well past the crop
+        // check's per-pixel copy tolerance.
+        let mut up = impeccable_comp::raster::resize(&refimg, refimg.width as f64 * 2.0, refimg.height as f64 * 2.0);
+        let (width, height) = (up.width, up.height);
+        let cell = (width.max(height) as f64 / 3.0).max(8.0);
+        let mut y = 0.0;
+        while y < height as f64 {
+            let mut x = 0.0;
+            while x < width as f64 {
+                if ((x / cell) as i64 + (y / cell) as i64) % 2 == 0 {
+                    let w = cell.min(width as f64 - x);
+                    let h = cell.min(height as f64 - y);
+                    for py in y as usize..(y + h) as usize {
+                        for px in x as usize..(x + w) as usize {
+                            let i = (py * width + px) * 4;
+                            for c in 0..3 {
+                                up.data[i + c] = up.data[i + c].saturating_add(40);
+                            }
+                        }
+                    }
+                }
+                x += cell;
+            }
+            y += cell;
+        }
         let text = vec![("impeccable:prompt".to_string(), prompt.clone()), ("impeccable:fake".to_string(), "1".to_string())];
         match png_io::encode_png(&up, &text) {
             Ok(bytes) => {
@@ -741,7 +772,7 @@ fn run_plate(args: &[String], io: &mut Io, cwd: &str, env: &Env, plate_id: &str,
         m.insert("plate".into(), Value::String(plate_id.to_string()));
         m.insert("refs".into(), Value::Array(vec![Value::String(ref_path.clone())]));
         let _ = std::fs::write(abs(&format!("{out}.json")), json_pretty(&Value::Object(m)));
-        io.out(&format!("PLATE: {out} ({}x{}, fake 2x crop of region {plate_id}, $0.00, no API call)\n", up.width, up.height));
+        io.out(&format!("PLATE: {out} ({}x{}, fake tinted crop of region {plate_id}, $0.00, no API call)\n", up.width, up.height));
         // Fall through to the shared gate, as the real path does and as the
         // CLI contract already specified. Returning here emitted no
         // PLATE-SCORE and ignored --min, so fake mode could not stand in for

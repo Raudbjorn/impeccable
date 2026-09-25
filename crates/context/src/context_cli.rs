@@ -23,6 +23,7 @@ pub fn hook_manifests_for(provider_id: &str) -> &'static [&'static str] {
         "cursor" => &[".cursor/hooks.json"],
         "github" => &[".github/hooks/impeccable.json"],
         "grok" => &[".grok/hooks/impeccable.json"],
+        "gemini" => &[".gemini/settings.json"],
         _ => &[],
     }
 }
@@ -87,6 +88,11 @@ pub fn automatic_hook_mode(ctx: &Ctx, cwd: &str, env: &Env, provider: &Provider)
                 return "stop";
             }
         }
+    }
+    // Gemini's manifest carries only the session and build-completion hooks,
+    // no detector pass, so it never counts as automatic coverage.
+    if provider.id == "gemini" {
+        return "none";
     }
     let manifests = hook_manifests_for(&provider.id);
     for root in hook_manifest_search_roots(ctx, cwd, env) {

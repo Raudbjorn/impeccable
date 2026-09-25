@@ -1,14 +1,12 @@
 //! Find an installed Chromium-based browser. The JS engine launches
-//! puppeteer's bundled Chrome (on Windows the system `channel: 'chrome'`
-//! first, then bundled); the binary downloads nothing, so it discovers an
-//! installed browser instead. Order:
+//! puppeteer's bundled Chrome; the binary downloads nothing, so it
+//! discovers an installed browser instead. Order:
 //!
 //! 1. `IMPECCABLE_BROWSER` (explicit override)
 //! 2. `PUPPETEER_EXECUTABLE_PATH` (what puppeteer honors)
 //! 3. `CHROME_PATH` (chrome-launcher convention)
-//! 4. Per-OS standard locations: Google Chrome, Chromium, Microsoft Edge,
-//!    Brave (macOS `/Applications` and `~/Applications` bundles; Linux
-//!    binaries on `PATH`; Windows Program Files / LOCALAPPDATA paths).
+//! 4. Standard Linux locations for Google Chrome, Chromium, Microsoft Edge,
+//!    and Brave, searched on `PATH` and common install dirs.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

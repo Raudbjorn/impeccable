@@ -324,6 +324,7 @@ fn hook_artifacts_map_providers_to_manifest_files() {
         jsp::join(&["/p", ".cursor", "hooks.json"]),
         jsp::join(&["/p", ".github", "hooks", "impeccable.json"]),
         jsp::join(&["/p", ".grok", "hooks", "impeccable.json"]),
+        jsp::join(&["/p", ".gemini", "settings.json"]),
     ]);
     let a = hook_artifacts_for_provider("/b", "/p", ".claude");
     assert_eq!(a[0].src, jsp::join(&["/b", ".claude", "settings.json"]));
@@ -340,4 +341,53 @@ fn linux_hooks_do_not_emit_windows_launcher() {
     let bundle = serde_json::json!({"command": "skills/impeccable/scripts/impeccable hook"});
     let out = rewrite_hook_commands_for_skill_root(&bundle, ".agents", "/proj", false);
     assert!(out.get("commandWindows").is_none());
+}
+
+#[test]
+fn gemini_manifest_installs_and_rewrites_both_events() {
+    let artifacts = hook_artifacts_for_provider("/bundle", "/project", ".gemini");
+    assert_eq!(artifacts.len(), 1);
+    assert_eq!(artifacts[0].src, jsp::join(&["/bundle", ".gemini", "settings.json"]));
+    assert_eq!(artifacts[0].dest, jsp::join(&["/project", ".gemini", "settings.json"]));
+    let manifest = json!({"hooks": {
+        "BeforeTool": [{"matcher": "^run_shell_command$", "hooks": [{"type": "command", "command": "[ ! -f \"$GEMINI_PROJECT_DIR/.gemini/skills/impeccable/scripts/impeccable\" ] || \"$GEMINI_PROJECT_DIR/.gemini/skills/impeccable/scripts/impeccable\" hook", "timeout": 5000}]}],
+        "AfterAgent": [{"hooks": [{"type": "command", "command": "\"$GEMINI_PROJECT_DIR/.gemini/skills/impeccable/scripts/impeccable\" hook", "timeout": 30000}]}]
+    }});
+    for absolute in [false, true] {
+        let rewritten = rewrite_hook_commands_for_skill_root(&manifest, ".gemini", "/installed", absolute);
+        // Gemini substitutes `$GEMINI_PROJECT_DIR` textually with a
+        // shell-escaped path before the shell runs, so the token stays bare.
+        let expected = if absolute { format!("'{}'", jsp::join(&["/installed", ".gemini", "skills", "impeccable", "scripts", "impeccable"])) }
+            else { "$GEMINI_PROJECT_DIR/.gemini/skills/impeccable/scripts/impeccable".to_string() };
+        for command in commands(&rewritten) { assert_eq!(command, format!("command=[ ! -f {expected} ] || {expected} hook")); }
+        assert_eq!(rewritten["hooks"]["AfterAgent"][0]["hooks"][0]["timeout"], 30000);
+        assert!(rewritten["hooks"].get("AfterTool").is_none());
+    }
+}
+
+#[test]
+fn gemini_install_merges_into_commented_settings_and_force_never_wipes() {
+    let dir = tmp_dir("gemini-jsonc");
+    let root = dir.to_string_lossy().into_owned();
+    let bundle = jsp::join(&[&root, "bundle"]);
+    let project = jsp::join(&[&root, "project"]);
+    write(&jsp::join(&[&bundle, ".gemini", "settings.json"]), &json!({"hooks": {"AfterAgent": [{"hooks": [{"type": "command",
+        "command": "[ ! -f \"$GEMINI_PROJECT_DIR/.gemini/skills/impeccable/scripts/impeccable\" ] || \"$GEMINI_PROJECT_DIR/.gemini/skills/impeccable/scripts/impeccable\" hook"}]}]}}).to_string());
+    let settings = jsp::join(&[&project, ".gemini", "settings.json"]);
+    let original = "{\n  // pick a model\n  \"model\": {\"name\": \"gemini-3-pro\"},\n  /* MCP */ \"mcpServers\": {\"x\": {\"url\": \"http://a//b\"}}\n}\n";
+    write(&settings, original);
+    let sys = sys_with_home("/nonexistent-home");
+    copy_provider_hooks(&sys, &bundle, &project, &[".gemini"], false, None, None).unwrap();
+    let merged: Value = serde_json::from_str(&read(&settings)).unwrap();
+    assert_eq!(merged["model"]["name"], "gemini-3-pro");
+    assert_eq!(merged["mcpServers"]["x"]["url"], "http://a//b");
+    assert!(merged["hooks"]["AfterAgent"].is_array());
+    assert_eq!(read(&format!("{settings}.bak")), original);
+    // Truly malformed: refused without --force, and --force never replaces
+    // the user's whole settings file with a hooks-only manifest.
+    write(&settings, "{ \"model\": ");
+    assert!(copy_provider_hooks(&sys, &bundle, &project, &[".gemini"], false, None, None).is_err());
+    assert!(copy_provider_hooks(&sys, &bundle, &project, &[".gemini"], true, None, None).is_err());
+    assert_eq!(read(&settings), "{ \"model\": ");
+    let _ = std::fs::remove_dir_all(&dir);
 }

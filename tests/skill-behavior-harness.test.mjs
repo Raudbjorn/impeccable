@@ -45,7 +45,7 @@ it('advice outcomes do not depend on opening every reference, but keep consent a
   assert.doesNotThrow(() => check("Critique reviews the surface. Polish refines it. Critique isn't required before polish."));
   assert.doesNotThrow(() => check('Critique gives a report. Polish edits the surface independently, without a critique.'));
   assert.doesNotThrow(() => check('`/impeccable critique index.html` is diagnostic. Two parallel assessments produce a report.\n'
-    + '`/impeccable polish index.html` is remedial. It walks the surface, fixes defects, and closes gaps. Critique is not required.'));
+    + '`/impeccable polish index.html` is remedial: it walks the surface, fixes defects, and closes gaps. Critique is not required.'));
   assert.doesNotThrow(() => check('Critique gives a report. Polish improves the surface independently.'));
   assert.throws(() => check('Critique fixes defects. Polish gives a report. Critique is optional.'), /explain critique/);
   assert.throws(() => check('Critique gives a report. Polish is optional. Critique fixes defects.'), /explain polish/);
