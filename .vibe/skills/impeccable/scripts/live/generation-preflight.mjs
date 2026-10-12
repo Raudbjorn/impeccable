@@ -7,7 +7,8 @@ const PREFLIGHT_TIMEOUT_MS = 15_000;
 
 // Per-target cache of the resolved source file. The wrap search walks the whole
 // project tree and was measured at ~7.6s on a large repo; it re-ran on every
-// generate for the same picked element (re-rolls, param passes). Keyed by the
+// generate for the same picked element (re- 
+s, param passes). Keyed by the
 // target signature (locator + route), so it invalidates automatically when the
 // element or route changes; a failed resolution evicts its entry (see below).
 const sourceResolutionCache = new Map();

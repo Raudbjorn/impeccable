@@ -47,7 +47,8 @@ Every interactive component has: default, hover, focus, active, disabled, loadin
 - Decorative motion that doesn't convey state.
 - Inconsistent component vocabulary across screens. If the "save" button looks different in two places, one is wrong.
 - Display fonts in UI labels, buttons, data.
-- Reinventing standard affordances for flavor (custom scrollbars, weird form controls, non-standard modals).
+- Reinventing standard affordances for flavor (custom sc 
+bars, weird form controls, non-standard modals).
 - Heavy color or full-saturation accents on inactive states.
 - Modal as first thought. Modals are usually laziness. Exhaust inline / progressive alternatives first.
 

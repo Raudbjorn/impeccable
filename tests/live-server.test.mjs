@@ -295,17 +295,21 @@ describe('live-server integration', () => {
     let data = await res.json();
     assert.equal(data.agentPolling, false);
 
-    const controller = new AbortController();
+    const cont 
+er = new AbortCont 
+er();
     const pollPromise = fetch(
       `http://localhost:${server.port}/poll?token=${server.token}&timeout=5000`,
-      { signal: controller.signal },
+      { signal: cont 
+er.signal },
     );
     await new Promise((resolve) => setTimeout(resolve, 80));
     res = await fetch(`http://localhost:${server.port}/status?token=${server.token}`);
     data = await res.json();
     assert.equal(data.agentPolling, true);
 
-    controller.abort();
+    cont 
+er.abort();
     await pollPromise.catch(() => {});
     await new Promise((resolve) => setTimeout(resolve, 80));
     res = await fetch(`http://localhost:${server.port}/status?token=${server.token}`);
@@ -894,7 +898,8 @@ colors: {}
     }
   });
 
-  it('/manual-edit-commit rejects malformed chat Apply results without rolling back before retry', async () => {
+  it('/manual-edit-commit rejects malformed chat Apply results without  
+ing back before retry', async () => {
     const tmp = mkdtempSync(join(tmpdir(), 'impeccable-manual-commit-chat-invalid-result-'));
     let chatServer;
     try {
@@ -1324,7 +1329,8 @@ colors: {}
     }
   });
 
-  it('/manual-edit-commit rolls back a split entry when a later chat chunk fails', async () => {
+  it('/manual-edit-commit  
+s back a split entry when a later chat chunk fails', async () => {
     const tmp = mkdtempSync(join(tmpdir(), 'impeccable-manual-commit-chat-chunk-fail-'));
     let failServer;
     try {
@@ -1417,7 +1423,8 @@ colors: {}
       assert.equal(result.applied.length, 0);
       assert.equal(result.failed[0].id, 'def55555');
       assert.equal(result.failed[0].reason, 'second chunk failed');
-      assert.deepEqual(result.rolledBackFiles, ['src/page.html']);
+      assert.deepEqual(result. 
+edBackFiles, ['src/page.html']);
       assert.equal(readFileSync(sourcePath, 'utf-8'), originalSource);
 
       const nextEvent = await fetch(`http://localhost:${failServer.port}/poll?token=${failServer.token}&timeout=100&leaseMs=1`)
@@ -1506,7 +1513,8 @@ colors: {}
       assert.equal(lateAck.status, 409);
       const lateAckBody = await lateAck.json();
       assert.equal(lateAckBody.error, 'stale_manual_edit_apply_reply');
-      assert.deepEqual(lateAckBody.rolledBackFiles, ['src/page.html']);
+      assert.deepEqual(lateAckBody. 
+edBackFiles, ['src/page.html']);
       assert.match(readFileSync(sourcePath, 'utf-8'), /Welcome/);
 
       const buffer = JSON.parse(readFileSync(join(getLiveDir(tmp), 'pending-manual-edits.json'), 'utf-8'));
@@ -1520,7 +1528,8 @@ colors: {}
     }
   });
 
-  it('/manual-edit-commit repairs post-apply validation failures instead of rolling back', async () => {
+  it('/manual-edit-commit repairs post-apply validation failures instead of  
+ing back', async () => {
     const tmp = mkdtempSync(join(tmpdir(), 'impeccable-manual-repair-success-'));
     let repairServer;
     try {
@@ -1622,7 +1631,8 @@ colors: {}
       assert.equal(result.cleared, 2);
       assert.equal(result.failed.length, 0);
       assert.equal(result.repair.status, 'repaired');
-      assert.deepEqual(result.rolledBackFiles || [], []);
+      assert.deepEqual(result. 
+edBackFiles || [], []);
       assert.equal(readFileSync(pagePath, 'utf-8'), '<h1>Hello</h1>\n');
       assert.equal(readFileSync(dataPath, 'utf-8'), "export const counts = { 'Color': '0029' };\n");
       assert.equal(existsSync(join(getLiveDir(tmp), 'manual-edit-apply-transaction.json')), false);
@@ -1713,21 +1723,33 @@ colors: {}
       assert.equal(decisionStatus.status, 200);
       const decisionStatusBody = await decisionStatus.json();
       assert.equal(decisionStatusBody.manualEdits.lastActivity.type, 'manual_edit_repair_needs_decision');
-      const bufferBeforeRollback = JSON.parse(readFileSync(join(getLiveDir(tmp), 'pending-manual-edits.json'), 'utf-8'));
-      assert.equal(bufferBeforeRollback.entries.length, 1);
+      const bufferBefore 
+back = JSON.parse(readFileSync(join(getLiveDir(tmp), 'pending-manual-edits.json'), 'utf-8'));
+      assert.equal(bufferBefore 
+back.entries.length, 1);
 
-      const rollback = await fetch(`http://localhost:${decisionServer.port}/manual-edit-repair-decision?token=${decisionServer.token}&pageUrl=%2F`, {
+      const  
+back = await fetch(`http://localhost:${decisionServer.port}/manual-edit-repair-decision?token=${decisionServer.token}&pageUrl=%2F`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: decisionServer.token, pageUrl: '/', action: 'rollback' }),
+        body: JSON.stringify({ token: decisionServer.token, pageUrl: '/', action: ' 
+back' }),
       });
-      assert.equal(rollback.status, 200);
-      const rollbackBody = await rollback.json();
-      assert.deepEqual(rollbackBody.rollback.rolledBackFiles, ['src/data.js']);
+      assert.equal( 
+back.status, 200);
+      const  
+backBody = await  
+back.json();
+      assert.deepEqual( 
+backBody. 
+back. 
+edBackFiles, ['src/data.js']);
       assert.equal(readFileSync(dataPath, 'utf-8'), originalSource);
       assert.equal(existsSync(join(getLiveDir(tmp), 'manual-edit-apply-transaction.json')), false);
-      const bufferAfterRollback = JSON.parse(readFileSync(join(getLiveDir(tmp), 'pending-manual-edits.json'), 'utf-8'));
-      assert.equal(bufferAfterRollback.entries.length, 1);
+      const bufferAfter 
+back = JSON.parse(readFileSync(join(getLiveDir(tmp), 'pending-manual-edits.json'), 'utf-8'));
+      assert.equal(bufferAfter 
+back.entries.length, 1);
 
       const repairWithoutTransaction = await fetch(`http://localhost:${decisionServer.port}/manual-edit-commit?token=${decisionServer.token}&pageUrl=%2F&repair=1`, {
         method: 'POST',
@@ -1797,7 +1819,8 @@ colors: {}
       const discardBody = await discard.json();
       assert.equal(discardBody.discarded, 1);
       assert.deepEqual(discardBody.canceledApplyEvents.map((item) => item.id), [event.id]);
-      assert.deepEqual(discardBody.canceledApplyEvents[0].rolledBackFiles, ['src/page.html']);
+      assert.deepEqual(discardBody.canceledApplyEvents[0]. 
+edBackFiles, ['src/page.html']);
       assert.equal(discardBody.totalCount, 0);
       assert.match(readFileSync(sourcePath, 'utf-8'), /Welcome/);
       assert.equal(existsSync(event.evidencePath), false, 'discarded Apply should clean up evidence');
@@ -1834,7 +1857,8 @@ colors: {}
       assert.equal(lateAck.status, 409);
       const lateAckBody = await lateAck.json();
       assert.equal(lateAckBody.error, 'stale_manual_edit_apply_reply');
-      assert.deepEqual(lateAckBody.rolledBackFiles, ['src/page.html']);
+      assert.deepEqual(lateAckBody. 
+edBackFiles, ['src/page.html']);
       assert.match(readFileSync(sourcePath, 'utf-8'), /Welcome/);
 
       const buffer = JSON.parse(readFileSync(join(getLiveDir(tmp), 'pending-manual-edits.json'), 'utf-8'));
@@ -1848,7 +1872,8 @@ colors: {}
     }
   });
 
-  it('/manual-edit-commit rolls back abandoned chunk transactions after server restart', async () => {
+  it('/manual-edit-commit  
+s back abandoned chunk transactions after server restart', async () => {
     const tmp = mkdtempSync(join(tmpdir(), 'impeccable-manual-abandoned-transaction-'));
     let abandonedServer;
     let restarted;
@@ -1944,7 +1969,8 @@ colors: {}
       const status = await fetch(`http://localhost:${restarted.port}/status?token=${restarted.token}`);
       assert.equal(status.status, 200);
       const statusBody = await status.json();
-      assert.equal(statusBody.manualEdits.lastActivity.type, 'manual_edit_transaction_rolled_back');
+      assert.equal(statusBody.manualEdits.lastActivity.type, 'manual_edit_transaction_ 
+ed_back');
       assert.equal(statusBody.manualEdits.lastActivity.reason, 'manual_edit_server_start_recovered_abandoned_transaction');
     } finally {
       if (abandonedServer) {
@@ -2416,7 +2442,8 @@ colors: {}
     });
   });
 
-  it('page-controlled _instructions, _completionAck, and _acceptResult are stripped before poll', async () => {
+  it('page-cont 
+ed _instructions, _completionAck, and _acceptResult are stripped before poll', async () => {
     await drainPolls(server);
 
     const pollPromise = fetch(`http://localhost:${server.port}/poll?token=${server.token}&timeout=5000`)
@@ -2595,10 +2622,13 @@ colors: {}
 
   it('journals and streams agent progress without leasing it as work', async () => {
     await drainPolls(server);
-    const controller = new AbortController();
+    const cont 
+er = new AbortCont 
+er();
     const sseRes = await fetch(
       `http://localhost:${server.port}/events?token=${server.token}`,
-      { signal: controller.signal },
+      { signal: cont 
+er.signal },
     );
     const reader = sseRes.body.getReader();
     await reader.read();
@@ -2615,7 +2645,8 @@ colors: {}
     });
     assert.equal(progress.status, 200);
     const message = new TextDecoder().decode((await reader.read()).value);
-    controller.abort();
+    cont 
+er.abort();
     assert.match(message, /"type":"agent_phase"/);
     assert.match(message, /"phase":"first_reviewable"/);
     const polled = await fetch(`http://localhost:${server.port}/poll?token=${server.token}&timeout=50`).then(r => r.json());
@@ -2645,10 +2676,13 @@ colors: {}
 
   it('streams Svelte component checkpoints as progressive preview updates', async () => {
     await createSession(server, 'a1b2c3de');
-    const controller = new AbortController();
+    const cont 
+er = new AbortCont 
+er();
     const sseRes = await fetch(
       `http://localhost:${server.port}/events?token=${server.token}`,
-      { signal: controller.signal },
+      { signal: cont 
+er.signal },
     );
     const reader = sseRes.body.getReader();
     const decoder = new TextDecoder();
@@ -2680,15 +2714,19 @@ colors: {}
     assert.match(message, /"type":"variant_progress"/);
     assert.match(message, /"arrivedVariants":1/);
     assert.match(message, /"previewMode":"svelte-component"/);
-    controller.abort();
+    cont 
+er.abort();
   });
 
   it('streams source checkpoints so no-HMR frameworks can review variant 1', async () => {
     await createSession(server, 'a1b2c3df');
-    const controller = new AbortController();
+    const cont 
+er = new AbortCont 
+er();
     const sseRes = await fetch(
       `http://localhost:${server.port}/events?token=${server.token}`,
-      { signal: controller.signal },
+      { signal: cont 
+er.signal },
     );
     const reader = sseRes.body.getReader();
     const decoder = new TextDecoder();
@@ -2723,7 +2761,8 @@ colors: {}
     assert.match(message, /"previewMode":"source"/);
     assert.match(message, /"previewFile":"app\/pages\/index.vue"/);
     assert.match(message, /"publicationKind":"params"/);
-    controller.abort();
+    cont 
+er.abort();
   });
 
   // A framework full-reload (Astro reloads the page for any .astro edit, and
@@ -2765,10 +2804,13 @@ colors: {}
   it('redelivers done when a resumed browser checkpoint shows it missed generation completion', async () => {
     await runGenerateToDone('a1b2c3f5', 'src/pages/index.astro');
 
-    const controller = new AbortController();
+    const cont 
+er = new AbortCont 
+er();
     const sseRes = await fetch(
       `http://localhost:${server.port}/events?token=${server.token}`,
-      { signal: controller.signal },
+      { signal: cont 
+er.signal },
     );
     const reader = sseRes.body.getReader();
     const decoder = new TextDecoder();
@@ -2793,7 +2835,8 @@ colors: {}
     assert.equal(res.status, 200);
 
     const text = await readSseUntil(reader, decoder, '"redelivered":true');
-    controller.abort();
+    cont 
+er.abort();
     assert.match(
       text,
       /"type":"done"/,
@@ -2826,10 +2869,13 @@ colors: {}
   it('does not redeliver done to a browser whose checkpoint is current', async () => {
     await runGenerateToDone('a1b2c3f6', 'src/pages/index.astro');
 
-    const controller = new AbortController();
+    const cont 
+er = new AbortCont 
+er();
     const sseRes = await fetch(
       `http://localhost:${server.port}/events?token=${server.token}`,
-      { signal: controller.signal },
+      { signal: cont 
+er.signal },
     );
     const reader = sseRes.body.getReader();
     const decoder = new TextDecoder();
@@ -2875,7 +2921,8 @@ colors: {}
     assert.equal(ready.status, 200);
 
     const text = await readSseUntil(reader, decoder, '"variant_progress"', 4);
-    controller.abort();
+    cont 
+er.abort();
     assert.match(text, /"type":"variant_progress"/);
     const redeliveredForSession = text
       .split('\n')
@@ -2912,15 +2959,19 @@ colors: {}
     });
     assert.equal(res.status, 200);
 
-    const controller = new AbortController();
+    const cont 
+er = new AbortCont 
+er();
     const sseRes = await fetch(
       `http://localhost:${server.port}/events?token=${server.token}`,
-      { signal: controller.signal },
+      { signal: cont 
+er.signal },
     );
     const reader = sseRes.body.getReader();
     const decoder = new TextDecoder();
     const text = await readSseUntil(reader, decoder, '"type":"connected"', 2);
-    controller.abort();
+    cont 
+er.abort();
     const connectedLine = text.split('\n').find((line) => line.includes('"type":"connected"'));
     assert.ok(connectedLine, 'connected payload present');
     const connected = JSON.parse(connectedLine.replace(/^data: /, ''));
@@ -3247,10 +3298,13 @@ colors: {}
 
   it('agent reply is forwarded via SSE to browser', async () => {
     // Use raw HTTP to read SSE (no EventSource in Node.js)
-    const controller = new AbortController();
+    const cont 
+er = new AbortCont 
+er();
     const sseRes = await fetch(
       `http://localhost:${server.port}/events?token=${server.token}`,
-      { signal: controller.signal }
+      { signal: cont 
+er.signal }
     );
     assert.equal(sseRes.status, 200);
     assert.equal(sseRes.headers.get('content-type'), 'text/event-stream');
@@ -3290,7 +3344,8 @@ colors: {}
     assert.ok(text2.includes('"done"'));
     assert.ok(text2.includes('5ee7e575'));
 
-    controller.abort();
+    cont 
+er.abort();
   });
 
   it('/source reads project files with valid token', async () => {
@@ -3526,10 +3581,13 @@ colors: {}
   it('steer events flow from browser POST to agent poll and steer_done via SSE', async () => {
     await drainPolls(server);
 
-    const controller = new AbortController();
+    const cont 
+er = new AbortCont 
+er();
     const sseRes = await fetch(
       `http://localhost:${server.port}/events?token=${server.token}`,
-      { signal: controller.signal },
+      { signal: cont 
+er.signal },
     );
     assert.equal(sseRes.status, 200);
     const reader = sseRes.body.getReader();
@@ -3575,7 +3633,8 @@ colors: {}
     assert.ok(text.includes('b2c3d4e5'));
     assert.ok(text.includes('Hero spacing tightened'));
 
-    controller.abort();
+    cont 
+er.abort();
   });
 
   it('POST /events accepts generate with optional annotation fields', async () => {

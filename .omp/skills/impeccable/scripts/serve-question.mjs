@@ -17,12 +17,15 @@
  * Payload (JSON file via --payload, or stdin):
  * {
  *   "title": "Choose the visual world",
- *   "question": "The roll assigned Fillmore Handbill. Keep it, take an alternate, or re-roll.",
+ *   "question": "The  
+ assigned Fillmore Handbill. Keep it, take an alternate, or re- 
+.",
  *   "options": [
  *     {
  *       "id": "assigned",                  // returned verbatim
  *       "label": "Fillmore Handbill",
- *       "kicker": "THE ROLL",              // optional badge; the assigned option leads
+ *       "kicker": "THE  
+",              // optional badge; the assigned option leads
  *       "lineage": "1966-71 Fillmore ...", // optional
  *       "thesis": "one line: the idea this direction owns",       // optional
  *       "palette": ["#1a2f5e", "oklch(84% .19 80)", ...],         // optional, rendered as chips
@@ -53,7 +56,10 @@
  *       "board": "https://... or /abs/path.webp"   // optional secondary image
  *     }, ...
  *   ],
- *   "reroll": true,          // adds a re-roll action (returns {"optionId":"reroll"})
+ *   "re 
+": true,          // adds a re- 
+ action (returns {"optionId":"re 
+"})
  *                            // or { "registers": ["safer", "bolder"] } to add
  *                            // the register steers beside it: the answer then
  *                            // carries "register" and the agent re-runs
@@ -93,8 +99,10 @@
  *              exit 4 PAGE CLOSED (the tab went away without an answer;
  *              re-present, reopen the URL, or fall back).
  *   --stop --key K               kill a daemonized question.
- *   --update --key K --payload F deliver the next hand after a re-roll: the
- *              live page swaps to loading cards when the user re-rolls, and
+ *   --update --key K --payload F deliver the next hand after a re- 
+: the
+ *              live page swaps to loading cards when the user re- 
+s, and
  *              reloads into this new payload the moment it lands. Always the
  *              same key the round started with; a second --start serves a new
  *              URL and strands the open tab on a hand that never arrives.
@@ -132,7 +140,8 @@ if (process.env.IMPECCABLE_QUESTION_DISABLED) {
 // --schema prints text, and --update hands the next round to a page that is
 // already open. A spurious exit 2 from those breaks the documented loop,
 // which polls --wait while it exits 3, reads --schema before building a
-// payload, and delivers re-rolled hands with --update.
+// payload, and delivers re- 
+ed hands with --update.
 const wantsBrowser = !hasFlag('no-open') && !hasFlag('wait') && !hasFlag('stop') && !hasFlag('schema') && !hasFlag('update');
 if (wantsBrowser && !process.env.IMPECCABLE_QUESTION_FORCE) {
   const headless =
@@ -163,10 +172,13 @@ function printAnswer(raw) {
     if (a.optionId === 'canon') {
       console.log('CANON CHOSEN: the user picked the category standard on purpose. Ask once for two or three products this should sit alongside; their craft level becomes the quality bar. Execute the canon at full commitment, conventions embraced without irony or smuggled quirk.');
     }
-    if (a.optionId === 'reroll' && a.register) {
-      console.log(`REGISTER: the user steered the next hand to the ${a.register} register. Re-run concept-seed with the same key, the next --reroll round, and --register ${a.register}, then follow what it prints; the register is the user's steering, never yours to pre-select.`);
+    if (a.optionId === 're 
+' && a.register) {
+      console.log(`REGISTER: the user steered the next hand to the ${a.register} register. Re-run concept-seed with the same key, the next --re 
+ round, and --register ${a.register}, then follow what it prints; the register is the user's steering, never yours to pre-select.`);
     }
-    if (a.followup && a.optionId !== 'reroll') {
+    if (a.followup && a.optionId !== 're 
+') {
       console.log('FOLLOWUP OPEN: the table stays open and the page is showing a loading hand. Deliver the next round now with --update --key <key> --payload <file>, then collect it with --wait; never leave the page waiting on a round you have not sent.');
     }
     if (a.buildPath === 'comp' || a.buildPath === 'code') {
@@ -212,20 +224,26 @@ const flipFile = (key) => path.join(QUESTION_DIR, `${key}.flip.json`);
 if (hasFlag('schema')) {
   console.log(JSON.stringify({
     title: 'Choose the visual world',
-    question: 'The roll assigned Fillmore Handbill. Keep it, take an alternate, or re-roll.',
+    question: 'The  
+ assigned Fillmore Handbill. Keep it, take an alternate, or re- 
+.',
     options: [
-      { id: 'assigned', label: 'Fillmore Handbill', kicker: 'THE ROLL', lineage: '1966-71 Fillmore psychedelic handbills', thesis: 'The gig poster that treats every release like a one-night stand.', palette: ['#e8452c', '#f5d64c', '#1b2a52', '#f3ead8'], materials: ['letterpress', 'split-fountain ink'], viewport: 'A full-bleed dated bill with the product name in warped display type.', risk: 'Reads nostalgic when the type is set timidly.', raised: [{ from: 'challenger-microfiche', raise: 'The bill now owns its whole viewport as one continuous printed sheet.' }], comp: '.impeccable/mocks/decision/assigned.webp', hero: 'https://impeccable.style/worlds/cards/posters-covers-sleeves-fillmore-handbill-hero.webp', board: 'https://impeccable.style/worlds/cards/posters-covers-sleeves-fillmore-handbill.webp' },
+      { id: 'assigned', label: 'Fillmore Handbill', kicker: 'THE  
+', lineage: '1966-71 Fillmore psychedelic handbills', thesis: 'The gig poster that treats every release like a one-night stand.', palette: ['#e8452c', '#f5d64c', '#1b2a52', '#f3ead8'], materials: ['letterpress', 'split-fountain ink'], viewport: 'A full-bleed dated bill with the product name in warped display type.', risk: 'Reads nostalgic when the type is set timidly.', raised: [{ from: 'challenger-microfiche', raise: 'The bill now owns its whole viewport as one continuous printed sheet.' }], comp: '.impeccable/mocks/decision/assigned.webp', hero: 'https://impeccable.style/worlds/cards/posters-covers-sleeves-fillmore-handbill-hero.webp', board: 'https://impeccable.style/worlds/cards/posters-covers-sleeves-fillmore-handbill.webp' },
       { id: 'model-pick', label: 'The Broadside Ballad', kicker: 'IMPECCABLE’S PICK', lineage: 'street-sold ballad sheets', thesis: 'Every release printed as the day’s ballad sheet.', palette: ['#1f1c18', '#efe5d0', '#a33327'], materials: ['woodcut', 'rag paper'], viewport: 'One tall sheet, the newest release as today’s ballad.', risk: 'Also the direction most runs in this category land on.', comp: '.impeccable/mocks/decision/model-pick.webp' },
       { id: 'challenger-teletext', label: 'Teletext Service', verdict: 'competitive', lineage: 'broadcast teletext magazines', thesis: 'The catalog as a broadcast index: pages, not sections.', palette: ['#0000c0', '#ffff00', '#00c000', '#ffffff'], materials: ['block mosaic', 'phosphor glow'], viewport: 'P100 index page, releases as numbered rows.', case: 'Fuses cleanly: releases map to numbered pages; loses narrowly on clarity.', risk: 'Reads retro-novelty when the grid is not strict.', comp: '.impeccable/mocks/decision/challenger-teletext.webp', hero: 'https://impeccable.style/worlds/cards/broadcast-programming-teletext-service-hero.webp' },
       { id: 'challenger-microfiche', label: 'Microfiche Reader', verdict: 'declined', lineage: 'library microfiche stations', palette: ['#101418', '#9fb4c0'], materials: ['film grain', 'backlit glass'], case: 'Fuses poorly: listeners do not identify with archival retrieval.', kept: 'Total environmental commitment.', hero: 'https://impeccable.style/worlds/cards/archives-microfiche-reader-hero.webp' },
     ],
-    reroll: { registers: ['safer', 'bolder'] },
+    re 
+: { registers: ['safer', 'bolder'] },
     buildPath: { value: 'comp', toggle: true },
     canon: true,
     canonCard: { label: 'The category standard', thesis: 'What this category ships, executed impeccably.', palette: ['#ffffff', '#111827', '#2563eb'], materials: ['clean grid', 'product photography'], viewport: 'The arrangement a visitor expects, at full craft.', risk: 'Indistinguishable from the competition by design.', comp: '.impeccable/mocks/decision/canon.webp' },
     steer: true,
   }, null, 2));
-  console.log('\nOption ids return verbatim in ANSWER; "reroll" and "canon" are reserved. hero/board/comp accept URLs or local paths; comp slots may point at files that do not exist yet (serve first, generate after; the page polls until they land, so never block serving on generation). hero on a challenger is the inspiration it draws from and renders picture-in-picture beside the comp, never as the promise of the build. verdict routes rendering: "wins" and "competitive" challengers keep full cards, "declined" ones render demoted after them (narrow, quiet, art as a labeled thumb, "Adopt anyway"), with their kept line on the front; the page reorders declined cards to the end on its own. raised on the assigned card renders each donation as a named raise line. Salience parity: when the assigned card declares no comp (no image generation this round), catalog art on every card demotes to a labeled thumb, so what looks important is the verdict’s call, never rendering luck. canonCard renders the standing exit as a subordinate card with the same anatomy; without it, canon stays a quiet footer action. Include canon only for visual-direction rounds; never present it as your own recommendation. The pick card is a kicker convention, not a field: kicker "IMPECCABLE’S PICK" on your top-ranked grounded candidate, one at most, never in the lead slot. Every card gets the full anatomy, challengers, canon, and declined included: thesis, palette, materials, viewport, risk; the seed already hands you each challenger’s system rules, so a card with no palette chips is an authoring gap, not a data gap. Keep thesis and each fact to one short sentence: the card front shows thesis, identity, and a two-line risk, while first viewport and the case read on the card back behind the Details chip, so long facts cost the reader a flip, not the page its scanability. A card with no imagery at all has no back; its full read renders on the front, so a text-only round loses nothing. A card may instead declare "wireframe" ({"cols":12,"rows":10,"regions":[{"label":"nav rail","x":0,"y":0,"w":3,"h":10,"accent":true}]}): the page draws it as a layout schematic in the media slot; surface-scope rounds use it on code-led builds, it never counts toward salience, and the card keeps its full read on the front. The comp slot carries the card’s full-fidelity direction comp (the legacy key "sketch" is accepted as an alias). Comp aspect follows the surface: portrait at device viewport for native or mobile-first surfaces, landscape otherwise; the page adapts its cards to either. reroll accepts true or { "registers": ["safer", "bolder"] }: the register buttons steer the next hand along the familiar-to-bold axis, the answer carries "register", and you re-run concept-seed with --register <value> for the next round; offer the registers on direction rounds, and never pre-select one. buildPath rides the payload as { "value": "comp"|"code", "toggle": true }: the value is the recorded default (.impeccable/config.json buildPath, or .impeccable/config.local.json where one machine differs) and the toggle renders a footer switch whose flip binds that session only; the ANSWER then carries buildPath plus buildPathFlipped. On a code-led round each card still declares its comp path as a flip reserve: wireframes render, and a flip to comp makes --wait return once with BUILD PATH FLIPPED so you generate the comps into the declared slots while the round stays open; a flip back to code is free, and a comp that already landed stays as the critique reference. The toggle may only be offered when image generation exists: a harness with no image tool and no API key never sets toggle: true, so the choice never renders where comps cannot be made, and code-led simply rides as the untoggleable value. followup: true keeps the table open after a pick for a second round via --update; send the next payload immediately, the page is waiting on it.');
+  console.log('\nOption ids return verbatim in ANSWER; "re 
+" and "canon" are reserved. hero/board/comp accept URLs or local paths; comp slots may point at files that do not exist yet (serve first, generate after; the page polls until they land, so never block serving on generation). hero on a challenger is the inspiration it draws from and renders picture-in-picture beside the comp, never as the promise of the build. verdict routes rendering: "wins" and "competitive" challengers keep full cards, "declined" ones render demoted after them (narrow, quiet, art as a labeled thumb, "Adopt anyway"), with their kept line on the front; the page reorders declined cards to the end on its own. raised on the assigned card renders each donation as a named raise line. Salience parity: when the assigned card declares no comp (no image generation this round), catalog art on every card demotes to a labeled thumb, so what looks important is the verdict’s call, never rendering luck. canonCard renders the standing exit as a subordinate card with the same anatomy; without it, canon stays a quiet footer action. Include canon only for visual-direction rounds; never present it as your own recommendation. The pick card is a kicker convention, not a field: kicker "IMPECCABLE’S PICK" on your top-ranked grounded candidate, one at most, never in the lead slot. Every card gets the full anatomy, challengers, canon, and declined included: thesis, palette, materials, viewport, risk; the seed already hands you each challenger’s system rules, so a card with no palette chips is an authoring gap, not a data gap. Keep thesis and each fact to one short sentence: the card front shows thesis, identity, and a two-line risk, while first viewport and the case read on the card back behind the Details chip, so long facts cost the reader a flip, not the page its scanability. A card with no imagery at all has no back; its full read renders on the front, so a text-only round loses nothing. A card may instead declare "wireframe" ({"cols":12,"rows":10,"regions":[{"label":"nav rail","x":0,"y":0,"w":3,"h":10,"accent":true}]}): the page draws it as a layout schematic in the media slot; surface-scope rounds use it on code-led builds, it never counts toward salience, and the card keeps its full read on the front. The comp slot carries the card’s full-fidelity direction comp (the legacy key "sketch" is accepted as an alias). Comp aspect follows the surface: portrait at device viewport for native or mobile-first surfaces, landscape otherwise; the page adapts its cards to either. re 
+ accepts true or { "registers": ["safer", "bolder"] }: the register buttons steer the next hand along the familiar-to-bold axis, the answer carries "register", and you re-run concept-seed with --register <value> for the next round; offer the registers on direction rounds, and never pre-select one. buildPath rides the payload as { "value": "comp"|"code", "toggle": true }: the value is the recorded default (.impeccable/config.json buildPath, or .impeccable/config.local.json where one machine differs) and the toggle renders a footer switch whose flip binds that session only; the ANSWER then carries buildPath plus buildPathFlipped. On a code-led round each card still declares its comp path as a flip reserve: wireframes render, and a flip to comp makes --wait return once with BUILD PATH FLIPPED so you generate the comps into the declared slots while the round stays open; a flip back to code is free, and a comp that already landed stays as the critique reference. The toggle may only be offered when image generation exists: a harness with no image tool and no API key never sets toggle: true, so the choice never renders where comps cannot be made, and code-led simply rides as the untoggleable value. followup: true keeps the table open after a pick for a second round via --update; send the next payload immediately, the page is waiting on it.');
   process.exit(0);
 }
 
@@ -288,13 +306,15 @@ if (hasFlag('wait')) {
   if (!answered()) { console.log(`WAITING: no answer yet after ${pollSec}s; run --wait --key ${key} again`); process.exit(3); }
   const collected = fs.readFileSync(answerFile(key), 'utf8').trim();
   printAnswer(collected);
-  // A re-roll or a followup-round pick keeps the table open: the server stays
+  // A re- 
+ or a followup-round pick keeps the table open: the server stays
   // alive awaiting --update, so only the answer file is consumed. Terminal
   // choices clean up fully.
   let keepsTableOpen = false;
   try {
     const parsedAnswer = JSON.parse(collected);
-    keepsTableOpen = parsedAnswer.optionId === 'reroll' || parsedAnswer.followup === true;
+    keepsTableOpen = parsedAnswer.optionId === 're 
+' || parsedAnswer.followup === true;
   } catch { /* treat as terminal */ }
   try { fs.rmSync(answerFile(key)); } catch { /* already gone */ }
   if (!keepsTableOpen) { try { fs.rmSync(stateFile(key)); } catch { /* already gone */ } }
@@ -323,7 +343,8 @@ if (hasFlag('update')) {
   }
   // Liveness mirrors --wait: a fresh page heartbeat is the primary proof, the
   // kill probe is secondary, and EPERM means a sandbox blocked the signal,
-  // never a dead server. This is the documented re-roll delivery step, so a
+  // never a dead server. This is the documented re- 
+ delivery step, so a
   // false "no live server" here strands the page mid-shuffle.
   const live = (() => {
     try {
@@ -384,7 +405,8 @@ let raw;
 if (payloadPath) raw = fs.readFileSync(payloadPath, 'utf8');
 else raw = fs.readFileSync(0, 'utf8');
 
-// Round state is mutable: a re-roll keeps this server alive and --update
+// Round state is mutable: a re- 
+ keeps this server alive and --update
 // swaps in the next hand, so payload, options, and the local-image table
 // rebuild per round.
 let payload;
@@ -396,7 +418,8 @@ let localImages = [];
 // even when the round never rendered a toggle.
 let buildPathDefault = null;
 let liveBuildPath = null;
-// True between a collected re-roll or followup answer and the --update that
+// True between a collected re- 
+ or followup answer and the --update that
 // replaces the round: the window where GET / must serve the wait, not the
 // answered cards. The timestamp anchors the delivery deadline server-side,
 // so a native refresh re-enters the wait with the time already spent, never
@@ -694,18 +717,25 @@ function page(waiting = false) {
      content column; a carousel cut off at an invisible container edge reads as
      a rendering bug, but one cut off at the screen edge reads as more cards. */
   .deck-shell { position: relative; width: 100vw; margin-left: calc(50% - 50vw); }
-  /* One row in a wide viewport, one column in a tall one; the deck scrolls on
+  /* One row in a wide viewport, one column in a tall one; the deck sc 
+s on
      its axis with snap points and the arrows page it card by card. */
-  .grid { --deck-inset: var(--page-inset); display: flex; gap: 1.6rem; width: 100%; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none; padding: 6px var(--deck-inset); scroll-padding-inline: var(--deck-inset); align-items: stretch; }
-  .grid::-webkit-scrollbar { display: none; }
+  .grid { --deck-inset: var(--page-inset); display: flex; gap: 1.6rem; width: 100%; overflow-x: auto; overflow-y: hidden; sc 
+-snap-type: x mandatory; sc 
+bar-width: none; padding: 6px var(--deck-inset); sc 
+-padding-inline: var(--deck-inset); align-items: stretch; }
+  .grid::-webkit-sc 
+bar { display: none; }
   /* Wide enough that the comp carries the card: at 27vw the imagery read
      as a thumbnail above a column of copy, and the copy won the attention
      contest the comp is supposed to win. */
-  .grid > .card { flex: 0 0 clamp(24rem, 34vw, 34rem); scroll-snap-align: center; }
+  .grid > .card { flex: 0 0 clamp(24rem, 34vw, 34rem); sc 
+-snap-align: center; }
   /* Short landscape viewports (13-inch laptops): header, a 34vw card, and the
      footer do not fit 800px of height, so the headline compacts and the deck
      narrows. Height is the axis that gives; the sticky footer keeps the
-     round's verbs on screen while a too-tall card scrolls. */
+     round's verbs on screen while a too-tall card sc 
+s. */
   @media (min-aspect-ratio: 1/1) and (max-height: 900px) {
     body { padding-top: 1.1rem; }
     h1 { font-size: clamp(2rem, 3.4vw, 2.9rem); }
@@ -728,7 +758,9 @@ function page(waiting = false) {
   .deck-shell.can-prev .fade-prev { opacity: 1; }
   .deck-shell.can-next .fade-next { opacity: 1; }
   @media (max-aspect-ratio: 1/1) {
-    .grid { flex-direction: column; overflow-x: hidden; overflow-y: auto; scroll-snap-type: y mandatory; max-height: min(68dvh, 44rem); scroll-padding-block: 6px; }
+    .grid { flex-direction: column; overflow-x: hidden; overflow-y: auto; sc 
+-snap-type: y mandatory; max-height: min(68dvh, 44rem); sc 
+-padding-block: 6px; }
     .grid > .card { flex: 0 0 auto; }
     /* In the vertical deck the pager is the primary way forward, so it grows
        into a labeled pill instead of a bare chevron nobody notices. */
@@ -746,7 +778,8 @@ function page(waiting = false) {
     .grid > .card.declined { align-self: stretch; }
     /* The sticky bar is a wide-viewport fix. Here it would sit over the
        deck's More pager and cost a third of a phone screen, and the deck
-       already scrolls internally, so the footer stays in the page flow. */
+       already sc 
+s internally, so the footer stays in the page flow. */
     footer { position: static; width: auto; margin: 1rem 0 0; padding: .7rem 0 1.2rem; background: transparent; border-top: 0; backdrop-filter: none; }
   }
   .card { position: relative; perspective: 1400px; transform: rotate(var(--fan, 0deg)); transition: transform .25s cubic-bezier(.16, 1, .3, 1); }
@@ -804,7 +837,8 @@ function page(waiting = false) {
   .back-head { display: flex; align-items: center; justify-content: space-between; gap: .8rem; padding: 14px 14px 0; }
   .media.back-media { aspect-ratio: 16/6; }
   .media.back-media img { width: 100%; height: 100%; object-fit: cover; }
-  .body.back-body { overflow-y: auto; flex: 1; scrollbar-width: thin; }
+  .body.back-body { overflow-y: auto; flex: 1; sc 
+bar-width: thin; }
   /* Inspiration rides picture-in-picture: the catalog world explains where the
      direction comes from without promising what the build will look like. */
   /* Hovering the inspiration takes over the whole media region; the comp is
@@ -893,7 +927,8 @@ function page(waiting = false) {
   button.choose { margin-top: auto; align-self: start; background: var(--ks-kinpaku); color: var(--ks-dark-ink); border: 0; font-family: var(--ks-font); font-size: 1rem; font-weight: 500; line-height: 1.35; padding: 10px 38px; border-radius: 6px; cursor: pointer; transition: background .15s; }
   button.choose:hover { background: var(--ks-kinpaku-pale); }
   /* The round's verbs stay reachable on short viewports: the footer is a
-     full-bleed bar stuck to the viewport bottom and the deck scrolls under
+     full-bleed bar stuck to the viewport bottom and the deck sc 
+s under
      it. Same inset as the content column, so the controls stay aligned. */
   footer { position: sticky; bottom: 0; z-index: 10; width: 100vw; margin: 1.2rem calc(50% - 50vw) 0; padding: .7rem var(--page-inset) calc(.7rem + env(safe-area-inset-bottom, 0px)); display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; background: oklch(7% 0.006 95 / 0.82); backdrop-filter: blur(10px); border-top: 1px solid var(--ks-rule); }
   #steer { flex: 1; min-width: 16rem; background: var(--ks-lacquer-raised); color: var(--ks-text); border: 1px solid var(--ks-rule); border-radius: 7px; padding: .6rem .85rem; font: inherit; }
@@ -925,16 +960,26 @@ function page(waiting = false) {
   .bp-confirm-go:hover { background: var(--ks-kinpaku-pale); }
   .bp-confirm-stay { background: transparent; color: var(--ks-text-muted); border: 1px solid var(--ks-rule); font: inherit; padding: 9px 18px; border-radius: 6px; cursor: pointer; }
   .bp-confirm-stay:hover { color: var(--ks-text); border-color: var(--ks-text-faint); }
-  .reroll-btn { display: inline-flex; align-items: center; align-self: stretch; gap: 8px; padding: 0 16px; font-family: var(--ks-mono); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--ks-kinpaku); background: transparent; border: 1px solid var(--ks-rule); border-radius: 6px; cursor: pointer; transition: border-color .2s ease, color .2s ease; }
-  .reroll-btn:hover { color: var(--ks-kinpaku-pale); border-color: var(--ks-kinpaku-deep); }
-  .reroll-btn svg { width: 15px; height: 15px; }
-  .reroll-btn[disabled] { opacity: .4; cursor: default; }
-  /* The register steers read quieter than the plain roll: they are exits from
+  .re 
+-btn { display: inline-flex; align-items: center; align-self: stretch; gap: 8px; padding: 0 16px; font-family: var(--ks-mono); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--ks-kinpaku); background: transparent; border: 1px solid var(--ks-rule); border-radius: 6px; cursor: pointer; transition: border-color .2s ease, color .2s ease; }
+  .re 
+-btn:hover { color: var(--ks-kinpaku-pale); border-color: var(--ks-kinpaku-deep); }
+  .re 
+-btn svg { width: 15px; height: 15px; }
+  .re 
+-btn[disabled] { opacity: .4; cursor: default; }
+  /* The register steers read quieter than the plain  
+: they are exits from
      the current register, not the round's main verbs. */
-  #reroll-safer, #reroll-bolder { color: var(--ks-text-muted); min-height: 38px; }
-  #reroll-safer:hover, #reroll-bolder:hover { color: var(--ks-text); border-color: var(--ks-text-faint); }
+  #re 
+-safer, #re 
+-bolder { color: var(--ks-text-muted); min-height: 38px; }
+  #re 
+-safer:hover, #re 
+-bolder:hover { color: var(--ks-text); border-color: var(--ks-text-faint); }
   /* The quiet exit: always available, never argued with, visually subordinate
-     to the dealt cards and the re-roll so it reads as the user's own door,
+     to the dealt cards and the re- 
+ so it reads as the user's own door,
      not a recommendation. */
   #canon { align-self: center; padding: 0 4px; font-family: var(--ks-mono); font-size: .66rem; letter-spacing: .08em; text-transform: uppercase; color: inherit; opacity: .45; background: transparent; border: none; border-bottom: 1px dotted currentColor; cursor: pointer; transition: opacity .2s ease; }
   #canon:hover { opacity: .85; }
@@ -999,17 +1044,29 @@ ${buildPath?.toggle ? `<div id="bp-confirm" role="dialog" aria-modal="true" aria
 <footer>
   ${payload.steer ? '<input id="steer" placeholder="Optional steer: what should be different or kept?">' : ''}
   ${(() => {
-    if (!payload.reroll) return '';
+    if (!payload.re 
+) return '';
     const die = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="8.4" cy="8.4" r="1.5" fill="currentColor"/><circle cx="15.6" cy="8.4" r="1.5" fill="currentColor"/><circle cx="8.4" cy="15.6" r="1.5" fill="currentColor"/><circle cx="15.6" cy="15.6" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>';
-    const registers = Array.isArray(payload.reroll.registers) ? payload.reroll.registers.filter((r) => r === 'safer' || r === 'bolder') : [];
+    const registers = Array.isArray(payload.re 
+.registers) ? payload.re 
+.registers.filter((r) => r === 'safer' || r === 'bolder') : [];
     // The registers are the user's steering wheel on the familiar-to-bold
-    // axis; the plain re-roll sits between them so the spatial order matches
+    // axis; the plain re- 
+ sits between them so the spatial order matches
     // the axis it names.
-    const safer = registers.includes('safer') ? '<button class="reroll-btn" id="reroll-safer" title="Deal the familiar register: conventional grounded directions plus the category standard against named competitors"><span>&larr; Safer hand</span></button>' : '';
-    const bolder = registers.includes('bolder') ? '<button class="reroll-btn" id="reroll-bolder" title="Deal foreign forms only, at full commitment"><span>Bolder hand &rarr;</span></button>' : '';
-    return `${safer}<button class="reroll-btn" id="reroll">${die}<span>Re-roll</span></button>${bolder}`;
+    const safer = registers.includes('safer') ? '<button class="re 
+-btn" id="re 
+-safer" title="Deal the familiar register: conventional grounded directions plus the category standard against named competitors"><span>&larr; Safer hand</span></button>' : '';
+    const bolder = registers.includes('bolder') ? '<button class="re 
+-btn" id="re 
+-bolder" title="Deal foreign forms only, at full commitment"><span>Bolder hand &rarr;</span></button>' : '';
+    return `${safer}<button class="re 
+-btn" id="re 
+">${die}<span>Re- 
+</span></button>${bolder}`;
   })()}
-  ${payload.canon && !payload.canonCard ? '<button id="canon" title="Skip the roll: build the page this category ships, executed impeccably">Play it straight</button>' : ''}
+  ${payload.canon && !payload.canonCard ? '<button id="canon" title="Skip the  
+: build the page this category ships, executed impeccably">Play it straight</button>' : ''}
 </footer>
 <script>
   const steer = () => document.getElementById('steer')?.value || '';
@@ -1028,9 +1085,11 @@ ${buildPath?.toggle ? `<div id="bp-confirm" role="dialog" aria-modal="true" aria
   // swallow the click and never print the confirmation, so the user believed
   // a choice had landed that no one would ever collect.
   async function answer(optionId) {
-    // Quiet at the click: a re-roll or canon posted while this pick's POST
+    // Quiet at the click: a re- 
+ or canon posted while this pick's POST
     // is in flight would overwrite the answer being collected.
-    document.querySelectorAll('.reroll-btn, #canon').forEach(b => b.setAttribute('disabled', ''));
+    document.querySelectorAll('.re 
+-btn, #canon').forEach(b => b.setAttribute('disabled', ''));
     try {
       // fetch() only rejects on a transport failure; a 401/403 (a page kept
       // open across a server restart, which regenerates the key) resolves
@@ -1436,10 +1495,16 @@ ${buildPath?.toggle ? `<div id="bp-confirm" role="dialog" aria-modal="true" aria
     if (!deck || !prevBtn) return;
     const shell = deck.closest('.deck-shell');
     const v = vertical();
-    const overflow = v ? deck.scrollHeight > deck.clientHeight + 4 : deck.scrollWidth > deck.clientWidth + 4;
+    const overflow = v ? deck.sc 
+Height > deck.clientHeight + 4 : deck.sc 
+Width > deck.clientWidth + 4;
     prevBtn.hidden = nextBtn.hidden = !overflow;
-    const pos = v ? deck.scrollTop : deck.scrollLeft;
-    const max = v ? deck.scrollHeight - deck.clientHeight : deck.scrollWidth - deck.clientWidth;
+    const pos = v ? deck.sc 
+Top : deck.sc 
+Left;
+    const max = v ? deck.sc 
+Height - deck.clientHeight : deck.sc 
+Width - deck.clientWidth;
     const canPrev = overflow && pos > 2;
     const canNext = overflow && pos < max - 2;
     prevBtn.toggleAttribute('disabled', !canPrev);
@@ -1452,11 +1517,13 @@ ${buildPath?.toggle ? `<div id="bp-confirm" role="dialog" aria-modal="true" aria
     if (!card) return;
     const r = card.getBoundingClientRect();
     const step = (vertical() ? r.height : r.width) + 26;
-    deck.scrollBy(vertical() ? { top: dir * step, behavior: 'smooth' } : { left: dir * step, behavior: 'smooth' });
+    deck.sc 
+By(vertical() ? { top: dir * step, behavior: 'smooth' } : { left: dir * step, behavior: 'smooth' });
   }
   prevBtn?.addEventListener('click', () => pageDeck(-1));
   nextBtn?.addEventListener('click', () => pageDeck(1));
-  deck?.addEventListener('scroll', updateNav, { passive: true });
+  deck?.addEventListener('sc 
+', updateNav, { passive: true });
   addEventListener('resize', updateNav);
   updateNav();
 
@@ -1501,12 +1568,16 @@ ${buildPath?.toggle ? `<div id="bp-confirm" role="dialog" aria-modal="true" aria
   const dealAgain = async (register) => {
     // Quiet at the click, not after the fly-out: the POST round-trip plus
     // the 700ms animation was a window where a second click posted another
-    // re-roll and renewed the delivery deadline.
-    document.querySelectorAll('.reroll-btn, #canon').forEach(b => b.setAttribute('disabled', ''));
+    // re- 
+ and renewed the delivery deadline.
+    document.querySelectorAll('.re 
+-btn, #canon').forEach(b => b.setAttribute('disabled', ''));
     try {
-      const res = await fetch('/answer' + keyQ, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ optionId: 'reroll', steer: steer(), ...(register ? { register } : {}) }) });
+      const res = await fetch('/answer' + keyQ, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ optionId: 're 
+', steer: steer(), ...(register ? { register } : {}) }) });
       if (!res.ok) {
-        document.body.innerHTML = '<div class="done">This page is out of date (the server restarted since it loaded) and the re-roll was not recorded.<br>Reload this tab and try again.</div>';
+        document.body.innerHTML = '<div class="done">This page is out of date (the server restarted since it loaded) and the re- 
+ was not recorded.<br>Reload this tab and try again.</div>';
         return;
       }
     } catch {
@@ -1527,13 +1598,17 @@ ${buildPath?.toggle ? `<div id="bp-confirm" role="dialog" aria-modal="true" aria
       // forever. Go silent and let the server reclaim itself. Reload must
       // not undo that silence: an unconditional reload re-serves the same
       // unresolved round and its fresh page beats again, so check for a
-      // delivered hand first and only reload when one exists. The re-roll
+      // delivered hand first and only reload when one exists. The re- 
+
       // buttons and the canon exit go too: a stalled page served already
-      // expired never disabled them, a re-roll would renew the deadline the
-      // stall just enforced, and a canon pick would overwrite a re-roll
+      // expired never disabled them, a re- 
+ would renew the deadline the
+      // stall just enforced, and a canon pick would overwrite a re- 
+
       // --wait already collected, closing the table under the agent.
       clearInterval(beatTimer);
-      document.querySelectorAll('.reroll-btn, #canon').forEach(b => b.setAttribute('disabled', ''));
+      document.querySelectorAll('.re 
+-btn, #canon').forEach(b => b.setAttribute('disabled', ''));
       // Silence is for heartbeats only: a hand delivered after the deadline
       // must still land without a click, so a beat-free watch keeps checking
       // and reloads into it. /next-status never beats, so the daemon's idle
@@ -1570,9 +1645,12 @@ ${buildPath?.toggle ? `<div id="bp-confirm" role="dialog" aria-modal="true" aria
     }
     const cardHeight = cardsNow[0] ? cardsNow[0].getBoundingClientRect().height : 0;
     grid.innerHTML = cardsNow.map(() => '<article class="card skeleton"' + (cardHeight ? ' style="height:' + cardHeight + 'px"' : '') + '><div class="card-inner"><div class="face front"><div class="media"><div class="shimmer"></div></div><div class="body"><div class="line tier w40"></div><div class="line title w70"></div><div class="line w90"></div><div class="line w80"></div><div class="line w60"></div><div class="line button"></div></div></div></div></article>').join('');
-    // Canon goes quiet with the re-roll buttons: a pick posted mid-wait can
-    // never be collected once --wait has the re-roll, only close the table.
-    document.querySelectorAll('.reroll-btn, #canon').forEach(b => b.setAttribute('disabled', ''));
+    // Canon goes quiet with the re- 
+ buttons: a pick posted mid-wait can
+    // never be collected once --wait has the re- 
+, only close the table.
+    document.querySelectorAll('.re 
+-btn, #canon').forEach(b => b.setAttribute('disabled', ''));
     // The wait must be able to end: a dead server rejects every tick and a
     // round nobody delivers stays ready:false forever, and both used to spin
     // the skeletons indefinitely. Distinguish them, say so, and offer a way
@@ -1590,11 +1668,15 @@ ${buildPath?.toggle ? `<div id="bp-confirm" role="dialog" aria-modal="true" aria
       }
     }, 1200);
   }
-  document.getElementById('reroll')?.addEventListener('click', () => dealAgain());
-  document.getElementById('reroll-safer')?.addEventListener('click', () => dealAgain('safer'));
-  document.getElementById('reroll-bolder')?.addEventListener('click', () => dealAgain('bolder'));
+  document.getElementById('re 
+')?.addEventListener('click', () => dealAgain());
+  document.getElementById('re 
+-safer')?.addEventListener('click', () => dealAgain('safer'));
+  document.getElementById('re 
+-bolder')?.addEventListener('click', () => dealAgain('bolder'));
   // A native refresh must not resurrect an answered round: while the server
-  // holds a collected re-roll or followup pick with no replacement delivered,
+  // holds a collected re- 
+ or followup pick with no replacement delivered,
   // it serves the page in waiting mode and the refresh re-enters the same
   // bounded wait, with only the time the original deadline has left, instead
   // of showing dead cards whose heartbeat props the daemon forever.
@@ -1732,24 +1814,31 @@ const server = http.createServer((req, res) => {
       let parsed = {};
       try { parsed = JSON.parse(body); } catch { /* empty steer */ }
       const chosen = options.find((o) => o.id === parsed.optionId);
-      const isReroll = parsed.optionId === 'reroll';
+      const isRe 
+ = parsed.optionId === 're 
+';
       // A followup round's pick is not terminal: the table stays open for the
-      // next round (--update), exactly like a re-roll. Detached mode only;
+      // next round (--update), exactly like a re- 
+. Detached mode only;
       // the blocking mode has no update channel, so its picks stay terminal.
-      const followupOpen = Boolean(detachedKey) && payload.followup === true && !isReroll;
+      const followupOpen = Boolean(detachedKey) && payload.followup === true && !isRe 
+;
       const answer = JSON.stringify({
         optionId: parsed.optionId ?? null,
         steer: parsed.steer ?? '',
-        ...(isReroll && (parsed.register === 'safer' || parsed.register === 'bolder') ? { register: parsed.register } : {}),
+        ...(isRe 
+ && (parsed.register === 'safer' || parsed.register === 'bolder') ? { register: parsed.register } : {}),
         ...(followupOpen ? { followup: true } : {}),
         ...(chosen?.hero || chosen?.board ? { hero: chosen.hero ?? null, board: chosen.board ?? null } : {}),
         ...((chosen?.comp ?? chosen?.sketch) ? { comp: chosen.comp ?? chosen.sketch } : {}),
-        ...(liveBuildPath && !isReroll ? { buildPath: liveBuildPath, buildPathFlipped: liveBuildPath !== (buildPathDefault?.value ?? null) } : {}),
+        ...(liveBuildPath && !isRe 
+ ? { buildPath: liveBuildPath, buildPathFlipped: liveBuildPath !== (buildPathDefault?.value ?? null) } : {}),
       });
       // The delivery deadline is single-issue: a duplicate answer racing the
       // page's disable must not restamp the allowance already inherited.
       const wasAwaiting = awaitingNext;
-      awaitingNext = (isReroll || followupOpen) && Boolean(detachedKey);
+      awaitingNext = (isRe 
+ || followupOpen) && Boolean(detachedKey);
       if (awaitingNext && !wasAwaiting) awaitingNextSince = Date.now();
       if (detachedKey) {
         fs.mkdirSync(QUESTION_DIR, { recursive: true });
@@ -1757,10 +1846,12 @@ const server = http.createServer((req, res) => {
       } else {
         printAnswer(answer);
       }
-      // A re-roll or followup pick in detached mode keeps the table open: the
+      // A re- 
+ or followup pick in detached mode keeps the table open: the
       // client shows a loading hand and reloads when --update delivers the
       // next round.
-      if (!((isReroll || followupOpen) && detachedKey)) setTimeout(() => process.exit(0), 150);
+      if (!((isRe 
+ || followupOpen) && detachedKey)) setTimeout(() => process.exit(0), 150);
     });
     return;
   }
@@ -1782,7 +1873,8 @@ server.listen(portArg, '127.0.0.1', () => {
   }
   // The timeout bounds the wait for a page, never the user's decision: an
   // absolute guillotine counted from start used to kill the server under a
-  // still-open tab (a slow re-rolled round easily outlived it), leaving the
+  // still-open tab (a slow re- 
+ed round easily outlived it), leaving the
   // page polling skeletons that could never resolve. Once the page beats,
   // the server's lifetime tracks the beats, and it exits only after the idle
   // grace passes with none, long enough to survive a closed laptop lid.

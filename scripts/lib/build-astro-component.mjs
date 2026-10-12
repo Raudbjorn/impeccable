@@ -1,6 +1,7 @@
 // Builds an Astro-sourced component into skill/scripts/<name>/: the shape
 // scripts/build-picker.mjs pioneered for the picker, generalized so a new
-// component can reuse it instead of hand-rolling the same astro-build,
+// component can reuse it instead of hand- 
+ing the same astro-build,
 // copy-to-output, sync-provider-output plumbing. See docs/add-branding.md
 // for the walkthrough of adding a new component this way.
 //

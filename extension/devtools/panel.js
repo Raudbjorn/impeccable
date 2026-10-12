@@ -316,7 +316,8 @@ async function formatFindingsForCopy(findings) {
     lines.push('');
   }
 
-  // Roll up suggested skills across all findings (most-relevant first)
+  //  
+ up suggested skills across all findings (most-relevant first)
   const skills = uniqueSkillsForFindings(findings);
   if (skills.length) {
     lines.push(`Suggested Impeccable skills to fix: ${skills.join(', ')}`);
@@ -504,7 +505,8 @@ function inspectElement(selector) {
   chrome.devtools.inspectedWindow.eval(
     `(function() {
       var el = document.querySelector(${json});
-      if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); inspect(el); }
+      if (el) { el.sc 
+IntoView({ behavior: 'smooth', block: 'center' }); inspect(el); }
     })()`
   );
 }

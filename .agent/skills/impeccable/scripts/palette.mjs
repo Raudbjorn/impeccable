@@ -103,7 +103,8 @@ const SEEDS = [
     mood: "Mid-century darkroom under the safelight — developer trays, oxblood leather, the quiet patience of a print emerging",
     strategy: "Seed becomes a deep oxblood primary; surface stays pure black so the red glows like a safelight, with a warmer ember accent for hierarchy" },
   { id: "seed-026", oklch: [0.489, 0.190, 28.3],
-    mood: "smoldering ember in a blacksmith's forge — iron-hot rust, soot, and controlled fire",
+    mood: "smoldering ember in a blacksmith's forge — iron-hot rust, soot, and cont 
+ed fire",
     strategy: "Near-black soot background lets the seed's red-orange glow like heated metal; ink is bone-white, accent is a cooler tempered-steel orange that creates internal heat gradient with the primary." },
   { id: "seed-027", oklch: [0.568, 0.208, 27.1],
     mood: "Sicilian blood orange at golden hour — citrus rind, terracotta, sun on stucco",

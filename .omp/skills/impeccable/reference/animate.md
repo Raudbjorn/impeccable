@@ -31,7 +31,8 @@ Write a short plan before implementation:
 - **Feedback:** the controls and outcomes that need acknowledgment.
 - **Budget:** which effects may be expensive and how often they run.
 
-The focal moment must come from this product and surface concept. A generic fade-and-rise, hover lift, parallax layer, or scroll reveal is not a thesis.
+The focal moment must come from this product and surface concept. A generic fade-and-rise, hover lift, parallax layer, or sc 
+ reveal is not a thesis.
 
 ## Choose material by meaning
 
@@ -39,13 +40,15 @@ Transform and opacity are reliable foundations, not the entire palette. Choose p
 
 - **Continuity and relationship:** shared-element motion, FLIP-style transforms, view transitions, or deliberate spatial movement.
 - **Focus and depth:** bounded blur, filter, backdrop, light, or shadow changes.
-- **Reveal and composition:** masks, clip paths, cropping, or controlled occlusion.
+- **Reveal and composition:** masks, clip paths, cropping, or cont 
+ed occlusion.
 - **Material and energy:** color, gradient position, texture, distortion, or shader effects when the world and runtime support them.
 - **State and feedback:** the smallest change that makes cause and result unmistakable.
 
 Do not stack techniques for spectacle. One strong material idea, carried through the focal sequence and quiet supporting states, is usually enough.
 
-Sibling stagger is appropriate when a list appears as a list. Cap the total delay, and never reinterpret every scrolled section as a staggered list.
+Sibling stagger is appropriate when a list appears as a list. Cap the total delay, and never reinterpret every sc 
+ed section as a staggered list.
 
 ## Timing and easing
 
@@ -65,7 +68,9 @@ Exit faster than entrance. Use natural deceleration such as `cubic-bezier(0.16, 
 - Use CSS transitions and keyframes for declarative state and bounded sequences.
 - Use Web Animations API or the project's existing motion library for interruption, sequencing, and dynamic values.
 - Use View Transitions or shared-element techniques when continuity across states is the point.
-- Use scroll-driven motion only when the scroll relationship itself carries meaning, with a robust fallback.
+- Use sc 
+-driven motion only when the sc 
+ relationship itself carries meaning, with a robust fallback.
 - Do not add a dependency for an effect the existing stack can express cleanly.
 
 Keep content visible in the default state so failed scripts do not hide the page. Avoid casually animating layout-driving properties such as `width`, `height`, `top`, `left`, and margins; use FLIP, transforms, or grid techniques when appropriate. Bound blur, filter, shadow, canvas, and shader work to isolated regions. Apply `will-change` only during known animation. Measure on target viewports and devices rather than assuming transform means fast.

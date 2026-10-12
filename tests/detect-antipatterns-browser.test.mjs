@@ -413,12 +413,16 @@ describe('detectUrl — browser-only fixtures', () => {
     assert.equal(edges.length, 3, `expected 3 body-text-viewport-edge findings, got ${edges.length}: ${JSON.stringify(edges.map(e => e.snippet))}`);
   });
 
-  it('text-overflow: flags content wider than its box, skips real scroll regions', async () => {
-    // Browser-only: needs scrollWidth vs clientWidth from real layout.
+  it('text-overflow: flags content wider than its box, skips real sc 
+ regions', async () => {
+    // Browser-only: needs sc 
+Width vs clientWidth from real layout.
     // Flag column: a nowrap line and an unbreakable token spilling past a
     // fixed-width box (overflow visible). Pass column: a genuine
-    // overflow-x:auto scroll region, a <pre>, normally wrapping text, a long
-    // line living inside a scroll ancestor, and sr-only accessible text.
+    // overflow-x:auto sc 
+ region, a <pre>, normally wrapping text, a long
+    // line living inside a sc 
+ ancestor, and sr-only accessible text.
     const f = await detectUrl(`${baseUrl}/fixtures/antipatterns/text-overflow.html`);
     const hits = f.filter(r => r.antipattern === 'text-overflow');
     const flagged = new Set();
@@ -430,10 +434,12 @@ describe('detectUrl — browser-only fixtures', () => {
     assert.ok(flagged.has('flag-longword'), 'expected the unbreakable-token overflow case to flag');
     assert.ok(flagged.has('flag-inline-spill'), 'expected the inline-owner overflow case to flag');
     for (const cls of [
-      'pass-scroll',
+      'pass-sc 
+',
       'pass-pre',
       'pass-wrap',
-      'pass-inside-scroll',
+      'pass-inside-sc 
+',
       'pass-sr-only-clip-path',
       'pass-sr-only-legacy',
       'pass-sr-only-tiny-hidden',
@@ -464,7 +470,8 @@ describe('detectUrl — browser-only fixtures', () => {
   });
 
   it('script-error + content-hidden-at-rest: working reveal page stays clean', async () => {
-    // Identical markup with a working script (plus scroll-behavior: smooth,
+    // Identical markup with a working script (plus sc 
+-behavior: smooth,
     // hidden menus, aria-hidden and template content). The reveal sweep must
     // reveal every section and the exclusion rules must keep legitimately
     // hidden UI out of the measurement.
@@ -483,10 +490,12 @@ describe('detectUrl — browser-only fixtures', () => {
     const f = await detectUrl(`${baseUrl}/fixtures/antipatterns/edge-flush-cards.html`, { visualContrast: false });
     const hits = f.filter(r => r.antipattern === 'edge-flush-cards');
     assert.equal(hits.length, 1, `expected exactly 1 edge-flush-cards finding, got ${hits.length}: ${JSON.stringify(hits.map(h => h.snippet))}`);
-    assert.match(hits[0].snippet, /flag-pager/, `finding must attach to the oversized-panel scroller: ${hits[0].snippet}`);
+    assert.match(hits[0].snippet, /flag-pager/, `finding must attach to the oversized-panel sc 
+er: ${hits[0].snippet}`);
     assert.match(hits[0].snippet, /2 cards/, `both oversized-panel cards should count: ${hits[0].snippet}`);
     for (const cls of ['pass-even', 'pass-peek', 'pass-plain']) {
-      assert.doesNotMatch(hits[0].snippet, new RegExp(cls), `".${cls}" scroller must not flag`);
+      assert.doesNotMatch(hits[0].snippet, new RegExp(cls), `".${cls}" sc 
+er must not flag`);
     }
   });
 
@@ -595,7 +604,8 @@ describe('detectUrl — browser-only fixtures', () => {
       await page.evaluate(browserScript);
       const result = await page.evaluate(async () => {
         const before = document.querySelectorAll('.impeccable-overlay, .impeccable-label, .impeccable-banner').length;
-        const analyses = await window.impeccableAnalyzeVisualContrast({ maxCandidates: 20, scrollOffscreen: true });
+        const analyses = await window.impeccableAnalyzeVisualContrast({ maxCandidates: 20, sc 
+Offscreen: true });
         const after = document.querySelectorAll('.impeccable-overlay, .impeccable-label, .impeccable-banner').length;
         return {
           before,
@@ -618,7 +628,8 @@ describe('detectUrl — browser-only fixtures', () => {
     }
   });
 
-  it('browser API: visual contrast scan decorates visible findings without scrolling by default', async () => {
+  it('browser API: visual contrast scan decorates visible findings without sc 
+ing by default', async () => {
     const puppeteer = await import('puppeteer');
     const browser = await puppeteer.default.launch({
       headless: true,
@@ -626,19 +637,29 @@ describe('detectUrl — browser-only fixtures', () => {
     });
     try {
       const page = await browser.newPage();
-      // Keep three failing visual-contrast cards in the no-scroll viewport;
-      // the offscreen cases are covered by the scrollOffscreen test above.
+      // Keep three failing visual-contrast cards in the no-sc 
+ viewport;
+      // the offscreen cases are covered by the sc 
+Offscreen test above.
       await page.setViewport({ width: 1280, height: 1000 });
       await page.goto(`${baseUrl}/fixtures/antipatterns/visual-contrast.html`, { waitUntil: 'load' });
       const browserScript = fs.readFileSync(path.join(ROOT, 'cli/engine/detect-antipatterns-browser.js'), 'utf-8');
       await page.evaluate(() => { window.__IMPECCABLE_CONFIG__ = { autoScan: false }; });
       await page.evaluate(browserScript);
       const result = await page.evaluate(async () => {
-        let scrollEvents = 0;
-        let maxScrollY = window.scrollY;
-        window.addEventListener('scroll', () => {
-          scrollEvents += 1;
-          maxScrollY = Math.max(maxScrollY, window.scrollY);
+        let sc 
+Events = 0;
+        let maxSc 
+Y = window.sc 
+Y;
+        window.addEventListener('sc 
+', () => {
+          sc 
+Events += 1;
+          maxSc 
+Y = Math.max(maxSc 
+Y, window.sc 
+Y);
         }, { passive: true });
         const syncScanResult = window.impeccableScan({
           visualContrast: true,
@@ -661,9 +682,13 @@ describe('detectUrl — browser-only fixtures', () => {
           overlays: document.querySelectorAll('.impeccable-overlay:not(.impeccable-banner)').length,
           labels: document.querySelectorAll('.impeccable-label').length,
           analyses: window.impeccableGetLastVisualContrastAnalyses().filter(item => item.status === 'fail').length,
-          scrollEvents,
-          maxScrollY,
-          finalScrollY: window.scrollY,
+          sc 
+Events,
+          maxSc 
+Y,
+          finalSc 
+Y: window.sc 
+Y,
           syncScanIsArray: Array.isArray(syncScanResult),
           syncDetectIsArray: Array.isArray(syncDetectResult),
           hasAsyncApi: typeof window.impeccableScanAsync === 'function' && typeof window.impeccableDetectAsync === 'function',
@@ -677,14 +702,19 @@ describe('detectUrl — browser-only fixtures', () => {
       assert.equal(visualGroups.length, 3, `expected 3 viewport visual groups, got: ${JSON.stringify(result)}`);
       assert.ok(result.overlays >= 3, `expected regular overlays for visible visual findings, got: ${JSON.stringify(result)}`);
       assert.ok(result.labels >= 3, `expected regular labels for visible visual findings, got: ${JSON.stringify(result)}`);
-      assert.equal(result.maxScrollY, 0, `visual scan should not scroll the page by default: ${JSON.stringify(result)}`);
-      assert.equal(result.finalScrollY, 0, `visual scan should preserve scroll by default: ${JSON.stringify(result)}`);
+      assert.equal(result.maxSc 
+Y, 0, `visual scan should not sc 
+ the page by default: ${JSON.stringify(result)}`);
+      assert.equal(result.finalSc 
+Y, 0, `visual scan should preserve sc 
+ by default: ${JSON.stringify(result)}`);
       assert.equal(result.syncScanIsArray, true, `impeccableScan should keep a synchronous Array return: ${JSON.stringify(result)}`);
       assert.equal(result.syncDetectIsArray, true, `impeccableDetect should keep a synchronous Array return: ${JSON.stringify(result)}`);
       assert.equal(result.hasAsyncApi, true, `visual contrast should expose explicit async APIs: ${JSON.stringify(result)}`);
 
       const refreshedOverlayResult = await page.evaluate(async () => {
-        window.scrollTo(0, 0);
+        window.sc 
+To(0, 0);
         const target = [...document.querySelectorAll('p')]
           .find(node => /White text on light image should be sampled/i.test(node.textContent || ''));
         target.style.fontSize = '10px';
@@ -724,33 +754,43 @@ describe('detectUrl — browser-only fixtures', () => {
       const lazyResult = await page.evaluate(async () => {
         const target = [...document.querySelectorAll('p')]
           .find(node => /Muted gray text on a misty image/i.test(node.textContent || ''));
-        target?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
+        target?.sc 
+IntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
         await new Promise(resolve => setTimeout(resolve, 250));
         return {
           overlays: document.querySelectorAll('.impeccable-overlay:not(.impeccable-banner)').length,
           labels: document.querySelectorAll('.impeccable-label').length,
           analyses: window.impeccableGetLastVisualContrastAnalyses().filter(item => item.status === 'fail').length,
           targetHasOverlay: Boolean(target?._impeccableOverlay),
-          scrollY: window.scrollY,
+          sc 
+Y: window.sc 
+Y,
         };
       });
-      assert.equal(lazyResult.analyses, 4, `expected lazy visual resolution after scrolling into view, got: ${JSON.stringify(lazyResult)}`);
-      assert.ok(lazyResult.overlays >= 4, `expected lazy visual overlay after scrolling into view, got: ${JSON.stringify(lazyResult)}`);
-      assert.ok(lazyResult.labels >= 4, `expected lazy visual label after scrolling into view, got: ${JSON.stringify(lazyResult)}`);
+      assert.equal(lazyResult.analyses, 4, `expected lazy visual resolution after sc 
+ing into view, got: ${JSON.stringify(lazyResult)}`);
+      assert.ok(lazyResult.overlays >= 4, `expected lazy visual overlay after sc 
+ing into view, got: ${JSON.stringify(lazyResult)}`);
+      assert.ok(lazyResult.labels >= 4, `expected lazy visual label after sc 
+ing into view, got: ${JSON.stringify(lazyResult)}`);
       assert.equal(lazyResult.targetHasOverlay, true, `expected lazy visual target to get a regular overlay, got: ${JSON.stringify(lazyResult)}`);
-      assert.ok(lazyResult.scrollY > 0, `test should have naturally scrolled to the offscreen case: ${JSON.stringify(lazyResult)}`);
+      assert.ok(lazyResult.sc 
+Y > 0, `test should have naturally sc 
+ed to the offscreen case: ${JSON.stringify(lazyResult)}`);
 
       const staleOverlayResult = await page.evaluate(async () => {
         const target = [...document.querySelectorAll('p')]
           .find(node => /Muted gray text on a misty image/i.test(node.textContent || ''));
-        window.scrollTo(0, 0);
+        window.sc 
+To(0, 0);
         await new Promise(resolve => setTimeout(resolve, 50));
         await window.impeccableScanAsync({
           visualContrast: true,
           visualContrastMaxCandidates: 20,
         });
         const staleCleared = !target?._impeccableOverlay;
-        target?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
+        target?.sc 
+IntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
         await new Promise(resolve => setTimeout(resolve, 250));
         return {
           staleCleared,
@@ -765,15 +805,23 @@ describe('detectUrl — browser-only fixtures', () => {
       assert.equal(staleOverlayResult.targetOverlayConnected, true, `expected lazy visual overlay after rescan to be connected, got: ${JSON.stringify(staleOverlayResult)}`);
 
       const offscreenResult = await page.evaluate(async () => {
-        window.scrollTo(0, 0);
-        let maxScrollY = window.scrollY;
-        window.addEventListener('scroll', () => {
-          maxScrollY = Math.max(maxScrollY, window.scrollY);
+        window.sc 
+To(0, 0);
+        let maxSc 
+Y = window.sc 
+Y;
+        window.addEventListener('sc 
+', () => {
+          maxSc 
+Y = Math.max(maxSc 
+Y, window.sc 
+Y);
         }, { passive: true });
         const groups = await window.impeccableScanAsync({
           visualContrast: true,
           visualContrastMaxCandidates: 20,
-          visualContrastScrollOffscreen: true,
+          visualContrastSc 
+Offscreen: true,
         });
         await new Promise(resolve => setTimeout(resolve, 50));
         return {
@@ -782,8 +830,11 @@ describe('detectUrl — browser-only fixtures', () => {
             types: group.findings.map(finding => finding.type || finding.id),
           })),
           analyses: window.impeccableGetLastVisualContrastAnalyses().filter(item => item.status === 'fail').length,
-          maxScrollY,
-          finalScrollY: window.scrollY,
+          maxSc 
+Y,
+          finalSc 
+Y: window.sc 
+Y,
         };
       });
       const offscreenVisualGroups = offscreenResult.groups.filter(group =>
@@ -792,8 +843,12 @@ describe('detectUrl — browser-only fixtures', () => {
       );
       assert.equal(offscreenResult.analyses, 4, `expected 4 opt-in visual failures, got: ${JSON.stringify(offscreenResult)}`);
       assert.equal(offscreenVisualGroups.length, 4, `expected 4 opt-in visual groups, got: ${JSON.stringify(offscreenResult)}`);
-      assert.ok(offscreenResult.maxScrollY > 0, `offscreen opt-in should be allowed to scroll: ${JSON.stringify(offscreenResult)}`);
-      assert.equal(offscreenResult.finalScrollY, 0, `offscreen opt-in should restore scroll: ${JSON.stringify(offscreenResult)}`);
+      assert.ok(offscreenResult.maxSc 
+Y > 0, `offscreen opt-in should be allowed to sc 
+: ${JSON.stringify(offscreenResult)}`);
+      assert.equal(offscreenResult.finalSc 
+Y, 0, `offscreen opt-in should restore sc 
+: ${JSON.stringify(offscreenResult)}`);
     } finally {
       await browser.close().catch(() => {});
     }
@@ -842,7 +897,8 @@ describe('detectUrl — browser-only fixtures', () => {
         await new Promise(resolve => setTimeout(resolve, 50));
         const target = [...document.querySelectorAll('p')]
           .find(node => /Muted gray text on a misty image/i.test(node.textContent || ''));
-        target?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
+        target?.sc 
+IntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
         await new Promise(resolve => setTimeout(resolve, 300));
         const resultsAfterRemove = window.__impeccableMessages
           .filter(message => message.source === 'impeccable-results').length;
@@ -1138,7 +1194,8 @@ describe('detectUrl — browser-only fixtures', () => {
     });
     try {
       const page = await browser.newPage();
-      // Keep failing visual-contrast cards inside the no-scroll viewport.
+      // Keep failing visual-contrast cards inside the no-sc 
+ viewport.
       await page.setViewport({ width: 1280, height: 1000 });
       await page.goto(`${baseUrl}/fixtures/antipatterns/visual-contrast.html`, { waitUntil: 'load' });
       const browserScript = fs.readFileSync(path.join(ROOT, 'cli/engine/detect-antipatterns-browser.js'), 'utf-8');

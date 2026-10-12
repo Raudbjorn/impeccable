@@ -40,7 +40,8 @@ describe('live source-search — findSourceFile', () => {
   });
 
   it('finds a .html.heex template', () => {
-    const abs = write('lib/my_app_web/controllers/page_html/home.html.heex', '<section class="hero">x</section>\n');
+    const abs = write('lib/my_app_web/cont 
+ers/page_html/home.html.heex', '<section class="hero">x</section>\n');
     assert.equal(findSourceFile({ query: 'hero', cwd: tmp, extensions: EXTS }), abs);
   });
 

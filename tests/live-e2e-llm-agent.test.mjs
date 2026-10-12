@@ -392,7 +392,8 @@ describe('live-e2e LLM agent manual edit prompt', () => {
     assert.match(MANUAL_EDIT_SYSTEM_INSTRUCTIONS, /Return a complete result/);
     assert.match(MANUAL_EDIT_SYSTEM_INSTRUCTIONS, /event\.repair/);
     assert.match(MANUAL_EDIT_SYSTEM_INSTRUCTIONS, /repair the current source/);
-    assert.match(MANUAL_EDIT_SYSTEM_INSTRUCTIONS, /do not restart from old source or roll files back/);
+    assert.match(MANUAL_EDIT_SYSTEM_INSTRUCTIONS, /do not restart from old source or  
+ files back/);
     assert.match(MANUAL_EDIT_SYSTEM_INSTRUCTIONS, /ambiguous or broad/);
     assert.match(MANUAL_EDIT_SYSTEM_INSTRUCTIONS, /Preserve op\.newText exactly/);
     assert.match(MANUAL_EDIT_SYSTEM_INSTRUCTIONS, /leading zeros/);

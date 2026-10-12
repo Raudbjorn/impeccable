@@ -163,8 +163,10 @@ describe('live-browser.js regression guards', () => {
     assert.match(SOURCE, /window\.__IMPECCABLE_LIVE_STATE__ = next/);
     assert.doesNotMatch(SOURCE, /document\.documentElement\.dataset\.impeccableLiveState/);
     assert.match(SOURCE, /pickedAnchorViewportTop: Number\.isFinite\(pickedAnchorViewportTop\)/);
-    assert.match(SOURCE, /scrollLockAnchorTop = typeof initialAnchorTop === 'number' && isFinite\(initialAnchorTop\)/);
-    assert.match(SOURCE, /const anchorDelta = anchorTop - scrollLockAnchorTop/);
+    assert.match(SOURCE, /sc 
+LockAnchorTop = typeof initialAnchorTop === 'number' && isFinite\(initialAnchorTop\)/);
+    assert.match(SOURCE, /const anchorDelta = anchorTop - sc 
+LockAnchorTop/);
   });
 
   it('does not autofocus the steering chat while inline editing', () => {
@@ -403,9 +405,14 @@ describe('live-browser.js regression guards', () => {
     );
   });
 
-  it('suppresses scroll anchoring via a stylesheet rule, not inline html/body style', () => {
-    // The scroll lock disables the browser's scroll-anchoring on the scroll
-    // root so it can't fight our manual scroll correction. Doing that by
+  it('suppresses sc 
+ anchoring via a stylesheet rule, not inline html/body style', () => {
+    // The sc 
+ lock disables the browser's sc 
+-anchoring on the sc 
+
+    // root so it can't fight our manual sc 
+ correction. Doing that by
     // mutating `document.documentElement.style` / `document.body.style`
     // inline makes React 19 report a hydration mismatch on the next
     // Fast-Refresh re-render: <html>/<body> are server-rendered by frameworks
@@ -417,27 +424,39 @@ describe('live-browser.js regression guards', () => {
     assert.doesNotMatch(
       SOURCE,
       /document\.documentElement\.style\.overflowAnchor\s*=/,
-      'event=live_browser.scroll_anchor_hydration actor=browser operation=start_scroll_lock risk=react19_hydration_mismatch_on_next_app_router expected=stylesheet_rule actual=inline_style_on_html',
+      'event=live_browser.sc 
+_anchor_hydration actor=browser operation=start_sc 
+_lock risk=react19_hydration_mismatch_on_next_app_router expected=stylesheet_rule actual=inline_style_on_html',
     );
     assert.doesNotMatch(
       SOURCE,
       /document\.body\.style\.overflowAnchor\s*=/,
-      'scroll lock must not mutate <body> inline overflowAnchor — it desyncs server/client hydration on SSR frameworks',
+      'sc 
+ lock must not mutate <body> inline overflowAnchor — it desyncs server/client hydration on SSR frameworks',
     );
     assert.match(
       SOURCE,
-      /const SCROLL_ANCHOR_LOCK_ID = 'impeccable-scroll-anchor-lock';/,
+      /const SC 
+_ANCHOR_LOCK_ID = 'impeccable-sc 
+-anchor-lock';/,
       'the anchor-suppression style needs a stable id constant so it can be created and removed by id',
     );
     assert.match(
       SOURCE,
-      /document\.getElementById\(SCROLL_ANCHOR_LOCK_ID\);[\s\S]{0,400}?createElement\('style'\)[\s\S]{0,400}?overflow-anchor:none[\s\S]{0,400}?\(document\.head \|\| document\.documentElement\)\.appendChild/,
-      'the scroll lock must suppress scroll anchoring with an injected <style> rule keyed by SCROLL_ANCHOR_LOCK_ID',
+      /document\.getElementById\(SC 
+_ANCHOR_LOCK_ID\);[\s\S]{0,400}?createElement\('style'\)[\s\S]{0,400}?overflow-anchor:none[\s\S]{0,400}?\(document\.head \|\| document\.documentElement\)\.appendChild/,
+      'the sc 
+ lock must suppress sc 
+ anchoring with an injected <style> rule keyed by SC 
+_ANCHOR_LOCK_ID',
     );
     assert.match(
       SOURCE,
-      /scrollLockAbort\.signal\.addEventListener\('abort', \(\) => \{\s*document\.getElementById\(SCROLL_ANCHOR_LOCK_ID\)\?\.remove\(\);/,
-      'stopping the scroll lock must remove the injected anchor-suppression <style> so it never outlives the session',
+      /sc 
+LockAbort\.signal\.addEventListener\('abort', \(\) => \{\s*document\.getElementById\(SC 
+_ANCHOR_LOCK_ID\)\?\.remove\(\);/,
+      'stopping the sc 
+ lock must remove the injected anchor-suppression <style> so it never outlives the session',
     );
   });
 
@@ -445,7 +464,8 @@ describe('live-browser.js regression guards', () => {
     // Variant divs live in page source, so Next.js App Router server-renders
     // them. Toggling hidden/style.display/--p-* on those nodes client-side
     // makes React 19 report a hydration mismatch on the next Fast-Refresh
-    // re-render — the same failure mode as scroll-anchor (#276) and pick-cursor
+    // re-render — the same failure mode as sc 
+-anchor (#276) and pick-cursor
     // (#286). Visibility and range/toggle custom properties must go through an
     // injected <style> rule instead.
     assert.doesNotMatch(
@@ -809,7 +829,8 @@ describe('live-browser.js regression guards', () => {
     // HTML never emitted trips React 19's "a tree hydrated but some attributes
     // ... didn't match" on the next Fast-Refresh re-render — surfacing as a
     // console.error that fails the nextjs-app-router live-e2e expectConsoleClean
-    // probe. Same fix shape as the scroll-anchor lock above.
+    // probe. Same fix shape as the sc 
+-anchor lock above.
     assert.doesNotMatch(
       SOURCE,
       /document\.documentElement\.classList\.(?:add|remove|toggle)\(/,
@@ -975,7 +996,8 @@ describe('live-browser.js regression guards', () => {
     assert.match(
       SOURCE,
       /const hiTarget = resolveBarAnchor\(\);[\s\S]{0,200}?showHighlight\(hiTarget\);/,
-      'scroll tracking keeps the element outline visible while configuring',
+      'sc 
+ tracking keeps the element outline visible while configuring',
     );
     assert.match(SOURCE, /function showConfigureBarTooltip\(/, 'configure controls use instant custom tooltips');
     assert.doesNotMatch(

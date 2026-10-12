@@ -443,7 +443,8 @@ describe('live-accept — style-element edge cases', () => {
   // both HTML and JSX.
   it('discard restores JSX content at the original indent (no 2-space drift from marker-inside layout)', () => {
     // Run the real wrap CLI so we exercise the JSX-marker-inside-wrapper
-    // layout end to end, not a hand-rolled approximation.
+    // layout end to end, not a hand- 
+ed approximation.
     const tsx = `export default function App() {
   return (
     <main>

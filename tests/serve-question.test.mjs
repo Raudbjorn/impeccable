@@ -33,12 +33,15 @@ function startServer(payload, extraArgs = []) {
 
 const PAYLOAD = {
   title: 'Choose the visual world',
-  question: 'The roll assigned Fillmore Handbill.',
+  question: 'The  
+ assigned Fillmore Handbill.',
   options: [
-    { id: 'assigned', label: 'Fillmore Handbill', kicker: 'THE ROLL', lineage: '1966-71 psychedelic handbills' },
+    { id: 'assigned', label: 'Fillmore Handbill', kicker: 'THE  
+', lineage: '1966-71 psychedelic handbills' },
     { id: 'challenger-1', label: 'Teletext Service', body: 'block-mosaic broadcast pages' },
   ],
-  reroll: true,
+  re 
+: true,
   steer: true,
 };
 
@@ -78,8 +81,10 @@ describe('serve-question', () => {
     const { child, url, read } = await startServer(PAYLOAD);
     const html = await (await fetch(url)).text();
     assert.match(html, /Fillmore Handbill/);
-    assert.match(html, /THE ROLL/);
-    assert.match(html, /Re-roll/);
+    assert.match(html, /THE  
+/);
+    assert.match(html, /Re- 
+/);
     const post = await fetch(`${url}answer`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -91,16 +96,19 @@ describe('serve-question', () => {
     assert.match(read(), /ANSWER: \{"optionId":"assigned","steer":"warmer palette"\}/);
   });
 
-  it('re-roll answers round-trip with their own id', async () => {
+  it('re- 
+ answers round-trip with their own id', async () => {
     const { child, url, read } = await startServer(PAYLOAD);
     await fetch(`${url}answer`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ optionId: 'reroll', steer: '' }),
+      body: JSON.stringify({ optionId: 're 
+', steer: '' }),
     });
     const code = await new Promise((resolve) => child.on('exit', resolve));
     assert.equal(code, 0);
-    assert.match(read(), /"optionId":"reroll"/);
+    assert.match(read(), /"optionId":"re 
+"/);
   });
 
   it('start/wait cycle: daemonize, poll WAITING, then collect the answer', async () => {
@@ -254,7 +262,8 @@ describe('serve-question', () => {
     try {
       const waiting = await run(['--wait', '--key', 'hk', '--poll', '1']);
       assert.equal(waiting.code, 3, `--wait under CI must report WAITING, got ${waiting.code}: ${waiting.out}`);
-      // --update delivers a re-rolled hand to a page that is already open; a
+      // --update delivers a re- 
+ed hand to a page that is already open; a
       // headless gate that eats it strands that page mid-shuffle (issue #469).
       const updated = await run(['--update', '--key', 'hk', '--payload', payloadPath]);
       assert.equal(updated.code, 0, `--update under CI must deliver, got ${updated.code}: ${updated.out}`);
@@ -439,7 +448,8 @@ describe('serve-question', () => {
     assert.ok(url, started.out);
     try {
       await fetch(`${url}heartbeat?key=latehand`, { method: 'POST' });
-      await fetch(`${url}answer?key=latehand`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ optionId: 'reroll', steer: '' }) });
+      await fetch(`${url}answer?key=latehand`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ optionId: 're 
+', steer: '' }) });
       // Go silent like a stalled page until just before the 3s idle
       // deadline, then deliver: the daemon used to exit before the page's
       // watch could claim the hand, orphaning a delivery --update had
@@ -463,7 +473,8 @@ describe('serve-question', () => {
     }
   });
 
-  it('a refresh while a re-roll is outstanding re-enters the wait instead of re-serving the answered round', async () => {
+  it('a refresh while a re- 
+ is outstanding re-enters the wait instead of re-serving the answered round', async () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'serve-question-'));
     const payloadPath = path.join(dir, 'q.json');
     writeFileSync(payloadPath, JSON.stringify(PAYLOAD));
@@ -481,12 +492,15 @@ describe('serve-question', () => {
       const before = await (await fetch(url)).text();
       assert.ok(!before.includes('awaitNextRound(false,'), 'a fresh round serves the normal page');
       // A native refresh bypasses the page's own gated Reload button, so the
-      // serving decision has to live here: once a re-roll answer is collected
+      // serving decision has to live here: once a re- 
+ answer is collected
       // and no replacement has landed, GET / re-enters the bounded shuffle
       // wait instead of re-serving the answered cards.
-      await fetch(`${url}answer?key=refresh`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ optionId: 'reroll', steer: '' }) });
+      await fetch(`${url}answer?key=refresh`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ optionId: 're 
+', steer: '' }) });
       const waitingPage = await (await fetch(url)).text();
-      assert.ok(waitingPage.includes('awaitNextRound(false,'), 'a refresh mid re-roll re-enters the shuffle wait');
+      assert.ok(waitingPage.includes('awaitNextRound(false,'), 'a refresh mid re- 
+ re-enters the shuffle wait');
       const nextPath = path.join(dir, 'next.json');
       writeFileSync(nextPath, JSON.stringify({ ...PAYLOAD, title: 'Second round' }));
       const updated = await run(['--update', '--key', 'refresh', '--payload', nextPath]);
@@ -514,7 +528,8 @@ describe('serve-question', () => {
     const url = started.out.match(/QUESTION URL: (\S+)/)?.[1];
     assert.ok(url, started.out);
     try {
-      await fetch(`${url}answer?key=deadline`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ optionId: 'reroll', steer: '' }) });
+      await fetch(`${url}answer?key=deadline`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ optionId: 're 
+', steer: '' }) });
       const fresh = await (await fetch(url)).text();
       const budget = Number(fresh.match(/awaitNextRound\(false, (\d+)\);/)?.[1]);
       assert.ok(budget > 0 && budget <= 3000, `the waiting page carries the remaining allowance, got ${budget}`);
@@ -523,9 +538,11 @@ describe('serve-question', () => {
       // click-time disable can race a second click, so the server keeps the
       // first stamp instead of renewing the allowance.
       await new Promise((r) => setTimeout(r, 1200));
-      await fetch(`${url}answer?key=deadline`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ optionId: 'reroll', steer: '' }) });
+      await fetch(`${url}answer?key=deadline`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ optionId: 're 
+', steer: '' }) });
       const restamped = Number((await (await fetch(url)).text()).match(/awaitNextRound\(false, (\d+)\);/)?.[1]);
-      assert.ok(restamped > 0 && restamped < 2500, `a duplicate re-roll does not renew the allowance, got ${restamped}`);
+      assert.ok(restamped > 0 && restamped < 2500, `a duplicate re- 
+ does not renew the allowance, got ${restamped}`);
       await new Promise((r) => setTimeout(r, 3500));
       const spent = await (await fetch(url)).text();
       assert.ok(spent.includes('awaitNextRound(false, 0);'), 'a refresh after the deadline gets no new allowance');
@@ -559,7 +576,8 @@ describe('serve-question', () => {
       // A bad file that reaches the disk anyway must not trap the page:
       // GET / discards it, so /next-status stops reporting a hand that can
       // never render and the bounded wait resumes instead of reload-looping.
-      await fetch(`${url}answer?key=badhand`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ optionId: 'reroll', steer: '' }) });
+      await fetch(`${url}answer?key=badhand`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ optionId: 're 
+', steer: '' }) });
       writeFileSync(path.join(dir, '.impeccable', 'questions', 'badhand.next.json'), JSON.stringify({ title: 'No options' }));
       const page = await (await fetch(url)).text();
       assert.ok(page.includes('awaitNextRound(false,'), 'the round stays in the wait');
@@ -585,7 +603,8 @@ describe('serve-question', () => {
     const url = started.out.match(/QUESTION URL: (\S+)/)?.[1];
     assert.ok(url, started.out);
     try {
-      await fetch(`${url}answer?key=silent`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ optionId: 'reroll', steer: '' }) });
+      await fetch(`${url}answer?key=silent`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ optionId: 're 
+', steer: '' }) });
       const collected = await run(['--wait', '--key', 'silent', '--poll', '2']);
       assert.equal(collected.code, 0, collected.out);
       // The stalled page went silent by design: fake a beat older than the
@@ -638,7 +657,8 @@ describe('serve-question', () => {
     const url = started.out.match(/QUESTION URL: (\S+)/)?.[1];
     assert.ok(url, started.out);
     try {
-      await fetch(`${url}answer?key=claimgap`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ optionId: 'reroll', steer: '' }) });
+      await fetch(`${url}answer?key=claimgap`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ optionId: 're 
+', steer: '' }) });
       const collected = await run(['--wait', '--key', 'claimgap', '--poll', '2']);
       assert.equal(collected.code, 0, collected.out);
       const statePath = path.join(dir, '.impeccable', 'questions', 'claimgap.state.json');
@@ -680,7 +700,8 @@ describe('serve-question', () => {
       child.on('exit', resolve);
     });
     // Fresh heartbeat + a pid the sandbox cannot signal (pid 1 throws EPERM):
-    // --update is the documented re-roll delivery step, so a false "no live
+    // --update is the documented re- 
+ delivery step, so a false "no live
     // server" here strands the page mid-shuffle. Must deliver, exit 0.
     writeFileSync(path.join(qdir, 'upbeat.state.json'), JSON.stringify({ pid: 1, port: 1, url: 'http://127.0.0.1:1/', lastBeat: Date.now() }));
     assert.equal(await run('upbeat'), 0, 'fresh heartbeat must read as alive regardless of the kill probe');
@@ -698,7 +719,8 @@ describe('serve-question', () => {
       title: 'Choose the visual world',
       options: [
         {
-          id: 'assigned', label: 'Fillmore Handbill', kicker: 'THE ROLL',
+          id: 'assigned', label: 'Fillmore Handbill', kicker: 'THE  
+',
           thesis: 'The gig poster idea.', palette: ['#e8452c', '#f5d64c'], materials: ['letterpress'],
           viewport: 'Full-bleed dated bill.', risk: 'Nostalgia trap.',
           // The legacy key: a payload authored against the sketch-era schema
@@ -707,7 +729,8 @@ describe('serve-question', () => {
         },
         { id: 'challenger-1', label: 'Teletext Service', case: 'Fuses cleanly.' },
       ],
-      reroll: true,
+      re 
+: true,
       canon: true,
       canonCard: { label: 'The category standard', thesis: 'What the category ships.' },
       steer: true,

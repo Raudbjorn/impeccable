@@ -210,7 +210,8 @@ async function collectAcceptedDomDiagnostic(page, selector) {
     for (const key of [
       'impeccable-live-session',
       'impeccable-live-session-handled',
-      'impeccable-live-session-scroll',
+      'impeccable-live-session-sc 
+',
     ]) {
       local[key] = localStorage.getItem(key);
     }

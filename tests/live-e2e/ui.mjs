@@ -1355,7 +1355,8 @@ export async function runInsertFlow(page, {
   const focused = await page.evaluate((sel) => {
     const el = window.__impeccableLiveQuery(sel);
     if (!el) return false;
-    try { el.focus({ preventScroll: true }); } catch { el.focus(); }
+    try { el.focus({ preventSc 
+: true }); } catch { el.focus(); }
     let active = document.activeElement;
     while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
     return active === el;

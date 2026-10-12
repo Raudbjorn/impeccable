@@ -23,12 +23,14 @@ Run comprehensive checks across 5 dimensions. Score each dimension 0-4 using the
 **Check for**:
 - **Slow startup**: heavy work on launch before first frame
 - **Unvirtualized lists**: long content without FlatList / LazyColumn / List recycling
-- **Main-thread jank**: synchronous work in scroll or gesture paths, dropped frames on 60/120 Hz
+- **Main-thread jank**: synchronous work in sc 
+ or gesture paths, dropped frames on 60/120 Hz
 - **Wasted rendering**: unnecessary re-renders (React Native) or recompositions (Compose); missing memoization/keys
 - **Image handling**: full-size images decoded for thumbnails, no caching
 - **App weight**: bloated JS bundle or binary, unused dependencies
 
-**Score 0-4**: 0=Janky everywhere, 1=Major problems (unvirtualized lists, slow launch), 2=Partial, 3=Good (minor improvements possible), 4=Excellent (fast launch, smooth scroll, lean)
+**Score 0-4**: 0=Janky everywhere, 1=Major problems (unvirtualized lists, slow launch), 2=Partial, 3=Good (minor improvements possible), 4=Excellent (fast launch, smooth sc 
+, lean)
 
 ### 3. Appearance & Theming
 
@@ -36,7 +38,8 @@ Run comprehensive checks across 5 dimensions. Score each dimension 0-4 using the
 - **Hard-coded colors**: raw hex instead of Material color roles / design tokens
 - **Broken dark appearance**: missing dark variants, poor contrast in dark, quick inverts
 - **Dynamic Color** (Android 12+): no static fallback scheme, or ignored where it fits
-- **Off-platform materials**: hand-rolled visual materials where system materials or tonal elevation are expected
+- **Off-platform materials**: hand- 
+ed visual materials where system materials or tonal elevation are expected
 
 **Score 0-4**: 0=Hard-coded everything, 1=Minimal tokens, 2=Partial (tokens exist, inconsistently used), 3=Good (minor hard-coded values), 4=Excellent (semantic throughout, both appearances first-class)
 

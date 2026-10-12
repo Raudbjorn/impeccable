@@ -197,39 +197,67 @@
   const browserOwner = sessionState.owner;
   let checkpointTimer = null;
 
-  // Scroll lock - holds window.scrollY at a fixed value while the session is
+  // Sc 
+ lock - holds window.sc 
+Y at a fixed value while the session is
   // active, so HMR DOM patches and variant swaps can't drift the page. See
-  // startScrollLock / stopScrollLock below.
-  let scrollLockObserver = null;
-  let scrollLockTargetY = null;
-  let scrollLockAnchorTop = null;
-  let scrollLockRaf = null;
-  let scrollLockAbort = null;
-  const SCROLL_ANCHOR_LOCK_ID = 'impeccable-scroll-anchor-lock';
+  // startSc 
+Lock / stopSc 
+Lock below.
+  let sc 
+LockObserver = null;
+  let sc 
+LockTargetY = null;
+  let sc 
+LockAnchorTop = null;
+  let sc 
+LockRaf = null;
+  let sc 
+LockAbort = null;
+  const SC 
+_ANCHOR_LOCK_ID = 'impeccable-sc 
+-anchor-lock';
   const VARIANT_STATE_STYLE_ID = 'impeccable-variant-state';
   const DISCARD_STATE_STYLE_ID = 'impeccable-discard-state';
 
-  // Dedicated key for scroll position - SEPARATE from LS_KEY so that
-  // saveSession's state updates don't clobber a carefully-captured scrollY.
-  // (Previously: saveSession wrote scrollY alongside state, so every call
+  // Dedicated key for sc 
+ position - SEPARATE from LS_KEY so that
+  // saveSession's state updates don't clobber a carefully-captured sc 
+Y.
+  // (Previously: saveSession wrote sc 
+Y alongside state, so every call
   // during resume overwrote the pre-reload value with whatever the browser
   // had landed on, typically 0.)
-  function writeScrollY(y) { sessionState.writeScrollY(y); }
-  function readScrollY() { return sessionState.readScrollY(); }
-  function clearScrollY() { sessionState.clearScrollY(); }
+  function writeSc 
+Y(y) { sessionState.writeSc 
+Y(y); }
+  function readSc 
+Y() { return sessionState.readSc 
+Y(); }
+  function clearSc 
+Y() { sessionState.clearSc 
+Y(); }
 
-  // Pre-empt the browser: apply manual scroll restoration and jump to the
-  // saved scrollY at script-parse time. Retries on fonts.ready and load
-  // are essential: scrollTo(y) clamps to the current document.scrollHeight,
+  // Pre-empt the browser: apply manual sc 
+ restoration and jump to the
+  // saved sc 
+Y at script-parse time. Retries on fonts.ready and load
+  // are essential: sc 
+To(y) clamps to the current document.sc 
+Height,
   // which is often hundreds of pixels short of the final value until
   // async-loaded fonts swap in and reflow.
   try {
-    history.scrollRestoration = 'manual';
-    const savedY = readScrollY();
+    history.sc 
+Restoration = 'manual';
+    const savedY = readSc 
+Y();
     if (savedY != null) {
       const apply = () => {
-        if (Math.abs(window.scrollY - savedY) > 0.5) {
-          window.scrollTo(0, savedY);
+        if (Math.abs(window.sc 
+Y - savedY) > 0.5) {
+          window.sc 
+To(0, savedY);
         }
       };
       apply();
@@ -245,7 +273,8 @@
   let barHideSeq = 0;
   let pickerEl = null;
   let toastEl = null;
-  let scrollRaf = null;
+  let sc 
+Raf = null;
   let editBadgeEl = null;
   let editBadgeProxyRoot = null;
   let editBadgeProxyByTarget = new Map();
@@ -411,7 +440,8 @@
   // Active while state === 'CONFIGURING'. The overlay is a fixed-positioned
   // sibling of <body> mirroring selectedElement's bounding rect. Click (no
   // drag) drops a comment pin; drag paints a kinpaku SVG stroke. All coords
-  // are stored in element-local CSS px so they survive scroll / resize and
+  // are stored in element-local CSS px so they survive sc 
+ / resize and
   // correlate directly with the captured PNG.
   //
 
@@ -1132,7 +1162,8 @@
 
     // Prefer below the element; fall back to above; if neither fits (element
     // taller than viewport), pin to a stable viewport anchor so the bar
-    // doesn't teleport between top and bottom as the user scrolls.
+    // doesn't teleport between top and bottom as the user sc 
+s.
     let top;
     const belowTop = r.bottom + GAP;
     const aboveTop = r.top - barH - GAP;
@@ -1988,7 +2019,8 @@
    * `document.documentElement` trips "a tree hydrated but some attributes ...
    * didn't match" on the next Fast-Refresh re-render. Keying the cursor off a
    * stable-id <style> keeps the effect off the hydrated host elements (same
-   * shape as the scroll-anchor lock). A falsy cursor clears the rule.
+   * shape as the sc 
+-anchor lock). A falsy cursor clears the rule.
    */
   function setPageInteractionCursor(cursor) {
     let style = document.getElementById(PICK_CURSOR_STYLE_ID);
@@ -2500,7 +2532,8 @@
     input.addEventListener('mousedown', (e) => e.stopPropagation());
     input.addEventListener('click', (e) => {
       e.stopPropagation();
-      try { input.focus({ preventScroll: true }); } catch { input.focus(); }
+      try { input.focus({ preventSc 
+: true }); } catch { input.focus(); }
     });
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
@@ -3530,7 +3563,8 @@
     restoreInlineEditDrafts();
     disableInlineEdit();
     hideBar();
-    stopScrollTracking();
+    stopSc 
+Tracking();
     hideAnnotOverlay();
     clearAnnotations();
     renderEditBadge('hidden');
@@ -3545,7 +3579,8 @@
     // hideBar() restores unsaved EDITING drafts before it disables inline
     // edit; disabling here first would wipe the draft metadata it needs.
     hideBar();
-    stopScrollTracking();
+    stopSc 
+Tracking();
     hideAnnotOverlay();
     clearAnnotations();
     renderEditBadge('hidden');
@@ -4021,7 +4056,9 @@
       pendingTrashBtn.style.opacity = '1';
     }
     if (pendingKeepFixingBtn) pendingKeepFixingBtn.style.display = 'none';
-    if (pendingRollbackBtn) pendingRollbackBtn.style.display = 'none';
+    if (pending 
+backBtn) pending 
+backBtn.style.display = 'none';
     refreshLiveControlsForManualApply();
   }
 
@@ -4046,7 +4083,9 @@
     pendingTrashBtn.style.opacity = pendingApplyInFlight ? '0.58' : '1';
     if (pendingApplyInFlight) {
       if (pendingKeepFixingBtn) pendingKeepFixingBtn.style.display = 'none';
-      if (pendingRollbackBtn) pendingRollbackBtn.style.display = 'none';
+      if (pending 
+backBtn) pending 
+backBtn.style.display = 'none';
       pendingTrashBtn.style.display = 'inline-flex';
     }
     schedulePendingDockPosition();
@@ -4182,7 +4221,9 @@
     }
     if (pendingTrashBtn) pendingTrashBtn.style.display = 'none';
     if (pendingKeepFixingBtn) pendingKeepFixingBtn.style.display = 'inline-flex';
-    if (pendingRollbackBtn) pendingRollbackBtn.style.display = 'inline-flex';
+    if (pending 
+backBtn) pending 
+backBtn.style.display = 'inline-flex';
     if (pendingDockEl) pendingDockEl.style.display = 'inline-flex';
     schedulePendingDockPosition();
     refreshLiveControlsForManualApply();
@@ -4199,7 +4240,9 @@
       );
       if (!res.ok) throw new Error('HTTP ' + res.status);
       if (pendingKeepFixingBtn) pendingKeepFixingBtn.style.display = 'none';
-      if (pendingRollbackBtn) pendingRollbackBtn.style.display = 'none';
+      if (pending 
+backBtn) pending 
+backBtn.style.display = 'none';
       if (pendingTrashBtn) pendingTrashBtn.style.display = 'inline-flex';
     } catch (err) {
       console.error('[impeccable] repair retry failed:', err);
@@ -4208,8 +4251,10 @@
     }
   }
 
-  async function onPendingRollbackClick() {
-    const ok = confirm('Rollback source files to before this Apply and keep the edits staged?');
+  async function onPending 
+backClick() {
+    const ok = confirm(' 
+back source files to before this Apply and keep the edits staged?');
     if (!ok) return;
     try {
       const res = await fetch(
@@ -4217,17 +4262,21 @@
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: TOKEN, pageUrl: location.pathname, action: 'rollback' }),
+          body: JSON.stringify({ token: TOKEN, pageUrl: location.pathname, action: ' 
+back' }),
         },
       );
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const result = await res.json().catch(() => ({}));
       clearStoredManualApplyState();
       updatePendingCounter(numberOrNull(result.remainingCount) || 0);
-      showToast('Rolled back source; copy edits are still staged.', 3500);
+      showToast(' 
+ed back source; copy edits are still staged.', 3500);
     } catch (err) {
-      console.error('[impeccable] manual Apply rollback failed:', err);
-      showToast('Rollback failed - see console', 4000);
+      console.error('[impeccable] manual Apply  
+back failed:', err);
+      showToast(' 
+back failed - see console', 4000);
     }
   }
 
@@ -4284,7 +4333,8 @@
       return;
     }
 
-    if (msg.type === 'manual_edit_repair_rollback_done') {
+    if (msg.type === 'manual_edit_repair_ 
+back_done') {
       clearStoredManualApplyState();
       fetchPendingCount();
       return;
@@ -4567,7 +4617,8 @@
     });
     proxy.addEventListener('mousedown', (event) => {
       stop(event);
-      target.focus?.({ preventScroll: true });
+      target.focus?.({ preventSc 
+: true });
       proxyMouseEvent('mousedown', event, target);
     });
     proxy.addEventListener('mouseup', (event) => {
@@ -5183,12 +5234,15 @@
     if (checkpointReason) queueCheckpoint(checkpointReason);
   }
 
-  function enterRecoveryWaitingForAnchor({ filePath, sessionId, srcWrapper, checkpointReason, trackScroll }) {
+  function enterRecoveryWaitingForAnchor({ filePath, sessionId, srcWrapper, checkpointReason, trackSc 
+ }) {
     recoveryWaitingForAnchor = true;
     selectedElement = document.body;
     setLiveState('GENERATING');
     showBar('generating');
-    if (trackScroll !== false) startScrollTracking();
+    if (trackSc 
+ !== false) startSc 
+Tracking();
     saveSession();
     if (srcWrapper && filePath && sessionId) {
       waitForVariantAnchorAndRetry({ filePath, sessionId, srcWrapper, checkpointReason });
@@ -5817,7 +5871,8 @@
         visibleVariant = visibleVariant > 0 && visibleVariant <= arrivedVariants
           ? visibleVariant
           : (savedVisibleVariant > 0 && savedVisibleVariant <= arrivedVariants ? savedVisibleVariant : 1);
-        enterRecoveryWaitingForAnchor({ checkpointReason: 'component_preview_anchor_missing', trackScroll: true });
+        enterRecoveryWaitingForAnchor({ checkpointReason: 'component_preview_anchor_missing', trackSc 
+: true });
         waitForSvelteComponentTargetAndRetry({ manifestPath, sessionId, manifest });
         return;
       }
@@ -6118,10 +6173,13 @@
     hideShaderOverlay();
     if (pendingSvelteComponentRetryObserver) { pendingSvelteComponentRetryObserver.disconnect(); pendingSvelteComponentRetryObserver = null; }
     if (pendingVariantAnchorRetryObserver) { pendingVariantAnchorRetryObserver.disconnect(); pendingVariantAnchorRetryObserver = null; }
-    // The generate submit armed a scroll lock and a variant observer; a page
-    // the user cannot scroll, watched by a stale observer, is exactly the
+    // The generate submit armed a sc 
+ lock and a variant observer; a page
+    // the user cannot sc 
+, watched by a stale observer, is exactly the
     // wrong place to show a card asking them to act.
-    stopScrollLock();
+    stopSc 
+Lock();
     if (variantObserver) { variantObserver.disconnect(); variantObserver = null; }
     removeVariantStateStylesheet();
     hideBar(true);
@@ -6153,7 +6211,8 @@
     if (variantObserver) { variantObserver.disconnect(); variantObserver = null; }
     if (pendingSvelteComponentRetryObserver) { pendingSvelteComponentRetryObserver.disconnect(); pendingSvelteComponentRetryObserver = null; }
     if (pendingVariantAnchorRetryObserver) { pendingVariantAnchorRetryObserver.disconnect(); pendingVariantAnchorRetryObserver = null; }
-    stopScrollLock();
+    stopSc 
+Lock();
     removeVariantStateStylesheet();
     clearMountErrorCard();
     clearSession();
@@ -6270,7 +6329,8 @@
               sessionId,
               srcWrapper,
               checkpointReason: 'variant_anchor_missing',
-              trackScroll: false,
+              trackSc 
+: false,
             });
             return;
           }
@@ -6551,7 +6611,8 @@
   // divs are scaffolded into page source, so SSR frameworks (Next.js App
   // Router) server-render them; toggling their `hidden` / inline `style` /
   // `--p-*` client-side trips a React 19 hydration mismatch on the next
-  // Fast-Refresh re-render — the same failure mode the scroll-anchor (#276)
+  // Fast-Refresh re-render — the same failure mode the sc 
+-anchor (#276)
   // and pick-cursor (#286) fixes address. A stylesheet rule has the same
   // computed effect without mutating any hydrated element's attributes.
   // (steps params keep driving `data-p-*` attributes, matching scoped CSS.)
@@ -6621,70 +6682,106 @@
       + wrapper + ' > [data-impeccable-variant="original"] { display:block !important; }';
   }
 
-  function resolveScrollLockAnchorTop() {
+  function resolveSc 
+LockAnchorTop() {
     const anchor = resolveBarAnchor();
     if (!anchor?.isConnected) return null;
     const top = anchor.getBoundingClientRect().top;
     return Number.isFinite(top) ? top : null;
   }
 
-  // Hold window.scrollY at a fixed value across DOM mutations inside the
+  // Hold window.sc 
+Y at a fixed value across DOM mutations inside the
   // session's wrapper (HMR patches, variant inserts, cycle swaps).
-  function startScrollLock(sessionId, initialTargetY, initialAnchorTop) {
-    stopScrollLock();
-    scrollLockTargetY = typeof initialTargetY === 'number' && isFinite(initialTargetY)
+  function startSc 
+Lock(sessionId, initialTargetY, initialAnchorTop) {
+    stopSc 
+Lock();
+    sc 
+LockTargetY = typeof initialTargetY === 'number' && isFinite(initialTargetY)
       ? initialTargetY
-      : window.scrollY;
-    scrollLockAnchorTop = typeof initialAnchorTop === 'number' && isFinite(initialAnchorTop)
+      : window.sc 
+Y;
+    sc 
+LockAnchorTop = typeof initialAnchorTop === 'number' && isFinite(initialAnchorTop)
       ? initialAnchorTop
-      : resolveScrollLockAnchorTop();
+      : resolveSc 
+LockAnchorTop();
 
-    try { history.scrollRestoration = 'manual'; } catch {}
+    try { history.sc 
+Restoration = 'manual'; } catch {}
 
-    // Suppress the browser's scroll-anchoring on the scroll root so it can't
-    // fight our manual scroll correction. Apply this as a stylesheet rule, not
+    // Suppress the browser's sc 
+-anchoring on the sc 
+ root so it can't
+    // fight our manual sc 
+ correction. Apply this as a stylesheet rule, not
     // as inline `style` on <html>/<body>: those elements are server-rendered by
     // frameworks like Next.js App Router, and mutating their inline style makes
     // React 19 report a hydration mismatch on the next Fast-Refresh re-render.
     // A <style> rule has the same computed effect without touching any hydrated
     // element's attributes. Like the inline version, it is recreated on every
-    // startScrollLock call, so reload survival (driven by the persisted scroll
+    // startSc 
+Lock call, so reload survival (driven by the persisted sc 
+
     // key) is unaffected.
-    let anchorLockStyle = document.getElementById(SCROLL_ANCHOR_LOCK_ID);
+    let anchorLockStyle = document.getElementById(SC 
+_ANCHOR_LOCK_ID);
     if (!anchorLockStyle) {
       anchorLockStyle = document.createElement('style');
-      anchorLockStyle.id = SCROLL_ANCHOR_LOCK_ID;
+      anchorLockStyle.id = SC 
+_ANCHOR_LOCK_ID;
       anchorLockStyle.textContent = 'html,body{overflow-anchor:none !important;}';
       (document.head || document.documentElement).appendChild(anchorLockStyle);
     }
 
     const correct = (why) => {
-      scrollLockRaf = null;
-      if (scrollLockTargetY == null) return;
+      sc 
+LockRaf = null;
+      if (sc 
+LockTargetY == null) return;
       const anchor = resolveBarAnchor();
-      if (anchor?.isConnected && typeof scrollLockAnchorTop === 'number' && isFinite(scrollLockAnchorTop)) {
+      if (anchor?.isConnected && typeof sc 
+LockAnchorTop === 'number' && isFinite(sc 
+LockAnchorTop)) {
         const anchorTop = anchor.getBoundingClientRect().top;
-        const anchorDelta = anchorTop - scrollLockAnchorTop;
+        const anchorDelta = anchorTop - sc 
+LockAnchorTop;
         if (Math.abs(anchorDelta) >= 0.5) {
-          window.scrollTo({ top: window.scrollY + anchorDelta, left: window.scrollX, behavior: 'instant' });
-          scrollLockTargetY = window.scrollY;
-          writeScrollY(scrollLockTargetY);
+          window.sc 
+To({ top: window.sc 
+Y + anchorDelta, left: window.sc 
+X, behavior: 'instant' });
+          sc 
+LockTargetY = window.sc 
+Y;
+          writeSc 
+Y(sc 
+LockTargetY);
           return;
         }
       }
-      const before = window.scrollY;
-      const delta = before - scrollLockTargetY;
+      const before = window.sc 
+Y;
+      const delta = before - sc 
+LockTargetY;
       if (Math.abs(delta) < 0.5) {
         return;
       }
-      window.scrollTo({ top: scrollLockTargetY, left: window.scrollX, behavior: 'instant' });
+      window.sc 
+To({ top: sc 
+LockTargetY, left: window.sc 
+X, behavior: 'instant' });
     };
     const schedule = (why) => {
-      if (scrollLockRaf != null) return;
-      scrollLockRaf = requestAnimationFrame(() => correct(why));
+      if (sc 
+LockRaf != null) return;
+      sc 
+LockRaf = requestAnimationFrame(() => correct(why));
     };
 
-    scrollLockObserver = new MutationObserver((mutations) => {
+    sc 
+LockObserver = new MutationObserver((mutations) => {
       for (const m of mutations) {
         if (m.target?.closest?.('[data-impeccable-variants="' + sessionId + '"]')) {
           schedule('mutation-in-wrapper');
@@ -6698,26 +6795,46 @@
         }
       }
     });
-    scrollLockObserver.observe(document.body, { childList: true, subtree: true });
+    sc 
+LockObserver.observe(document.body, { childList: true, subtree: true });
 
-    scrollLockAbort = new AbortController();
-    scrollLockAbort.signal.addEventListener('abort', () => {
-      document.getElementById(SCROLL_ANCHOR_LOCK_ID)?.remove();
+    sc 
+LockAbort = new AbortCont 
+er();
+    sc 
+LockAbort.signal.addEventListener('abort', () => {
+      document.getElementById(SC 
+_ANCHOR_LOCK_ID)?.remove();
     }, { once: true });
-    const sig = { signal: scrollLockAbort.signal };
-    // Track whether the most recent scroll came from a user gesture. We
-    // gate user-scroll re-anchoring on this flag so programmatic smooth
-    // scrolls (browser reload-restore, scrollIntoView from other scripts)
+    const sig = { signal: sc 
+LockAbort.signal };
+    // Track whether the most recent sc 
+ came from a user gesture. We
+    // gate user-sc 
+ re-anchoring on this flag so programmatic smooth
+    // sc 
+s (browser reload-restore, sc 
+IntoView from other scripts)
     // don't accidentally update our target.
     let userGestureAt = 0;
     const USER_GESTURE_WINDOW_MS = 250;
 
     const reanchor = (why) => {
-      if (scrollLockRaf != null) { cancelAnimationFrame(scrollLockRaf); scrollLockRaf = null; }
-      const prevTarget = scrollLockTargetY;
-      scrollLockTargetY = window.scrollY;
-      scrollLockAnchorTop = resolveScrollLockAnchorTop();
-      writeScrollY(scrollLockTargetY);
+      if (sc 
+LockRaf != null) { cancelAnimationFrame(sc 
+LockRaf); sc 
+LockRaf = null; }
+      const prevTarget = sc 
+LockTargetY;
+      sc 
+LockTargetY = window.sc 
+Y;
+      sc 
+LockAnchorTop = resolveSc 
+LockAnchorTop();
+      writeSc 
+Y(sc 
+LockTargetY);
     };
     const markGesture = (why) => {
       userGestureAt = performance.now();
@@ -6730,34 +6847,64 @@
       if (['PageDown', 'PageUp', ' ', 'End', 'Home', 'ArrowDown', 'ArrowUp'].includes(e.key)) markGesture('key:' + e.key);
     }, sig);
 
-    // Correct on EVERY scroll event: whether it's the browser's
+    // Correct on EVERY sc 
+ event: whether it's the browser's
     // post-reload animated restore or some other script calling
-    // scrollIntoView, we want to snap back immediately. Only skip if a
+    // sc 
+IntoView, we want to snap back immediately. Only skip if a
     // user gesture fired in the last 250ms.
-    window.addEventListener('scroll', () => {
-      const now = window.scrollY;
-      if (scrollLockTargetY == null) return;
+    window.addEventListener('sc 
+', () => {
+      const now = window.sc 
+Y;
+      if (sc 
+LockTargetY == null) return;
       if (performance.now() - userGestureAt < USER_GESTURE_WINDOW_MS) return;
-      if (Math.abs(now - scrollLockTargetY) < 0.5) return;
-      window.scrollTo({ top: scrollLockTargetY, left: window.scrollX, behavior: 'instant' });
+      if (Math.abs(now - sc 
+LockTargetY) < 0.5) return;
+      window.sc 
+To({ top: sc 
+LockTargetY, left: window.sc 
+X, behavior: 'instant' });
     }, { passive: true, ...sig });
 
     // Apply target synchronously, not via rAF - racing the browser's
-    // restore or a smooth-scroll animation means we want to win now.
-    if (Math.abs(window.scrollY - scrollLockTargetY) > 0.5) {
-      window.scrollTo({ top: scrollLockTargetY, left: window.scrollX, behavior: 'instant' });
+    // restore or a smooth-sc 
+ animation means we want to win now.
+    if (Math.abs(window.sc 
+Y - sc 
+LockTargetY) > 0.5) {
+      window.sc 
+To({ top: sc 
+LockTargetY, left: window.sc 
+X, behavior: 'instant' });
     }
   }
 
-  function stopScrollLock() {
-    if (scrollLockObserver) { scrollLockObserver.disconnect(); scrollLockObserver = null; }
-    if (scrollLockRaf != null) { cancelAnimationFrame(scrollLockRaf); scrollLockRaf = null; }
-    if (scrollLockAbort) { scrollLockAbort.abort(); scrollLockAbort = null; }
-    scrollLockTargetY = null;
-    scrollLockAnchorTop = null;
-    // NOTE: do NOT clear the persistent scroll key here. startScrollLock
+  function stopSc 
+Lock() {
+    if (sc 
+LockObserver) { sc 
+LockObserver.disconnect(); sc 
+LockObserver = null; }
+    if (sc 
+LockRaf != null) { cancelAnimationFrame(sc 
+LockRaf); sc 
+LockRaf = null; }
+    if (sc 
+LockAbort) { sc 
+LockAbort.abort(); sc 
+LockAbort = null; }
+    sc 
+LockTargetY = null;
+    sc 
+LockAnchorTop = null;
+    // NOTE: do NOT clear the persistent sc 
+ key here. startSc 
+Lock
     // calls us as a reset, and clearing the key would nuke the Go-time
-    // scrollY that the next resume needs to read.
+    // sc 
+Y that the next resume needs to read.
   }
 
   //
@@ -6873,10 +7020,12 @@
   }
 
   //
-  // Bar scroll tracking
+  // Bar sc 
+ tracking
   //
 
-  function startScrollTracking() {
+  function startSc 
+Tracking() {
     function tick() {
       if (state === 'CONFIGURING' || state === 'GENERATING' || state === 'CYCLING') {
         if (isInsertGeneratingSession()) ensureInsertPlaceholder();
@@ -6901,13 +7050,19 @@
       // Shader overlay (via debug P toggle or generation) is repositioned
       // by its own branch below; debug no longer has a separate overlay.
       if (shaderState) positionShaderOverlay();
-      scrollRaf = requestAnimationFrame(tick);
+      sc 
+Raf = requestAnimationFrame(tick);
     }
-    scrollRaf = requestAnimationFrame(tick);
+    sc 
+Raf = requestAnimationFrame(tick);
   }
 
-  function stopScrollTracking() {
-    if (scrollRaf) { cancelAnimationFrame(scrollRaf); scrollRaf = null; }
+  function stopSc 
+Tracking() {
+    if (sc 
+Raf) { cancelAnimationFrame(sc 
+Raf); sc 
+Raf = null; }
   }
 
   //
@@ -6986,7 +7141,8 @@
         case 'manual_edit_apply_reply_received':
         case 'manual_edit_apply_dispatched':
         case 'manual_edit_repair_needs_decision':
-        case 'manual_edit_repair_rollback_done':
+        case 'manual_edit_repair_ 
+back_done':
         case 'manual_edit_commit_done':
         case 'manual_edit_commit_failed':
           handleManualEditActivity(msg);
@@ -7128,9 +7284,11 @@
     hideHighlight();
     hideShaderOverlay();
     hideAnnotOverlay();
-    stopScrollTracking();
+    stopSc 
+Tracking();
     if (variantObserver) { variantObserver.disconnect(); variantObserver = null; }
-    stopScrollLock();
+    stopSc 
+Lock();
     // Preserve local session state on server loss. The durable journal is the
     // source of truth, but localStorage plus the variant wrapper lets the UI
     // resume after a helper restart or page reload instead of treating a
@@ -7340,7 +7498,8 @@
       clearAnnotations();
       showAnnotOverlay(placeholder);
       showBar('configure');
-      startScrollTracking();
+      startSc 
+Tracking();
       return;
     }
     if (state !== 'PICKING' || !pickActive) return;
@@ -7359,7 +7518,8 @@
     showAnnotOverlay(selectedElement);
     showBar('configure');
     renderEditBadge(hasTextRows(selectedElement) ? 'idle' : 'hidden');
-    startScrollTracking();
+    startSc 
+Tracking();
     maybePrefetchPage();
     maybeWarnConditionalAncestor(selectedElement);
   }
@@ -7536,7 +7696,8 @@
         showAnnotOverlay(selectedElement);
         showBar('configure');
         renderEditBadge(hasTextRows(selectedElement) ? 'idle' : 'hidden');
-        startScrollTracking();
+        startSc 
+Tracking();
         return;
       }
       if (next) {
@@ -7551,10 +7712,12 @@
           showBar('configure');
           disableInlineEdit();
           renderEditBadge(hasTextRows(selectedElement) ? 'idle' : 'hidden');
-          startScrollTracking();
+          startSc 
+Tracking();
         }
         showHighlight(next);
-        next.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        next.sc 
+IntoView({ block: 'nearest', behavior: 'smooth' });
       }
       return;
     }
@@ -7632,17 +7795,22 @@
     showBar('generating');
     saveSession();
     sendCheckpoint('generate_started');
-    writeScrollY(window.scrollY);
+    writeSc 
+Y(window.sc 
+Y);
     if (variantObserver) variantObserver.disconnect();
     variantObserver = startVariantObserver(currentSessionId);
-    startScrollLock(currentSessionId, window.scrollY, pickedAnchorViewportTop);
+    startSc 
+Lock(currentSessionId, window.sc 
+Y, pickedAnchorViewportTop);
 
     captureAndEmit(elForCapture, basePayload, snapshot, captureRect);
   }
 
   function cancelInsertConfigure() {
     hideBar();
-    stopScrollTracking();
+    stopSc 
+Tracking();
     hideAnnotOverlay();
     clearAnnotations();
     clearInsertPicking();
@@ -7711,13 +7879,18 @@
 
     setLiveState('GENERATING');
     showBar('generating');
-    startScrollTracking();
+    startSc 
+Tracking();
     saveSession();
     sendCheckpoint('generate_started');
-    writeScrollY(window.scrollY);
+    writeSc 
+Y(window.sc 
+Y);
     if (variantObserver) variantObserver.disconnect();
     variantObserver = startVariantObserver(currentSessionId);
-    startScrollLock(currentSessionId, window.scrollY, pickedAnchorViewportTop);
+    startSc 
+Lock(currentSessionId, window.sc 
+Y, pickedAnchorViewportTop);
     captureAndEmit(elForCapture, basePayload, snapshot, captureRect);
   }
 
@@ -8083,7 +8256,8 @@
   //
   // Shader overlay - renders the captured screenshot as a WebGL texture and
   // runs an editorial "ink-wash" fragment shader over it during generation.
-  // A single rolling band sweeps top-to-bottom, desaturating + tinting kinpaku
+  // A single  
+ing band sweeps top-to-bottom, desaturating + tinting kinpaku
   // and leaving a soft trail. Makes the wait feel like a letterpress scan
   // instead of a dead spinner.
   //
@@ -8104,7 +8278,8 @@ uniform vec3 u_accent;
 uniform vec3 u_paper;
 varying vec2 v_uv;
 
-// Asymmetric roller band. Product of two one-sided smoothsteps - peaks at
+// Asymmetric  
+er band. Product of two one-sided smoothsteps - peaks at
 // d=0 with a short sharp leading ramp and a longer soft trailing tail. Clean
 // outside the [-leadW, trailW] range (no rogue "trail=1 everywhere below"
 // failure that reversed-edge smoothstep would give).
@@ -8116,7 +8291,8 @@ float bandAt(float d, float leadW, float trailW) {
 
 void main() {
   vec2 uv = v_uv;
-  // Roller sweeps top-to-bottom with small overshoot so each cycle enters
+  //  
+er sweeps top-to-bottom with small overshoot so each cycle enters
   // and exits the element cleanly.
   float phase = fract(u_time / 3.4);
   float y = phase * 1.25 - 0.12;
@@ -8138,7 +8314,8 @@ void main() {
   float contrast = clamp(length(cellImg - u_paper) / 1.732, 0.0, 1.0);
   float radius = min(sqrt(contrast) * 0.6, 0.38);
   float dotMask = smoothstep(radius + 0.06, radius, length(cellUv));
-  // Two-stage dissolve as the roller passes, so the element is rebuilt purely
+  // Two-stage dissolve as the  
+er passes, so the element is rebuilt purely
   // from dot size (its own halftone) and never bleeds through as raw pixels
   // behind the dots:
   //   1. cover  - the element flattens to the uniform paper ground first.
@@ -8650,11 +8827,14 @@ void main() {
   function cleanupAcceptedSession() {
     hideBar();
     hideHighlight();
-    stopScrollTracking();
+    stopSc 
+Tracking();
     if (variantObserver) { variantObserver.disconnect(); variantObserver = null; }
-    stopScrollLock();
+    stopSc 
+Lock();
     removeVariantStateStylesheet();
-    clearScrollY();
+    clearSc 
+Y();
     clearSession();
     resetSessionFileMeta();
     selectedElement = null;
@@ -8873,7 +9053,8 @@ void main() {
     setLiveState('GENERATING');
     recoveryWaitingForAnchor = !restoredAnchor;
     showBar('generating');
-    startScrollTracking();
+    startSc 
+Tracking();
     if (variantObserver) variantObserver.disconnect();
     variantObserver = startVariantObserver(currentSessionId);
     saveSession();
@@ -8936,7 +9117,9 @@ void main() {
 
   function saveSession() {
     if (!currentSessionId) return;
-    // NOTE: scrollY is stored under a separate key (writeScrollY). Storing
+    // NOTE: sc 
+Y is stored under a separate key (writeSc 
+Y). Storing
     // it here would overwrite the Go-time value every time state changes.
     sessionState.saveSession({
       id: currentSessionId,
@@ -9033,12 +9216,15 @@ void main() {
     }
     hideBar(instantChrome);
     hideHighlight();
-    stopScrollTracking();
+    stopSc 
+Tracking();
     if (variantObserver) { variantObserver.disconnect(); variantObserver = null; }
     if (pendingVariantAnchorRetryObserver) { pendingVariantAnchorRetryObserver.disconnect(); pendingVariantAnchorRetryObserver = null; }
-    stopScrollLock();
+    stopSc 
+Lock();
     removeVariantStateStylesheet();
-    clearScrollY();
+    clearSc 
+Y();
     finalizeInsertSession();
     clearSession();
     resetSessionFileMeta();
@@ -9161,7 +9347,8 @@ void main() {
       setLiveState('CYCLING');
       hideShaderOverlay();
       showBar('cycling');
-      startScrollTracking();
+      startSc 
+Tracking();
       refreshParamsPanel();
       saveSession();
       queueCheckpoint('browser_resumed_svelte_component');
@@ -9205,7 +9392,8 @@ void main() {
     if (visibleVariant > 0) showVariantInDOM(currentSessionId, visibleVariant);
 
     showBar(state === 'CYCLING' ? 'cycling' : 'generating');
-    startScrollTracking();
+    startSc 
+Tracking();
     // Build the params panel for the restored visible variant. Previously
     // this was missed on page-reload resume: showVariantInDOM above fires
     // refreshParamsPanel, but state was still IDLE at that moment so it
@@ -9224,7 +9412,9 @@ void main() {
 
     // Hold the target at its saved viewport top through any subsequent
     // HMR patches, variant inserts, or cycle swaps.
-    startScrollLock(currentSessionId, readScrollY(), pickedAnchorViewportTop);
+    startSc 
+Lock(currentSessionId, readSc 
+Y(), pickedAnchorViewportTop);
 
     // If we reloaded mid-generation (Bun's HTML HMR destroys the shader
     // canvas), re-capture the original's content and restart the shader so
@@ -9332,7 +9522,8 @@ void main() {
   let pendingPillCountEl = null;
   let pendingTrashBtn = null;
   let pendingKeepFixingBtn = null;
-  let pendingRollbackBtn = null;
+  let pending 
+backBtn = null;
   let pendingDockResizeObserver = null;
   let pendingIntroAnimation = null;
   let pendingApplyInFlight = false;
@@ -9481,7 +9672,8 @@ void main() {
     const expandInactive = !!(expanded && !pageChatExpanded);
     applyGlobalBarLabelState(expandInactive, pageChatExpanded);
 
-    if (expandInactive && globalBarEl && globalBarEl.scrollWidth > window.innerWidth - 16) {
+    if (expandInactive && globalBarEl && globalBarEl.sc 
+Width > window.innerWidth - 16) {
       applyGlobalBarLabelState(false);
     }
   }
@@ -9494,7 +9686,8 @@ void main() {
   function pageChatExpandedWidth() {
     if (!pageChatEl || !globalBarEl) return PAGE_CHAT_EXPANDED_MAX_W + 'px';
     const currentChatWidth = pageChatEl.getBoundingClientRect().width || pageChatCollapsedWidthPx();
-    const barWidth = Math.max(globalBarEl.getBoundingClientRect().width || 0, globalBarEl.scrollWidth || 0);
+    const barWidth = Math.max(globalBarEl.getBoundingClientRect().width || 0, globalBarEl.sc 
+Width || 0);
     const nonChatWidth = Math.max(0, barWidth - currentChatWidth);
     const available = window.innerWidth - 16 - nonChatWidth;
     const next = Math.max(pageChatCollapsedWidthPx(), Math.min(PAGE_CHAT_EXPANDED_MAX_W, available));
@@ -9836,7 +10029,8 @@ void main() {
     pageChatInput.style.pointerEvents = 'auto';
     const before = activeElementDeep();
     try { window.focus(); } catch { /* embed may block */ }
-    try { pageChatInput.focus({ preventScroll: true }); } catch { pageChatInput.focus(); }
+    try { pageChatInput.focus({ preventSc 
+: true }); } catch { pageChatInput.focus(); }
     syncPageChatFocusRing();
     syncPageChatChrome();
     steerFocusLog('focusSteerChat result', {
@@ -9914,7 +10108,8 @@ void main() {
 
   function focusPageChatInput(reason) {
     if (!preparePageChatInputForTyping() || steerLocked) return false;
-    try { pageChatInput.focus({ preventScroll: true }); } catch { pageChatInput.focus(); }
+    try { pageChatInput.focus({ preventSc 
+: true }); } catch { pageChatInput.focus(); }
     const focused = activeElementDeep() === pageChatInput;
     if (focused) steerInputWasFocused = true;
     syncPageChatFocusRing();
@@ -11004,14 +11199,21 @@ void main() {
     pendingKeepFixingBtn = makePendingDecisionBtn('Keep fixing', true);
     pendingKeepFixingBtn.setAttribute('aria-label', 'Ask the agent to keep fixing Apply errors');
     pendingKeepFixingBtn.addEventListener('click', onPendingKeepFixingClick);
-    pendingRollbackBtn = makePendingDecisionBtn('Rollback', false);
-    pendingRollbackBtn.setAttribute('aria-label', 'Rollback source and keep copy edits staged');
-    pendingRollbackBtn.addEventListener('click', onPendingRollbackClick);
+    pending 
+backBtn = makePendingDecisionBtn(' 
+back', false);
+    pending 
+backBtn.setAttribute('aria-label', ' 
+back source and keep copy edits staged');
+    pending 
+backBtn.addEventListener('click', onPending 
+backClick);
 
     pendingDockEl.appendChild(pendingPillEl);
     pendingDockEl.appendChild(pendingTrashBtn);
     pendingDockEl.appendChild(pendingKeepFixingBtn);
-    pendingDockEl.appendChild(pendingRollbackBtn);
+    pendingDockEl.appendChild(pending 
+backBtn);
 
     // Thin divider before the exit button
     const divider = el('span', {
@@ -11308,7 +11510,8 @@ void main() {
       pendingPillCountEl = null;
       pendingTrashBtn = null;
       pendingKeepFixingBtn = null;
-      pendingRollbackBtn = null;
+      pending 
+backBtn = null;
       pendingApplyInFlight = false;
     }
     if (globalBarEl) {
@@ -11515,11 +11718,15 @@ void main() {
         flex: 1; overflow-y: auto;
         padding: 12px 12px 20px;
         background: ${DP.canvas};
-        scrollbar-width: thin;
-        scrollbar-color: ${DP.hairline} transparent;
+        sc 
+bar-width: thin;
+        sc 
+bar-color: ${DP.hairline} transparent;
       }
-      .panel-body::-webkit-scrollbar { width: 8px; }
-      .panel-body::-webkit-scrollbar-thumb { background: ${DP.hairline}; border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+      .panel-body::-webkit-sc 
+bar { width: 8px; }
+      .panel-body::-webkit-sc 
+bar-thumb { background: ${DP.hairline}; border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
 
       /* States */
       .empty, .loading, .error {
@@ -12502,7 +12709,8 @@ void main() {
   //
 
   function init() {
-    try { history.scrollRestoration = 'manual'; } catch {}
+    try { history.sc 
+Restoration = 'manual'; } catch {}
     initHighlight();
     initEditBadge();
     initAnnotOverlay();

@@ -1,11 +1,14 @@
-// The one implementation of world-roll selection.
+// The one implementation of world- 
+ selection.
 //
 // Two copies of this logic used to exist: this repo's concept-seed.mjs and the
-// service repo's functions/api/_worldroll-core.js, whose header claimed they
+// service repo's functions/api/_world 
+-core.js, whose header claimed they
 // matched "exactly". They did not. The API had no breadth gate on either pool,
 // no rating weighting for compositions, and dealt one composition where the
 // seeder dealt three. Because the catalog never ships with the skill, every real
-// user rolls through that API, so those gates reached nobody.
+// user  
+s through that API, so those gates reached nobody.
 //
 // Why generators. The two callers cannot agree on a hash: Node has a
 // synchronous one, Workers only have async crypto.subtle, and concept-seed's
@@ -14,7 +17,8 @@
 // whole seeder async, the selection is written once as a generator that yields
 // batches of strings to hash and resumes with their digests. runSyncSelection
 // and runAsyncSelection below are the only runtime-specific code, about eight
-// lines each. Both digests are the same bytes, so a roll is identical either way.
+// lines each. Both digests are the same bytes, so a  
+ is identical either way.
 //
 // Nothing here reads a file, an environment variable, or the network: callers
 // pass pools in.
@@ -22,7 +26,8 @@
 export const WELL_TIERS = ['graphic', 'interaction', 'atmosphere'];
 
 // Grain: how much of the product a composition composes. Named grain rather than
-// scope because scope already means direction-or-surface on every roll, and
+// scope because scope already means direction-or-surface on every  
+, and
 // 'surface' is already a register value, so a scope of 'surface' would collide
 // with both.
 //
@@ -52,7 +57,8 @@ export const COMPOSITION_GRAINS = [
 export const COMPOSITION_PLATFORMS = ['web', 'android'];
 
 // Both fields are optional and absence means eligible everywhere, so no entry
-// has to be backfilled before this ships and no existing roll changes.
+// has to be backfilled before this ships and no existing  
+ changes.
 export function isGrain(value) {
   return COMPOSITION_GRAINS.includes(value);
 }
@@ -136,8 +142,11 @@ function compositionTickets(pool) {
  *
  * @param {object} options
  * @param {'direction'|'surface'} options.scope
- * @param {string} options.key              same key reproduces the roll
- * @param {number} [options.reroll]         round of the re-roll chain
+ * @param {string} options.key              same key reproduces the  
+
+ * @param {number} [options.re 
+]         round of the re- 
+ chain
  * @param {number|null} [options.minRating] optional floor, skipped per tier it would empty
  * @param {Array} options.concepts          merged concepts with status, review, wellTier, familyId
  * @returns {Generator<string[], {approved: Array, picks: Array}, string[]>}
@@ -150,12 +159,14 @@ function modeAllows(concept, mode) {
   return allowed.includes(mode);
 }
 
-export function* selectApprovedChallengers({ scope, key, reroll = 0, minRating = null, mode = null, concepts }) {
+export function* selectApprovedChallengers({ scope, key, re 
+ = 0, minRating = null, mode = null, concepts }) {
   const approved = concepts.filter(concept => concept.status === 'approved');
   // Direction chooses a durable identity, so it draws worlds; surface designs
   // one page inside a committed identity, so it draws compositions. Duals serve
   // both. A tier with no matching-strength approvals falls back to its full
-  // approved pool rather than starving the roll.
+  // approved pool rather than starving the  
+.
   const wanted = scope === 'direction'
     ? new Set(['world', 'dual'])
     : new Set(['composition', 'dual']);
@@ -195,12 +206,15 @@ export function* selectApprovedChallengers({ scope, key, reroll = 0, minRating =
     if (matching.length > 0) approvedByTier.set(tier, matching);
   }
 
-  // Two challengers per tier, so every roll carries near-zero-translation
+  // Two challengers per tier, so every  
+ carries near-zero-translation
   // graphic systems beside instrument languages and atmosphere worlds, with the
-  // second pick preferring a different family. Tier order is rolled too, to
+  // second pick preferring a different family. Tier order is  
+ed too, to
   // avoid positional bias.
   function* pickRound(round, excluded) {
-    const salt = round === 0 ? '' : `:reroll-${round}`;
+    const salt = round === 0 ? '' : `:re 
+-${round}`;
     const tierOrder = (yield* rank(
       WELL_TIERS.map(id => ({ id })),
       `${scope}:${key}:tiers${salt}`
@@ -232,11 +246,13 @@ export function* selectApprovedChallengers({ scope, key, reroll = 0, minRating =
     return picks;
   }
 
-  // Round n of a re-roll chain excludes everything rounds 0..n-1 drew, so the
+  // Round n of a re- 
+ chain excludes everything rounds 0..n-1 drew, so the
   // same base key reproduces the whole chain.
   const excluded = new Set();
   let picks = yield* pickRound(0, excluded);
-  for (let round = 1; round <= reroll; round += 1) {
+  for (let round = 1; round <= re 
+; round += 1) {
     for (const pick of picks) excluded.add(pick.id);
     picks = yield* pickRound(round, excluded);
   }
@@ -254,15 +270,18 @@ function emptyMatch(grain, platform, platformExcluded = 0) {
  * One input was too weak a counterweight to a model's habitual page skeleton:
  * it became a single optional flourish beside six identity challengers rather
  * than a real search over composition. Distinct composition families are preferred
- * so a roll tests materially different hierarchy, sequence, and interaction
+ * so a  
+ tests materially different hierarchy, sequence, and interaction
  * laws. Cross-mode fallback would make the input misleading, so an absent mode
- * returns nothing rather than borrowing. Re-rolls exclude every earlier set
+ * returns nothing rather than borrowing. Re- 
+s exclude every earlier set
  * until the pool runs out.
  *
  * @param {object} options
  * @param {'direction'|'surface'} options.scope
  * @param {string} options.key
- * @param {number} [options.reroll]
+ * @param {number} [options.re 
+]
  * @param {string|null} [options.mode]  surface register to stay inside
  * @param {string|null} [options.grain]     how much of the product is in play
  * @param {string|null} [options.platform]  delivery target the result has to survive
@@ -270,7 +289,8 @@ function emptyMatch(grain, platform, platformExcluded = 0) {
  * @param {number} [options.count]
  * @returns {Generator<string[], {picks: Array, match: object}, string[]>}
  */
-export function* selectApprovedCompositions({ scope, key, reroll = 0, mode = null, grain = null, platform = null, compositions, count = 3 }) {
+export function* selectApprovedCompositions({ scope, key, re 
+ = 0, mode = null, grain = null, platform = null, compositions, count = 3 }) {
   // Compositions honour the same breadth gate as worlds: one too specific to serve
   // an arbitrary build stays approved for direct briefs and leaves the
   // challenger pool. Falls back to the full approved set rather than returning
@@ -303,7 +323,8 @@ export function* selectApprovedCompositions({ scope, key, reroll = 0, mode = nul
 
   const prior = new Set();
   let picks = [];
-  for (let round = 0; round <= reroll; round += 1) {
+  for (let round = 0; round <= re 
+; round += 1) {
     const available = approved.filter(composition => !prior.has(composition.id));
     const base = available.length >= Math.min(count, approved.length) ? available : approved;
     // Rating weights the draw as it does for worlds. It matters more here
@@ -318,8 +339,10 @@ export function* selectApprovedCompositions({ scope, key, reroll = 0, mode = nul
     const ranked = (yield* rank(
       tickets,
       // The salt keeps the word "staging" deliberately. It is hash input, so
-      // renaming it would re-deal every roll anyone has ever reproduced by key.
-      round === 0 ? `${scope}:${key}:staging` : `${scope}:${key}:staging:reroll-${round}`,
+      // renaming it would re-deal every  
+ anyone has ever reproduced by key.
+      round === 0 ? `${scope}:${key}:staging` : `${scope}:${key}:staging:re 
+-${round}`,
       entry => `${entry.composition.id}#${entry.ticket}`
     )).map(entry => entry.composition);
 
@@ -350,7 +373,8 @@ export function* selectApprovedCompositions({ scope, key, reroll = 0, mode = nul
       if (picks.length >= count) break;
       if (!picks.some(pick => pick.id === composition.id)) picks.push(composition);
     }
-    if (round < reroll) picks.forEach(composition => prior.add(composition.id));
+    if (round < re 
+) picks.forEach(composition => prior.add(composition.id));
   }
 
   const atGrain = grain ? picks.filter(composition => composition.grain === grain).length : null;

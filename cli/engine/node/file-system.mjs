@@ -171,9 +171,13 @@ async function isPortListening(port, fingerprint = null) {
 
   // HTTP probe with fingerprint matching
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2000);
-    const res = await fetch(`http://localhost:${port}/`, { signal: controller.signal, redirect: 'follow' });
+    const cont 
+er = new AbortCont 
+er();
+    const timeout = setTimeout(() => cont 
+er.abort(), 2000);
+    const res = await fetch(`http://localhost:${port}/`, { signal: cont 
+er.signal, redirect: 'follow' });
     clearTimeout(timeout);
 
     // Check header fingerprint

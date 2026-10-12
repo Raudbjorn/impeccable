@@ -19,7 +19,8 @@ buzzwords, no metric-theater, no "trusted by leading teams" wallpaper.
 ## Users
 Working researchers (PhD students, postdocs, principal investigators) who
 already maintain disciplined note-taking systems and are choosing between
-ours and rolling their own in a Zettelkasten plugin.
+ours and  
+ing their own in a Zettelkasten plugin.
 
 ## Positioning
 The research notebook that preserves a scientist's chain of thought instead
@@ -75,7 +76,8 @@ buzzwords, no metric-theater, no "trusted by leading teams" wallpaper.
 ## Users
 Working researchers (PhD students, postdocs, principal investigators) who
 already maintain disciplined note-taking systems and are choosing between
-ours and rolling their own in a Zettelkasten plugin.
+ours and  
+ing their own in a Zettelkasten plugin.
 
 ## Positioning
 The research notebook that preserves a scientist's chain of thought instead

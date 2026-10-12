@@ -19,7 +19,8 @@ serve-question protocol output:
 
 - **pick assigned** returns the chosen `optionId`, the typed steer, the
   `hero`/`board` fields, and the `CHOSEN CARD` directive printed by `--wait`.
-- **re-roll with steer** keeps the daemon alive, `--update` re-deals the next
+- **re- 
+ with steer** keeps the daemon alive, `--update` re-deals the next
   hand, the page reloads itself, and the following pick is terminal (state file
   cleaned up).
 - **canon** returns `optionId: canon` and prints the `CANON CHOSEN` directive.
@@ -29,7 +30,8 @@ serve-question protocol output:
   exists, the `SYNTHETIC` marker is present, and different prompts produce
   different palettes.
 
-The concept-seed direction roll (challengers, `ASSIGNED INDEX`, the no
+The concept-seed direction  
+ (challengers, `ASSIGNED INDEX`, the no
 PRODUCT.md gate) is already covered by `tests/concept-seed.test.mjs` and is not
 repeated here.
 
@@ -38,7 +40,8 @@ repeated here.
 - `user-bot.mjs` is a module plus CLI. Given a workspace dir it resolves the
   running daemon from `.impeccable/questions/<key>.state.json`, opens the page,
   and runs a JSON policy of real clicks: `{"pick":"assigned"}`,
-  `{"reroll":true,"steer":"warmer"}`, `{"pick":"challenger-*"}`,
+  `{"re 
+":true,"steer":"warmer"}`, `{"pick":"challenger-*"}`,
   `{"canon":true}`, `{"close":true}`. The deterministic tier passes an
   already-launched browser in; the CLI launches its own Chromium.
 - `IMPECCABLE_IMAGE_GEN_FAKE=1` switches `skill/scripts/generate-image.mjs` to

@@ -194,7 +194,8 @@ t('items', { count }) // Handles complex plural rules
 - Time estimates for long operations
 
 **Large datasets**:
-- Pagination or virtual scrolling
+- Pagination or virtual sc 
+ing
 - Search/filter capabilities
 - Performance optimization
 - Don't load all 10,000 items at once
@@ -202,7 +203,8 @@ t('items', { count }) // Handles complex plural rules
 **Concurrent operations**:
 - Prevent double-submission (disable button while loading)
 - Handle race conditions
-- Optimistic updates with rollback
+- Optimistic updates with  
+back
 - Conflict resolution
 
 **Permission states**:
@@ -284,8 +286,11 @@ t('items', { count }) // Handles complex plural rules
 // Debounce search input
 const debouncedSearch = debounce(handleSearch, 300);
 
-// Throttle scroll handler
-const throttledScroll = throttle(handleScroll, 100);
+// Throttle sc 
+ handler
+const throttledSc 
+ = throttle(handleSc 
+, 100);
 ```
 
 ## Testing Strategies

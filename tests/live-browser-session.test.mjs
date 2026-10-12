@@ -26,22 +26,27 @@ function loadFactory() {
 }
 
 describe('live-browser-session state helper', () => {
-  it('persists session, handled state, and scroll independently', () => {
+  it('persists session, handled state, and sc 
+ independently', () => {
     const createState = loadFactory();
     const storage = createMemoryStorage();
     const state = createState({ prefix: 'impeccable-live', storage, idFactory: () => 'owner-a' });
 
-    state.writeScrollY(420);
+    state.writeSc 
+Y(420);
     state.saveSession({ id: 'session-a', state: 'CYCLING', visible: 2 });
     state.markHandled('session-a');
 
-    assert.equal(state.readScrollY(), 420);
+    assert.equal(state.readSc 
+Y(), 420);
     assert.equal(state.loadSession().visible, 2);
     assert.equal(state.isHandled('session-a'), true);
 
     state.clearSession();
     assert.equal(state.loadSession(), null);
-    assert.equal(state.readScrollY(), 420, 'scroll key is deliberately independent from session key');
+    assert.equal(state.readSc 
+Y(), 420, 'sc 
+ key is deliberately independent from session key');
   });
 
   it('carries checkpoint revision across reload-equivalent helper instances', () => {

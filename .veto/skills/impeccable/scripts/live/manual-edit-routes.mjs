@@ -103,7 +103,8 @@ export function createManualEditRoutes({
         sendJson(res, 409, { error: 'manual_edit_repair_transaction_missing' });
         return true;
       }
-      const recoveredTransaction = repairOnly ? null : manualApply.rollbackTransaction({
+      const recoveredTransaction = repairOnly ? null : manualApply. 
+backTransaction({
         pageUrl,
         reason: 'manual_edit_commit_recovered_abandoned_transaction',
       });
@@ -118,8 +119,12 @@ export function createManualEditRoutes({
           id: recoveredTransaction.id,
           reason: recoveredTransaction.reason,
           skipped: recoveredTransaction.skipped,
-          rolledBackFiles: recoveredTransaction.rolledBackFiles,
-          rollbackFailures: summarizeManualDiagnostics(recoveredTransaction.rollbackFailures, projectCwd()),
+           
+edBackFiles: recoveredTransaction. 
+edBackFiles,
+           
+backFailures: summarizeManualDiagnostics(recoveredTransaction. 
+backFailures, projectCwd()),
         } : null,
         ...summarizePendingManualEditBatch(projectCwd(), pageUrl),
       });
@@ -185,7 +190,8 @@ export function createManualEditRoutes({
           }
         } catch (err) {
           if (transaction) {
-            manualApply.rollbackTransaction({
+            manualApply. 
+backTransaction({
               pageUrl,
               reason: 'manual_edit_commit_exception',
             });
@@ -245,8 +251,13 @@ export function createManualEditRoutes({
             failed: summarizeManualApplyFailures(result.failed, projectCwd()),
             files: Array.isArray(result.files) ? result.files.slice(0, 20).map((file) => summarizeManualLogFile(file, projectCwd())).filter(Boolean) : [],
             warnings: summarizeManualDiagnostics(result.warnings, projectCwd()),
-            rolledBackFiles: Array.isArray(result.rolledBackFiles) ? result.rolledBackFiles.slice(0, 20).map((file) => summarizeManualLogFile(file, projectCwd())).filter(Boolean) : [],
-            rollbackFailures: summarizeManualDiagnostics(result.rollbackFailures, projectCwd()),
+             
+edBackFiles: Array.isArray(result. 
+edBackFiles) ? result. 
+edBackFiles.slice(0, 20).map((file) => summarizeManualLogFile(file, projectCwd())).filter(Boolean) : [],
+             
+backFailures: summarizeManualDiagnostics(result. 
+backFailures, projectCwd()),
             unreportedFiles: Array.isArray(result.unreportedFiles) ? result.unreportedFiles.slice(0, 20).map((file) => summarizeManualLogFile(file, projectCwd())).filter(Boolean) : undefined,
             noteCount: Array.isArray(result.notes) ? result.notes.length : 0,
             cleared: result.cleared || 0,
@@ -274,24 +285,30 @@ export function createManualEditRoutes({
         if (token !== getToken()) { res.writeHead(401); res.end('Unauthorized'); return; }
         const pageUrl = payload.pageUrl || url.searchParams.get('pageUrl') || null;
         const action = String(payload.action || url.searchParams.get('action') || '').trim().toLowerCase();
-        if (action !== 'rollback') {
+        if (action !== ' 
+back') {
           sendJson(res, 400, { error: 'unsupported_manual_edit_repair_decision', action });
           return;
         }
-        const rollback = manualApply.rollbackTransaction({
+        const  
+back = manualApply. 
+backTransaction({
           pageUrl,
-          reason: 'manual_edit_user_requested_rollback',
+          reason: 'manual_edit_user_requested_ 
+back',
         });
         const { totalCount, perPage } = countPendingByPage(projectCwd());
         const response = {
           action,
           pageUrl,
-          rollback,
+           
+back,
           remainingCount: pageUrl ? (perPage[pageUrl] || 0) : totalCount,
           totalCount,
           perPage,
         };
-        recordManualEditActivity('manual_edit_repair_rollback_done', response);
+        recordManualEditActivity('manual_edit_repair_ 
+back_done', response);
         sendJson(res, 200, response);
       });
       return true;
@@ -304,10 +321,13 @@ export function createManualEditRoutes({
       let discarded;
       let discardedEntries = [];
       let canceledApplyEvents = [];
-      let transactionRollback = null;
+      let transaction 
+back = null;
       try {
         const buffer = readManualEditsBuffer(projectCwd());
-        transactionRollback = manualApply.rollbackTransaction({
+        transaction 
+back = manualApply. 
+backTransaction({
           pageUrl,
           reason: 'manual_edit_discarded',
         });
@@ -328,11 +348,21 @@ export function createManualEditRoutes({
         pageUrl,
         discarded,
         canceledApplyIds: canceledApplyEvents.map((event) => event.id),
-        transactionRollback: transactionRollback ? {
-          id: transactionRollback.id,
-          rolledBackFiles: transactionRollback.rolledBackFiles?.map((file) => summarizeManualLogFile(file, projectCwd())).filter(Boolean) || [],
-          rollbackFailures: summarizeManualDiagnostics(transactionRollback.rollbackFailures, projectCwd()),
-          skipped: transactionRollback.skipped,
+        transaction 
+back: transaction 
+back ? {
+          id: transaction 
+back.id,
+           
+edBackFiles: transaction 
+back. 
+edBackFiles?.map((file) => summarizeManualLogFile(file, projectCwd())).filter(Boolean) || [],
+           
+backFailures: summarizeManualDiagnostics(transaction 
+back. 
+backFailures, projectCwd()),
+          skipped: transaction 
+back.skipped,
         } : undefined,
         totalCount,
       });

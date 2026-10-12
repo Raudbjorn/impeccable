@@ -17,24 +17,32 @@ async function launchBrowser(puppeteer, { headless = true, args = [] } = {}) {
 }
 
 // Reveal sweep + invisible-text measurement for the content-hidden-at-rest
-// rule. Scrolls through the document with instant jumps (bypasses CSS
-// scroll-behavior: smooth) so IntersectionObserver / scroll reveal handlers
+// rule. Sc 
+s through the document with instant jumps (bypasses CSS
+// sc 
+-behavior: smooth) so IntersectionObserver / sc 
+ reveal handlers
 // get every chance to fire, returns to the top, lets transitions settle,
 // then measures how much text still renders invisible. A healthy
-// reveal-on-scroll page drops to ~0 after the sweep; a page whose reveal
+// reveal-on-sc 
+ page drops to ~0 after the sweep; a page whose reveal
 // script died keeps most of its text at opacity 0.
 async function measureContentHiddenAfterReveal(page) {
   await page.evaluate(async () => {
     const step = Math.max(200, Math.floor(window.innerHeight * 0.7));
     const max = Math.max(
-      document.documentElement.scrollHeight || 0,
-      document.body?.scrollHeight || 0,
+      document.documentElement.sc 
+Height || 0,
+      document.body?.sc 
+Height || 0,
     );
     for (let y = 0; y <= max; y += step) {
-      window.scrollTo({ top: y, left: 0, behavior: 'instant' });
+      window.sc 
+To({ top: y, left: 0, behavior: 'instant' });
       await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 40)));
     }
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    window.sc 
+To({ top: 0, left: 0, behavior: 'instant' });
     await new Promise(resolve => setTimeout(resolve, 700));
   });
   return page.evaluate(() => {
@@ -67,7 +75,9 @@ async function runVisualContrastFallback(page, serializedGroups, options, profil
   const maxCandidates = Number.isFinite(options?.visualContrastMaxCandidates)
     ? options.visualContrastMaxCandidates
     : 12;
-  const scrollOffscreen = options?.visualContrastScrollOffscreen !== false;
+  const sc 
+Offscreen = options?.visualContrastSc 
+Offscreen !== false;
   const existingLowContrastSelectors = new Set(
     serializedGroups
       .filter(group => group.findings?.some(f => f.type === 'low-contrast'))
@@ -84,10 +94,13 @@ async function runVisualContrastFallback(page, serializedGroups, options, profil
       ruleId: 'browser-fallback',
       target,
     }, async () => {
-      browserAnalyses = await page.evaluate(async ({ maxCandidates, scrollOffscreen }) => {
+      browserAnalyses = await page.evaluate(async ({ maxCandidates, sc 
+Offscreen }) => {
         if (typeof window.impeccableAnalyzeVisualContrast !== 'function') return [];
-        return window.impeccableAnalyzeVisualContrast({ maxCandidates, scrollOffscreen });
-      }, { maxCandidates, scrollOffscreen });
+        return window.impeccableAnalyzeVisualContrast({ maxCandidates, sc 
+Offscreen });
+      }, { maxCandidates, sc 
+Offscreen });
       return browserAnalyses
         .filter(result => result.finding && !existingLowContrastSelectors.has(result.selector))
         .map(result => result.finding);
@@ -329,7 +342,8 @@ async function detectUrl(rawUrl, options = {}) {
     });
     // Content invisible at rest: reveal sweep, then re-measure. Runs after
     // the main scan (which must see the true at-rest state) and before the
-    // visual contrast fallback (the sweep restores scroll to the top).
+    // visual contrast fallback (the sweep restores sc 
+ to the top).
     if (options?.contentHidden !== false) {
       const hiddenFindings = await profileFindingsAsync(profile, {
         engine: 'browser',

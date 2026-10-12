@@ -134,8 +134,10 @@ if (IS_BROWSER) {
     return r.top >= 0 && r.left >= 0 && r.bottom <= window.innerHeight && r.right <= window.innerWidth;
   }
 
-  // Reposition spotlight on scroll/resize
-  window.addEventListener('scroll', () => {
+  // Reposition spotlight on sc 
+/resize
+  window.addEventListener('sc 
+', () => {
     if (spotlightTarget) updateSpotlightClipPath();
   }, { passive: true });
   window.addEventListener('resize', () => {
@@ -169,8 +171,10 @@ if (IS_BROWSER) {
       overlay.style.left = `${rect.left - 2}px`;
     } else {
       // Document-relative coords for normal targets
-      overlay.style.top = `${rect.top + scrollY - 2}px`;
-      overlay.style.left = `${rect.left + scrollX - 2}px`;
+      overlay.style.top = `${rect.top + sc 
+Y - 2}px`;
+      overlay.style.left = `${rect.left + sc 
+X - 2}px`;
     }
     overlay.style.width = `${rect.width + 4}px`;
     overlay.style.height = `${rect.height + 4}px`;
@@ -191,8 +195,10 @@ if (IS_BROWSER) {
     resizeRAF = requestAnimationFrame(repositionOverlays);
   };
   window.addEventListener('resize', onResize);
-  // Reposition on scroll too -- catches sticky/parallax shifts
-  window.addEventListener('scroll', onResize, { passive: true });
+  // Reposition on sc 
+ too -- catches sticky/parallax shifts
+  window.addEventListener('sc 
+', onResize, { passive: true });
   // Reposition when body resizes (lazy-loaded images, dynamic content, fonts loading)
   if (typeof ResizeObserver !== 'undefined') {
     const bodyResizeObserver = new ResizeObserver(onResize);
@@ -214,7 +220,8 @@ if (IS_BROWSER) {
         if (!overlay._revealed) {
           overlay._revealed = true;
           if (firstScanDone) {
-            // Subsequent reveals (re-scans, scroll-into-view): instant, no animation
+            // Subsequent reveals (re-scans, sc 
+-into-view): instant, no animation
             overlay.style.animation = 'none';
           } else {
             // Initial scan: staggered cascade reveal
@@ -270,8 +277,10 @@ if (IS_BROWSER) {
     outline._isFixed = fixed;
     Object.assign(outline.style, {
       position: fixed ? 'fixed' : 'absolute',
-      top: fixed ? `${rect.top - 2}px` : `${rect.top + scrollY - 2}px`,
-      left: fixed ? `${rect.left - 2}px` : `${rect.left + scrollX - 2}px`,
+      top: fixed ? `${rect.top - 2}px` : `${rect.top + sc 
+Y - 2}px`,
+      left: fixed ? `${rect.left - 2}px` : `${rect.left + sc 
+X - 2}px`,
       width: `${rect.width + 4}px`, height: `${rect.height + 4}px`,
       zIndex: '99999', boxSizing: 'border-box',
     });
@@ -422,13 +431,18 @@ if (IS_BROWSER) {
       banner.style.transform = 'translateY(0)';
     }));
 
-    // Scrollable findings area
-    const scrollArea = document.createElement('div');
-    Object.assign(scrollArea.style, {
+    // Sc 
+able findings area
+    const sc 
+Area = document.createElement('div');
+    Object.assign(sc 
+Area.style, {
       flex: '1', minWidth: '0', overflowX: 'auto', overflowY: 'hidden',
       display: 'flex', gap: '8px', alignItems: 'center',
-      padding: '0 12px', scrollSnapType: 'x mandatory',
-      scrollbarWidth: 'none',
+      padding: '0 12px', sc 
+SnapType: 'x mandatory',
+      sc 
+barWidth: 'none',
     });
     for (const f of findings) {
       const prefix = RULE_CATEGORY[f.type] === 'slop' ? '\u2726 ' : '';
@@ -437,11 +451,14 @@ if (IS_BROWSER) {
       Object.assign(tag.style, {
         background: 'rgba(255,255,255,0.15)', padding: '2px 8px',
         borderRadius: '3px', fontSize: '12px', fontFamily: 'ui-monospace, monospace',
-        whiteSpace: 'nowrap', flexShrink: '0', scrollSnapAlign: 'start',
+        whiteSpace: 'nowrap', flexShrink: '0', sc 
+SnapAlign: 'start',
       });
-      scrollArea.appendChild(tag);
+      sc 
+Area.appendChild(tag);
     }
-    banner.appendChild(scrollArea);
+    banner.appendChild(sc 
+Area);
 
     // Controls area (only in standalone mode, not extension)
     if (!EXTENSION_MODE) {
@@ -694,8 +711,10 @@ if (IS_BROWSER) {
       const isLargeText = fontSize >= WCAG_LARGE_TEXT_PX || (fontSize >= WCAG_LARGE_BOLD_TEXT_PX && fontWeight >= 700);
       const threshold = isLargeText ? 3.0 : 4.5;
       const clip = {
-        x: Math.max(0, Math.floor(rect.left + window.scrollX - 2)),
-        y: Math.max(0, Math.floor(rect.top + window.scrollY - 2)),
+        x: Math.max(0, Math.floor(rect.left + window.sc 
+X - 2)),
+        y: Math.max(0, Math.floor(rect.top + window.sc 
+Y - 2)),
         width: Math.max(1, Math.ceil(rect.width + 4)),
         height: Math.max(1, Math.ceil(rect.height + 4)),
       };
@@ -1182,31 +1201,55 @@ if (IS_BROWSER) {
     // imageOnly is enforced inside the collector, before the candidate cap.
     const candidates = collectVisualContrastCandidates(options);
     const results = [];
-    const shouldScrollOffscreen = options.scrollOffscreen === true;
-    const restoreScroll = { x: window.scrollX, y: window.scrollY };
+    const shouldSc 
+Offscreen = options.sc 
+Offscreen === true;
+    const restoreSc 
+ = { x: window.sc 
+X, y: window.sc 
+Y };
     for (const candidate of candidates) {
-      if (shouldScrollOffscreen && (window.scrollX !== restoreScroll.x || window.scrollY !== restoreScroll.y)) {
-        window.scrollTo(restoreScroll.x, restoreScroll.y);
+      if (shouldSc 
+Offscreen && (window.sc 
+X !== restoreSc 
+.x || window.sc 
+Y !== restoreSc 
+.y)) {
+        window.sc 
+To(restoreSc 
+.x, restoreSc 
+.y);
         await waitForVisualPaint();
       }
       let result = await analyzeVisualContrastCandidate(candidate);
-      if (shouldScrollOffscreen && result.status === 'unresolved' && result.reason === 'text outside viewport') {
+      if (shouldSc 
+Offscreen && result.status === 'unresolved' && result.reason === 'text outside viewport') {
         let el = null;
         try {
           el = document.querySelector(candidate.selector);
         } catch {
           el = null;
         }
-        if (el && typeof el.scrollIntoView === 'function') {
-          el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
+        if (el && typeof el.sc 
+IntoView === 'function') {
+          el.sc 
+IntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
           await waitForVisualPaint();
           result = await analyzeVisualContrastCandidate(candidate);
         }
       }
       results.push(result);
     }
-    if (shouldScrollOffscreen && (window.scrollX !== restoreScroll.x || window.scrollY !== restoreScroll.y)) {
-      window.scrollTo(restoreScroll.x, restoreScroll.y);
+    if (shouldSc 
+Offscreen && (window.sc 
+X !== restoreSc 
+.x || window.sc 
+Y !== restoreSc 
+.y)) {
+      window.sc 
+To(restoreSc 
+.x, restoreSc 
+.y);
     }
     return results;
   }
@@ -1600,8 +1643,10 @@ if (IS_BROWSER) {
       addBrowserFindings(groupMap, f.el || document.body, [{ type: f.type, detail: f.detail }]);
     }
 
-    // Edge-flush cards in horizontal scrollers (browser-only: needs real
-    // layout for the scroller clip box vs card rect math)
+    // Edge-flush cards in horizontal sc 
+ers (browser-only: needs real
+    // layout for the sc 
+er clip box vs card rect math)
     const edgeFlushFindings = checkEdgeFlushCardsDOM().filter(f => _ruleOk(f.type));
     for (const f of edgeFlushFindings) {
       addBrowserFindings(groupMap, f.el || document.body, [{ type: f.type, detail: f.detail }]);
@@ -1676,7 +1721,8 @@ if (IS_BROWSER) {
             const dotEl = document.querySelector(f.selector);
             if (dotEl) {
               const rect = dotEl.getBoundingClientRect();
-              const pageTop = rect.top + (window.scrollY || 0);
+              const pageTop = rect.top + (window.sc 
+Y || 0);
               if (pageTop <= 900) item.severity = 'error';
             }
           } catch { /* unresolvable selector: keep registry severity */ }
@@ -1832,12 +1878,19 @@ if (IS_BROWSER) {
 
   function visualContrastOptions(options = {}) {
     const config = window.__IMPECCABLE_CONFIG__ || {};
-    const scrollOffscreen = typeof options.scrollOffscreen === 'boolean'
-      ? options.scrollOffscreen
-      : typeof options.visualContrastScrollOffscreen === 'boolean'
-        ? options.visualContrastScrollOffscreen
-        : typeof config.visualContrastScrollOffscreen === 'boolean'
-          ? config.visualContrastScrollOffscreen
+    const sc 
+Offscreen = typeof options.sc 
+Offscreen === 'boolean'
+      ? options.sc 
+Offscreen
+      : typeof options.visualContrastSc 
+Offscreen === 'boolean'
+        ? options.visualContrastSc 
+Offscreen
+        : typeof config.visualContrastSc 
+Offscreen === 'boolean'
+          ? config.visualContrastSc 
+Offscreen
           : false;
     return {
       ...options,
@@ -1848,7 +1901,8 @@ if (IS_BROWSER) {
           : Number.isFinite(config.visualContrastMaxCandidates)
             ? config.visualContrastMaxCandidates
             : undefined,
-      scrollOffscreen,
+      sc 
+Offscreen,
     };
   }
 
@@ -1939,7 +1993,8 @@ if (IS_BROWSER) {
 
   function scheduleLazyVisualContrast(groupMap, analyses, options = {}, runtime = {}) {
     disconnectLazyVisualContrastObserver();
-    if (options.visualContrastLazy === false || options.scrollOffscreen !== false) return;
+    if (options.visualContrastLazy === false || options.sc 
+Offscreen !== false) return;
     if (typeof IntersectionObserver === 'undefined') return;
     const unresolved = (analyses || []).filter(result =>
       result?.status === 'unresolved' &&
@@ -2143,9 +2198,13 @@ if (IS_BROWSER) {
         try {
           const target = e.data.selector ? document.querySelector(e.data.selector) : null;
           if (target) {
-            // Scroll first so positionOverlay reads the post-scroll rect
-            if (!isInViewport(target) && target.scrollIntoView) {
-              target.scrollIntoView({ behavior: 'instant', block: 'center' });
+            // Sc 
+ first so positionOverlay reads the post-sc 
+ rect
+            if (!isInViewport(target) && target.sc 
+IntoView) {
+              target.sc 
+IntoView({ behavior: 'instant', block: 'center' });
             }
             for (const o of overlays) {
               if (o.classList.contains('impeccable-banner')) continue;

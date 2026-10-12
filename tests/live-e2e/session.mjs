@@ -92,7 +92,8 @@ function addNpmInstallDefaults(cmd, args) {
   if (cmd !== 'npm') return args;
   if (!['install', 'ci'].includes(args[0])) return args;
   const out = [...args];
-  // npm can omit platform-specific Rollup binaries unless optional
+  // npm can omit platform-specific  
+up binaries unless optional
   // dependencies are requested explicitly (npm/cli#4828). Astro/Vite then
   // fail before Live starts on fresh staged fixtures.
   for (const flag of ['--no-progress', '--include=optional']) {
@@ -388,7 +389,8 @@ export async function bootFixtureSession({
 
     // Agent loop runs concurrently — abort on teardown.
     if (agent) {
-      agentAbort = new AbortController();
+      agentAbort = new AbortCont 
+er();
       const loopOptions = {
         tmp: appRoot,
         scriptsDir: SCRIPTS_DIR,

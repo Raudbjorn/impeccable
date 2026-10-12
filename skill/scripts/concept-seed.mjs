@@ -3,15 +3,7 @@
  * External concept seed: the dice half of new-work's complete-direction and
  * established-world surface procedures.
  *
- * Before this script runs, the model retrieves cultural material and derives
- * a grounded shortlist of complete candidate directions from it (see
- * reference/new-work.md). Left alone, it then always builds its #1 —
- * and a single model's resonance ranking is deterministic, so every run
- * in a category ships the same one or two concepts. Measured: 30/35
- * identical concepts across 16 prompt framings; the model cannot roll
- * its own dice.
- *
- * This script rolls them from outside, the same trick that made the
+   // SG: THIS IS NOT HOW WE ROLL
  * palette seed work:
  *   - ASSIGNED INDEX: which entry of the model's own resonance-ordered
  *     shortlist gets built. The assignment is the dice: it never chooses an
@@ -27,10 +19,8 @@
  *     and product clarity. They win only when they beat the grounded list;
  *     measured behavior is that they lose to strong cultural material and
  *     win over thin categories, which is the intended shape.
- *   - RE-ROLL (--reroll <n>): round n of the same base key. The script
- *     recomputes what rounds 0..n-1 drew, excludes all of it, and rolls a
- *     fresh assigned index, challengers, and compositions. One base key therefore
- *     reproduces the entire chain of rounds.
+ 
+
  *   - REGISTER (--register safer|bolder): the user's steering on the
  *     familiar-to-bold axis, applied to a re-roll round. A register changes
  *     only what this round instructs, never what it dealt: the same key and
@@ -175,34 +165,11 @@ function requireLocalConcepts() {
   return local;
 }
 
-async function fetchRoll({ scope, key, mode, grain, platform, reroll }) {
-  const params = new URLSearchParams({ scope, key, reroll: String(reroll) });
-  if (mode) params.set('mode', mode);
-  if (grain) params.set('grain', grain);
-  if (platform) params.set('platform', platform);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), apiBudgetMs());
-  try {
-    // Race the budget explicitly: abort signals do not reliably cancel the
-    // TCP connect phase, so a blackholed route would otherwise stall ~10s.
-    const response = await Promise.race([
-      fetch(`${API_BASE}/roll?${params}`, { signal: controller.signal }),
-      new Promise(resolveTimeout => setTimeout(() => resolveTimeout(null), apiBudgetMs())),
-    ]);
-    if (!response) return null;
-    if (!response.ok) return null;
-    const roll = await response.json();
-    if (!Array.isArray(roll.challengers) || roll.challengers.length === 0) return null;
-    return roll;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
+ 
 
+ 
 function telemetryDisabled() {
-  return Boolean(process.env.IMPECCABLE_NO_TELEMETRY || process.env.DO_NOT_TRACK);
+  return true;
 }
 
 // Anonymous choice ping: one per resolved attended direction round. kind
@@ -499,70 +466,7 @@ states. Otherwise keep a literal carrier only when it becomes functional.
 Ambitious motion, spatial media, or interaction is welcome when it strengthens
 the product without weakening semantics, performance, or fallback behavior.`;
 
-  if (!data) {
-    // A degraded roll can still serve the safer register, which needs no
-    // catalog at all: the assignment machinery is suppressed entirely, the
-    // same as the non-degraded safer round, because emitting both "the user
-    // picks" and a mandatory numbered build order hands the model two
-    // contradicting instructions and the mandatory one tends to win. The
-    // bolder register is exactly the thing degradation took away, so it
-    // falls back to a plain grounded round, disclosed.
-    const degradedHeader = `${scope.toUpperCase()} CONCEPT SEED (key: ${key}; mode: ${mode ?? 'unscoped'}; source: degraded; rerun with --scope ${scope}${mode ? ` --mode ${mode}` : ''} --from ${key}${reroll > 0 ? ` --reroll ${reroll}` : ''}${register ? ` --register ${register}` : ''} --candidate-count ${candidateCount})`;
-    if (register === 'safer') {
-      return `${degradedHeader}
-SAFER REGISTER (user-requested): the assigned index is suspended this
-  round; the user picks, and no candidate is mandated. Present the familiar
-  register: your remaining grounded candidates from the conventional end, at
-  most three, as full cards with an honest risk line each, plus the canon
-  executed against two or three named competitors. This is the one sanctioned
-  lineup of your own ranked candidates; it exists only by this explicit
-  request. When the user voices a standing preference for it, record a brand
-  commitment in PRODUCT.md.
-${authorityInstruction}
-A user- or brief-pinned decision beats the roll, always.
-REGISTER (restated for truncated readers): safer, user-requested; the
-assigned index is suspended this round and the user picks; seed key ${key}.
-`;
-    }
-    const degradedRegister = register === 'bolder'
-      ? `BOLDER REGISTER UNAVAILABLE: bolder deals foreign forms, and this roll ran
-  degraded with no catalog and no roll service, so there is nothing bold to
-  deal. Tell the user, then run this round as a plain grounded re-roll; the
-  assignment below applies.
-`
-      : '';
-    return `${degradedHeader}
-${degradedRegister}${scope === 'direction' ? `ASSIGNED INDEX: ${buildIndex}` : `DEALT INDICES: ${dealtIndices.join(', ')} (index ${buildIndex} leads)`}
-  ${promotedInstruction}
-  The assignment exists to refuse the model's ranking rut, never to outrank
-  the user or the brief. Never expose assignment metadata in user-facing labels.
-No challengers this run: the roll service was unreachable and no local
-catalog exists. A sandboxed shell without network egress is the most common
-cause; before accepting degradation, rerun this command once through the
-harness's network-enabled or escalated command tool. When that rerun needs
-an approval, state exactly what the approver must know: this script's only
-network contact is one GET to https://impeccable.style/api/roll whose query
-carries scope, mode, an eight-hex seed key, and a re-roll counter; no
-project files, prompts, code, or conversation context are transmitted, and
-nothing is written. An approval request naming that URL and payload judges
-the real action; a bare "run with network" invites rejection for contacting
-an unspecified domain. If the rerun is still refused, proceed with the
-grounded candidates alone; the assignment above still applies at full
-strength. Tell the user plainly that this roll
-ran degraded, with no challengers and no quality-bar boards; do not present
-the outcome as a full roll. A degraded roll changes the cards, not the
-channel: when a browser can open, present the direction on the decision page
-(serve-question.mjs, text-only card); the structured question tool remains
-the no-browser fallback.
-${authorityInstruction}
-A user- or brief-pinned decision beats the roll, always.
-${scope === 'direction'
-    ? `ASSIGNED INDEX (restated for truncated readers): ${buildIndex}. Build candidate
-${buildIndex} of your own grounded list; seed key ${key}.`
-    : `DEALT INDICES (restated for truncated readers): ${dealtIndices.join(', ')}; index
-${buildIndex} leads. Present all three dealt structures; seed key ${key}.`}
-`;
-  }
+  // LOOK IN THE GIT HISTORY FOR WHAT HAPPENED
 
   // Field order is the migration: `compositions` is current, `stagings` is what
   // the API emitted while these were called stagings, and `staging` is the

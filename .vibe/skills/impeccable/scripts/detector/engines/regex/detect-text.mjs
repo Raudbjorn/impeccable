@@ -757,7 +757,8 @@ const REGEX_ANALYZERS = [
     const lines = content.substring(0, hits[0].index).split('\n');
     return [finding('radial-halo', filePath, hits[0].snippet, lines.length)];
   },
-  // Auto-scrolling marquees (<marquee> or infinite horizontal loop
+  // Auto-sc 
+ing marquees (<marquee> or infinite horizontal loop
   // animations).
   (content, filePath) => scanCssTextForMarquee(content).map(hit => finding('marquee', filePath, hit.snippet)),
 ];

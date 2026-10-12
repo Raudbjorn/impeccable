@@ -117,7 +117,8 @@ export function compRoundOpen(cwd = process.cwd()) {
   if (buildPath === 'code') return null;
   const pending = path.join(cwd, BUILD_DIR, 'pending.json');
   const statePath = path.join(cwd, STATE_PATH);
-  if (fs.existsSync(pending) && !fs.existsSync(statePath)) return { reason: 'a direction was chosen (concept-seed rolled) but build-phase.mjs start never ran', pending };
+  if (fs.existsSync(pending) && !fs.existsSync(statePath)) return { reason: 'a direction was chosen (concept-seed  
+ed) but build-phase.mjs start never ran', pending };
   if (fs.existsSync(statePath)) {
     try {
       const st = JSON.parse(fs.readFileSync(statePath, 'utf8'));
@@ -930,7 +931,8 @@ async function main() {
         console.log(sent ? 'choice recorded' : 'choice ping skipped');
       } catch { console.log('choice ping skipped'); }
     }
-    // Clear the roll's pending marker: the build has started.
+    // Clear the  
+'s pending marker: the build has started.
     try { fs.rmSync(path.join(BUILD_DIR, 'pending.json'), { force: true }); } catch { /* absent */ }
     // Code-led: no phase machine to run; say what comes next and stop.
     const buildPath = readBuildPath();

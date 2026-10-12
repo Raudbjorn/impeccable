@@ -92,7 +92,8 @@ export function ssimShifted(a, b, dx, dy, win = 8) {
 /**
  * Structure score 0..1: SSIM over blurred grayscale at a fixed working width,
  * taking the best of a small translation search so a composition that sits a
- * few pixels off (a different masthead height, a scrollbar) is not read as a
+ * few pixels off (a different masthead height, a sc 
+bar) is not read as a
  * different composition. Shifts up to ~4% of the width are forgiven; a moved
  * region is not.
  */

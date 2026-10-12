@@ -25,7 +25,8 @@ import {
 import fs from 'node:fs';
 import path from 'node:path';
 
-const ROLLBACK_EXTENSIONS = new Set([
+const  
+BACK_EXTENSIONS = new Set([
   '.astro',
   '.cjs',
   '.css',
@@ -50,7 +51,8 @@ const ROLLBACK_EXTENSIONS = new Set([
   '.yaml',
   '.yml',
 ]);
-const ROLLBACK_SKIP_DIRS = new Set([
+const  
+BACK_SKIP_DIRS = new Set([
   '.astro',
   '.git',
   '.impeccable',
@@ -518,7 +520,8 @@ function snapshotTargetPasses(snapshot, target, op) {
   return verificationTargetPassesLines(before.split('\n'), target, op);
 }
 
-function findUnappliedEntrySourceChanges({ batch, entries, reportedFiles, cwd, rollbackSnapshot }) {
+function findUnappliedEntrySourceChanges({ batch, entries, reportedFiles, cwd,  
+backSnapshot }) {
   const failures = [];
   for (const entry of entries || []) {
     for (const rawOp of entry.ops || []) {
@@ -527,7 +530,8 @@ function findUnappliedEntrySourceChanges({ batch, entries, reportedFiles, cwd, r
       const targets = verificationTargetsForOp(batch, op, reportedFiles, cwd);
       const leakedTargets = targets.filter((target) =>
         verificationTargetPasses(cwd, target, op)
-        && !snapshotTargetPasses(rollbackSnapshot, target, op)
+        && !snapshotTargetPasses( 
+backSnapshot, target, op)
       );
       if (leakedTargets.length === 0) continue;
       failures.push({
@@ -572,12 +576,17 @@ function clearAppliedEntries(cwd, appliedEntryIds) {
   return cleared;
 }
 
-function snapshotRollbackFiles(cwd, files = null) {
+function snapshot 
+backFiles(cwd, files = null) {
   const snapshot = new Map();
-  const rollbackFiles = Array.isArray(files) && files.length > 0
-    ? uniqueStrings(files).map((file) => normalizeRollbackPath(cwd, file)).filter(Boolean)
-    : collectRollbackFiles(cwd);
-  for (const relativeFile of rollbackFiles) {
+  const  
+backFiles = Array.isArray(files) && files.length > 0
+    ? uniqueStrings(files).map((file) => normalize 
+backPath(cwd, file)).filter(Boolean)
+    : collect 
+backFiles(cwd);
+  for (const relativeFile of  
+backFiles) {
     const absolute = path.resolve(cwd, relativeFile);
     try {
       snapshot.set(relativeFile, {
@@ -588,21 +597,25 @@ function snapshotRollbackFiles(cwd, files = null) {
       if (err?.code === 'ENOENT') {
         snapshot.set(relativeFile, { existed: false });
       }
-      // Other read failures are not safe to roll back.
+      // Other read failures are not safe to  
+ back.
     }
   }
   return snapshot;
 }
 
-function collectRollbackFiles(cwd) {
+function collect 
+backFiles(cwd) {
   const out = [];
   const seenDirs = new Set();
   const seenFiles = new Set();
-  scanRollbackDir(cwd, cwd, out, seenDirs, seenFiles, 0);
+  scan 
+backDir(cwd, cwd, out, seenDirs, seenFiles, 0);
   return out;
 }
 
-function scanRollbackDir(dir, cwd, out, seenDirs, seenFiles, depth) {
+function scan 
+backDir(dir, cwd, out, seenDirs, seenFiles, depth) {
   if (depth > 10) return;
   let realDir;
   try { realDir = fs.realpathSync(dir); } catch { return; }
@@ -613,12 +626,15 @@ function scanRollbackDir(dir, cwd, out, seenDirs, seenFiles, depth) {
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
   for (const entry of entries) {
     if (entry.isDirectory()) {
-      if (ROLLBACK_SKIP_DIRS.has(entry.name)) continue;
-      scanRollbackDir(path.join(dir, entry.name), cwd, out, seenDirs, seenFiles, depth + 1);
+      if ( 
+BACK_SKIP_DIRS.has(entry.name)) continue;
+      scan 
+backDir(path.join(dir, entry.name), cwd, out, seenDirs, seenFiles, depth + 1);
       continue;
     }
     if (!entry.isFile()) continue;
-    if (!ROLLBACK_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) continue;
+    if (! 
+BACK_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) continue;
     const absolute = path.join(dir, entry.name);
     if (isGeneratedFile(absolute, { cwd })) continue;
     let realFile;
@@ -634,9 +650,11 @@ function scanRollbackDir(dir, cwd, out, seenDirs, seenFiles, depth) {
 function changedFilesSinceSnapshot(cwd, snapshot, scopeFiles = null) {
   const changed = new Map();
   const scopedFiles = Array.isArray(scopeFiles) && scopeFiles.length > 0
-    ? scopeFiles.map((file) => normalizeRollbackPath(cwd, file)).filter(Boolean)
+    ? scopeFiles.map((file) => normalize 
+backPath(cwd, file)).filter(Boolean)
     : null;
-  const currentFiles = new Set(scopedFiles || collectRollbackFiles(cwd));
+  const currentFiles = new Set(scopedFiles || collect 
+backFiles(cwd));
   for (const [relativeFile, before] of snapshot.entries()) {
     if (scopedFiles && !currentFiles.has(relativeFile)) continue;
     const absolute = path.resolve(cwd, relativeFile);
@@ -662,23 +680,28 @@ function changedFilesSinceSnapshot(cwd, snapshot, scopeFiles = null) {
   return [...changed.values()];
 }
 
-function rollbackChangedFiles(cwd, snapshot, extraFiles = [], scopeFiles = []) {
+function  
+backChangedFiles(cwd, snapshot, extraFiles = [], scopeFiles = []) {
   const scope = new Set(
     [...(scopeFiles || []), ...(extraFiles || [])]
-      .map((file) => normalizeRollbackPath(cwd, file))
+      .map((file) => normalize 
+backPath(cwd, file))
       .filter(Boolean),
   );
   const changed = changedFilesSinceSnapshot(cwd, snapshot, [...scope]);
   const byFile = new Map(changed.map((item) => [item.file, item]));
   for (const file of extraFiles || []) {
-    const relative = normalizeRollbackPath(cwd, file);
+    const relative = normalize 
+backPath(cwd, file);
     if (relative && !byFile.has(relative)) {
       byFile.set(relative, { file: relative, kind: snapshot.has(relative) ? 'reported' : 'unknown' });
     }
   }
 
-  const rolledBackFiles = [];
-  const rollbackFailures = [];
+  const  
+edBackFiles = [];
+  const  
+backFailures = [];
   for (const item of byFile.values()) {
     if (!scope.has(item.file)) continue;
     const absolute = path.resolve(cwd, item.file);
@@ -690,15 +713,20 @@ function rollbackChangedFiles(cwd, snapshot, extraFiles = [], scopeFiles = []) {
       } else if (before?.existed === false && item.kind === 'added' && fs.existsSync(absolute)) {
         fs.rmSync(absolute);
       } else {
-        rollbackFailures.push({ file: item.file, reason: 'no_snapshot' });
+         
+backFailures.push({ file: item.file, reason: 'no_snapshot' });
         continue;
       }
-      rolledBackFiles.push(item.file);
+       
+edBackFiles.push(item.file);
     } catch (err) {
-      rollbackFailures.push({ file: item.file, reason: 'restore_failed', message: err.message || String(err) });
+       
+backFailures.push({ file: item.file, reason: 'restore_failed', message: err.message || String(err) });
     }
   }
-  return { rolledBackFiles, rollbackFailures };
+  return {  
+edBackFiles,  
+backFailures };
 }
 
 function collectApplyOwnedFiles(batch, cwd, extraFiles = []) {
@@ -715,19 +743,22 @@ function collectApplyOwnedFiles(batch, cwd, extraFiles = []) {
   }
   files.push(...(extraFiles || []));
   return uniqueStrings(files)
-    .map((file) => normalizeRollbackPath(cwd, file))
+    .map((file) => normalize 
+backPath(cwd, file))
     .filter(Boolean);
 }
 
 function unreportedChangedFiles(cwd, snapshot, reportedFiles, scopeFiles = []) {
   const reported = new Set(
     (reportedFiles || [])
-      .map((file) => normalizeRollbackPath(cwd, file))
+      .map((file) => normalize 
+backPath(cwd, file))
       .filter(Boolean),
   );
   const scope = new Set(
     (scopeFiles || [])
-      .map((file) => normalizeRollbackPath(cwd, file))
+      .map((file) => normalize 
+backPath(cwd, file))
       .filter(Boolean),
   );
   return changedFilesSinceSnapshot(cwd, snapshot, [...scope])
@@ -736,7 +767,8 @@ function unreportedChangedFiles(cwd, snapshot, reportedFiles, scopeFiles = []) {
     .filter((file) => !reported.has(file));
 }
 
-function normalizeRollbackPath(cwd, file) {
+function normalize 
+backPath(cwd, file) {
   return normalizeProjectSourcePath(cwd, file);
 }
 
@@ -957,16 +989,25 @@ export async function commitManualEdits({
     transactionId,
   };
 
-  const baseRollbackScope = collectApplyOwnedFiles(batch, cwd);
-  const rollbackSnapshot = snapshotRollbackFiles(cwd, baseRollbackScope);
-  const failWithRollback = ({
-    scope = baseRollbackScope,
+  const base 
+backScope = collectApplyOwnedFiles(batch, cwd);
+  const  
+backSnapshot = snapshot 
+backFiles(cwd, base 
+backScope);
+  const failWith 
+back = ({
+    scope = base 
+backScope,
     extraFiles = [],
     failed,
     files = [],
     details = {},
   }) => {
-    const rollback = rollbackChangedFiles(cwd, rollbackSnapshot, extraFiles, scope);
+    const  
+back =  
+backChangedFiles(cwd,  
+backSnapshot, extraFiles, scope);
     return {
       applied: [],
       failed,
@@ -975,8 +1016,14 @@ export async function commitManualEdits({
       count,
       pageUrl,
       ...details,
-      rolledBackFiles: rollback.rolledBackFiles,
-      rollbackFailures: rollback.rollbackFailures,
+       
+edBackFiles:  
+back. 
+edBackFiles,
+       
+backFailures:  
+back. 
+backFailures,
       ...countByPage(cwd),
     };
   };
@@ -999,7 +1046,8 @@ export async function commitManualEdits({
           chatAvailable,
         });
   } catch (err) {
-    return failWithRollback({
+    return failWith 
+back({
       failed: batch.entries.map((entry) => ({
         id: entry.id,
         reason: err.message || String(err),
@@ -1009,10 +1057,13 @@ export async function commitManualEdits({
   }
 
   if (result.status === 'error') {
-    const rollbackScope = collectApplyOwnedFiles(batch, cwd, result.files || []);
+    const  
+backScope = collectApplyOwnedFiles(batch, cwd, result.files || []);
     const failed = normalizeFailedEntries(batch, result, result.message || 'AI copy edit failed');
-    return failWithRollback({
-      scope: rollbackScope,
+    return failWith 
+back({
+      scope:  
+backScope,
       extraFiles: result.files || [],
       failed: failed.length > 0
         ? failed
@@ -1027,14 +1078,17 @@ export async function commitManualEdits({
     .map((file) => normalizeRelativeFile(cwd, file))
     .filter(Boolean);
   const aiFailed = normalizeFailedEntries(batch, result, 'AI copy edit failed');
-  const rollbackScope = collectApplyOwnedFiles(batch, cwd, result.files || []);
+  const  
+backScope = collectApplyOwnedFiles(batch, cwd, result.files || []);
   const failedIds = new Set(aiFailed.map((item) => item.id).filter(Boolean));
   const conflictingAppliedIds = reportedAppliedIds.filter((id) => failedIds.has(id));
 
   if (conflictingAppliedIds.length > 0) {
     const conflictingEntries = batch.entries.filter((entry) => conflictingAppliedIds.includes(entry.id));
-    return failWithRollback({
-      scope: rollbackScope,
+    return failWith 
+back({
+      scope:  
+backScope,
       extraFiles: result.files || [],
       failed: [
         ...verificationFailuresForEntries(batch, conflictingEntries, 'conflicting_apply_result'),
@@ -1045,10 +1099,14 @@ export async function commitManualEdits({
     });
   }
 
-  const unreportedFiles = unreportedChangedFiles(cwd, rollbackSnapshot, result.files || [], rollbackScope);
+  const unreportedFiles = unreportedChangedFiles(cwd,  
+backSnapshot, result.files || [],  
+backScope);
   if (unreportedFiles.length > 0) {
-    return failWithRollback({
-      scope: [...rollbackScope, ...unreportedFiles],
+    return failWith 
+back({
+      scope: [... 
+backScope, ...unreportedFiles],
       extraFiles: result.files || [],
       failed: verificationFailuresForEntries(batch, batch.entries, 'unreported_source_changes', { files: unreportedFiles }),
       files: result.files || [],
@@ -1057,8 +1115,10 @@ export async function commitManualEdits({
   }
 
   if (result.status === 'done' && reportedAppliedIds.length === 0) {
-    return failWithRollback({
-      scope: rollbackScope,
+    return failWith 
+back({
+      scope:  
+backScope,
       extraFiles: result.files || [],
       failed: verificationFailuresForEntries(batch, batch.entries, 'missing_applied_entry_ids'),
       files: result.files || [],
@@ -1102,24 +1162,30 @@ export async function commitManualEdits({
     entries: unappliedEntries,
     reportedFiles,
     cwd,
-    rollbackSnapshot,
+     
+backSnapshot,
   });
   if (leakedUnapplied.length > 0) {
     const leakedIds = new Set(leakedUnapplied.map((item) => item.id).filter(Boolean));
-    const rolledBackVerified = reportedAppliedEntries
+    const  
+edBackVerified = reportedAppliedEntries
       .filter((entry) => verifiedAppliedIds.includes(entry.id))
       .map((entry) => ({
         id: entry.id,
-        reason: 'rolled_back_due_to_failed_entry_source_changed',
+        reason: ' 
+ed_back_due_to_failed_entry_source_changed',
         candidates: candidatesForEntry(batch, entry.id),
       }));
-    return failWithRollback({
-      scope: rollbackScope,
+    return failWith 
+back({
+      scope:  
+backScope,
       extraFiles: result.files || [],
       failed: [
         ...leakedUnapplied,
         ...failed.filter((item) => !leakedIds.has(item.id)),
-        ...rolledBackVerified,
+        ... 
+edBackVerified,
       ],
       files: result.files || [],
       details: { notes: result.notes || [] },

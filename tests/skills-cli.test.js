@@ -1877,7 +1877,8 @@ describe('copyProviderHooks: hook command path resolution (#399)', () => {
 
 // A bundle whose omp hook is a JS module, not a JSON manifest — oh-my-pi
 // discovers hooks by file presence under `.omp/hooks/post/`, one file per
-// hook. Real production content (not a hand-rolled stand-in) so the
+// hook. Real production content (not a hand- 
+ed stand-in) so the
 // skillRoot-rewrite tests below exercise the actual HOOK_SCRIPT computation.
 function createOmpBundle(root) {
   const bundleRoot = join(root, 'omp-bundle');

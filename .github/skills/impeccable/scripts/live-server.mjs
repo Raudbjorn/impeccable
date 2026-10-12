@@ -50,7 +50,8 @@ import {
 import { countByPage as countPendingByPage } from './live/manual-edits-buffer.mjs';
 import { collectProjectDetectorIgnores } from './live/project-ignores.mjs';
 import {
-  createManualApplyController,
+  createManualApplyCont 
+er,
   summarizeManualApplyFailures,
 } from './live/manual-apply.mjs';
 import {
@@ -151,7 +152,8 @@ const CHAT_POLL_FRESHNESS_MS = 60_000;
 const POLL_LEASE_EXPIRY_TIMER_GRACE_MS = 2;
 const DEBUG_MANUAL_EDIT_EVENTS = /^(1|true|yes)$/i.test(process.env.IMPECCABLE_LIVE_DEBUG_EVENTS || '');
 
-const manualApply = createManualApplyController({
+const manualApply = createManualApplyCont 
+er({
   pendingEvents: state.pendingEvents,
   pendingApplyDeferreds: state.pendingApplyDeferreds,
   timedOutApplyIds: state.timedOutApplyIds,
@@ -1330,14 +1332,23 @@ function handlePollPost(req, res) {
       return;
     }
     if (manualApply.hasTimedOutId(msg.id)) {
-      const rollback = manualApply.rollbackTimedOutReply(msg);
+      const  
+back = manualApply. 
+backTimedOutReply(msg);
       recordManualEditActivity('manual_edit_apply_stale_reply_rejected', {
         id: msg.id,
-        rolledBackFileCount: rollback.rolledBackFiles?.length || 0,
-        rollbackFailureCount: rollback.rollbackFailures?.length || 0,
+         
+edBackFileCount:  
+back. 
+edBackFiles?.length || 0,
+         
+backFailureCount:  
+back. 
+backFailures?.length || 0,
       });
       res.writeHead(409, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'stale_manual_edit_apply_reply', ...rollback }));
+      res.end(JSON.stringify({ error: 'stale_manual_edit_apply_reply', ... 
+back }));
       return;
     }
     const sourceEventType = msg.sourceEventType || inferSourceEventType(msg);
@@ -1664,7 +1675,8 @@ if (existingRecord?.info) {
 
 state.token = randomUUID();
 state.sessionStore = createLiveSessionStore({ cwd: process.cwd() });
-manualApply.rollbackTransaction({
+manualApply. 
+backTransaction({
   reason: 'manual_edit_server_start_recovered_abandoned_transaction',
 });
 applyLegacyDeferredAcceptsOnStartup();

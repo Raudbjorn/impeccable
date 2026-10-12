@@ -285,7 +285,8 @@ export function compare({ comp, build, spec = null, align = 'top', label = '', k
   let aligned = alignBuild(comp, build, align);
   const whole = scorePair(comp, aligned, kind);
   // Region crops are taken at fixed boxes, so a small global offset (a
-  // taller masthead, a scrollbar) would read every thin region as
+  // taller masthead, a sc 
+bar) would read every thin region as
   // contradicted while the whole-image search forgives it. Find the best
   // global translation once and shift the aligned build by it before
   // cropping regions; the whole score above stays as measured.

@@ -58,7 +58,8 @@
    "id": "fixture-print-family",
    "label": "fixture-print-family",
    "well": "fixture-print",
-   "description": "Fixture family for graphic tier testing with enough approved entries for re-roll chains.",
+   "description": "Fixture family for graphic tier testing with enough approved entries for re- 
+ chains.",
    "concepts": [
     {
      "id": "fixture-print-family-poster-wall",
@@ -77,8 +78,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 1",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 1"
      ],
-     "spark": "The poster wall wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The poster wall wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-print-family-ticket-ledger",
@@ -97,8 +100,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 2",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 2"
      ],
-     "spark": "The ticket ledger wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The ticket ledger wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-print-family-stamp-folio",
@@ -117,8 +122,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 3",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 3"
      ],
-     "spark": "The stamp folio wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The stamp folio wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-print-family-banner-press",
@@ -137,8 +144,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 4",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 4"
      ],
-     "spark": "The banner press wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The banner press wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-print-family-label-archive",
@@ -157,8 +166,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 5",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 5"
      ],
-     "spark": "The label archive wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The label archive wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-print-family-broadsheet-rack",
@@ -177,8 +188,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 6",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 6"
      ],
-     "spark": "The broadsheet rack wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The broadsheet rack wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-print-family-sleeve-library",
@@ -197,8 +210,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 7",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 7"
      ],
-     "spark": "The sleeve library wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The sleeve library wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     }
    ]
   },
@@ -206,7 +221,8 @@
    "id": "fixture-canon-family",
    "label": "fixture-canon-family",
    "well": "fixture-canon",
-   "description": "Fixture family for graphic tier testing with enough approved entries for re-roll chains.",
+   "description": "Fixture family for graphic tier testing with enough approved entries for re- 
+ chains.",
    "concepts": [
     {
      "id": "fixture-canon-family-placard-row",
@@ -225,8 +241,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 8",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 8"
      ],
-     "spark": "The placard row wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The placard row wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-canon-family-card-index",
@@ -245,8 +263,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 9",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 9"
      ],
-     "spark": "The card index wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The card index wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-canon-family-crest-register",
@@ -265,8 +285,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 10",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 10"
      ],
-     "spark": "The crest register wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The crest register wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-canon-family-folio-stand",
@@ -285,8 +307,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 11",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 11"
      ],
-     "spark": "The folio stand wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The folio stand wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-canon-family-plate-cabinet",
@@ -305,8 +329,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 12",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 12"
      ],
-     "spark": "The plate cabinet wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The plate cabinet wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-canon-family-proof-drawer",
@@ -325,8 +351,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 13",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 13"
      ],
-     "spark": "The proof drawer wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The proof drawer wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-canon-family-jacket-shelf",
@@ -345,8 +373,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 14",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 14"
      ],
-     "spark": "The jacket shelf wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The jacket shelf wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     }
    ]
   },
@@ -354,7 +384,8 @@
    "id": "fixture-instruments-family",
    "label": "fixture-instruments-family",
    "well": "fixture-instruments",
-   "description": "Fixture family for interaction tier testing with enough approved entries for re-roll chains.",
+   "description": "Fixture family for interaction tier testing with enough approved entries for re- 
+ chains.",
    "concepts": [
     {
      "id": "fixture-instruments-family-signal-tower",
@@ -373,8 +404,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 15",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 15"
      ],
-     "spark": "The signal tower wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The signal tower wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-instruments-family-gauge-bench",
@@ -393,8 +426,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 16",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 16"
      ],
-     "spark": "The gauge bench wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The gauge bench wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-instruments-family-relay-desk",
@@ -413,8 +448,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 17",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 17"
      ],
-     "spark": "The relay desk wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The relay desk wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-instruments-family-meter-row",
@@ -433,8 +470,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 18",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 18"
      ],
-     "spark": "The meter row wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The meter row wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-instruments-family-dial-cabinet",
@@ -453,8 +492,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 19",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 19"
      ],
-     "spark": "The dial cabinet wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The dial cabinet wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-instruments-family-switch-field",
@@ -473,8 +514,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 20",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 20"
      ],
-     "spark": "The switch field wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The switch field wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-instruments-family-lamp-board",
@@ -493,8 +536,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 21",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 21"
      ],
-     "spark": "The lamp board wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The lamp board wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     }
    ]
   },
@@ -502,7 +547,8 @@
    "id": "fixture-material-family",
    "label": "fixture-material-family",
    "well": "fixture-material",
-   "description": "Fixture family for atmosphere tier testing with enough approved entries for re-roll chains.",
+   "description": "Fixture family for atmosphere tier testing with enough approved entries for re- 
+ chains.",
    "concepts": [
     {
      "id": "fixture-material-family-tide-hall",
@@ -521,8 +567,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 22",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 22"
      ],
-     "spark": "The tide hall wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The tide hall wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-material-family-cloud-loft",
@@ -541,8 +589,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 23",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 23"
      ],
-     "spark": "The cloud loft wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The cloud loft wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-material-family-ember-court",
@@ -561,8 +611,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 24",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 24"
      ],
-     "spark": "The ember court wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The ember court wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-material-family-frost-arcade",
@@ -581,8 +633,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 25",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 25"
      ],
-     "spark": "The frost arcade wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The frost arcade wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-material-family-reed-basin",
@@ -601,8 +655,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 26",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 26"
      ],
-     "spark": "The reed basin wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The reed basin wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-material-family-dusk-quarry",
@@ -621,8 +677,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 27",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 27"
      ],
-     "spark": "The dusk quarry wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The dusk quarry wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-material-family-moss-theatre",
@@ -641,8 +699,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 28",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 28"
      ],
-     "spark": "The moss theatre wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The moss theatre wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     }
    ]
   },
@@ -650,7 +710,8 @@
    "id": "fixture-performed-family",
    "label": "fixture-performed-family",
    "well": "fixture-performed",
-   "description": "Fixture family for atmosphere tier testing with enough approved entries for re-roll chains.",
+   "description": "Fixture family for atmosphere tier testing with enough approved entries for re- 
+ chains.",
    "concepts": [
     {
      "id": "fixture-performed-family-salt-terrace",
@@ -669,8 +730,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 29",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 29"
      ],
-     "spark": "The salt terrace wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The salt terrace wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-performed-family-rain-atrium",
@@ -689,8 +752,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 30",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 30"
      ],
-     "spark": "The rain atrium wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The rain atrium wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-performed-family-pine-gallery",
@@ -709,8 +774,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 31",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 31"
      ],
-     "spark": "The pine gallery wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The pine gallery wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-performed-family-wind-rotunda",
@@ -729,8 +796,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 32",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 32"
      ],
-     "spark": "The wind rotunda wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The wind rotunda wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-performed-family-ash-pavilion",
@@ -749,8 +818,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 33",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 33"
      ],
-     "spark": "The ash pavilion wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The ash pavilion wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-performed-family-dawn-causeway",
@@ -769,8 +840,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 34",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 34"
      ],
-     "spark": "The dawn causeway wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The dawn causeway wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     },
     {
      "id": "fixture-performed-family-kelp-arcade",
@@ -789,8 +862,10 @@
       "Controls/state: reveal, compare, and preserve every meaningful authored state in register 35",
       "Responsive/motion: recompose the spatial law while retaining orientation across breakpoint 35"
      ],
-     "spark": "The kelp arcade wakes as its plates roll over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
-     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and scroll-driven rank reveal"
+     "spark": "The kelp arcade wakes as its plates  
+ over one by one, every register finding its rank while a single saturated signal tracks the decision you have not made yet.",
+     "webLeverage": "CSS grid plate choreography with a keyboard-readable register index and sc 
+-driven rank reveal"
     }
    ]
   }

@@ -190,8 +190,11 @@ describe('live-browser source contracts', () => {
     );
     assert.match(
       SOURCE,
-      /function onPendingRollbackClick\(\)[\s\S]*?\/manual-edit-repair-decision[\s\S]*?action: 'rollback'/,
-      'Rollback should be an explicit user decision through the repair-decision endpoint',
+      /function onPending 
+backClick\(\)[\s\S]*?\/manual-edit-repair-decision[\s\S]*?action: ' 
+back'/,
+      ' 
+back should be an explicit user decision through the repair-decision endpoint',
     );
     const applyStart = SOURCE.indexOf('async function onPendingPillClick');
     const applyEnd = SOURCE.indexOf('async function onPendingTrashClick', applyStart);

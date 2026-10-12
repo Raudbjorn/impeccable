@@ -2,13 +2,16 @@
  * Deterministic smoke tests for the new-work interactive flow.
  *
  * Covers the parts a user actually touches: the serve-question decision page
- * (pick, re-roll + steer + re-deal, canon, tab close) driven through a real
+ * (pick, re- 
+ + steer + re-deal, canon, tab close) driven through a real
  * browser by the scripted user bot, plus the offline fake image generator.
  * No LLM calls; a real Chromium via Playwright supplies full page fidelity
- * (heartbeats, re-roll reload, tab close). Kept OUT of `bun run test` like
+ * (heartbeats, re- 
+ reload, tab close). Kept OUT of `bun run test` like
  * live-e2e; run it with `bun run test:new-work-e2e`.
  *
- * The concept-seed direction roll (challengers, ASSIGNED INDEX, the no
+ * The concept-seed direction  
+ (challengers, ASSIGNED INDEX, the no
  * PRODUCT.md gate) is already covered by tests/concept-seed.test.mjs and is
  * not repeated here.
  *
@@ -136,12 +139,15 @@ describe('new-work-e2e: serve-question decision page', () => {
     const board = makeFakeImage(cwd, 'Fillmore handbill board', 'board.png');
     const payload = {
       title: 'Choose the visual world',
-      question: 'The roll assigned Fillmore Handbill.',
+      question: 'The  
+ assigned Fillmore Handbill.',
       options: [
-        { id: 'assigned', label: 'Fillmore Handbill', kicker: 'THE ROLL', hero, board },
+        { id: 'assigned', label: 'Fillmore Handbill', kicker: 'THE  
+', hero, board },
         { id: 'challenger-teletext', label: 'Teletext Service', body: 'block-mosaic pages' },
       ],
-      reroll: true,
+      re 
+: true,
       canon: true,
       steer: true,
     };
@@ -173,7 +179,8 @@ describe('new-work-e2e: serve-question decision page', () => {
     const payload = {
       title: 'Choose the visual world',
       options: [
-        { id: 'assigned', label: 'First Hand', kicker: 'THE ROLL' },
+        { id: 'assigned', label: 'First Hand', kicker: 'THE  
+' },
         { id: 'challenger-a', label: 'Alt One' },
       ],
     };
@@ -198,41 +205,52 @@ describe('new-work-e2e: serve-question decision page', () => {
     }
   });
 
-  it('(b) re-roll with steer keeps the server alive; --update re-deals; the next pick is terminal', async () => {
+  it('(b) re- 
+ with steer keeps the server alive; --update re-deals; the next pick is terminal', async () => {
     const cwd = makeWorkspace();
-    const key = 'reroll';
+    const key = 're 
+';
     const payload1 = {
       title: 'Choose the visual world',
       options: [
-        { id: 'assigned', label: 'First Hand', kicker: 'THE ROLL' },
+        { id: 'assigned', label: 'First Hand', kicker: 'THE  
+' },
         { id: 'challenger-a', label: 'Alt One' },
       ],
-      reroll: true, steer: true, canon: true,
+      re 
+: true, steer: true, canon: true,
     };
     const payload2 = {
       title: 'Choose the visual world',
       options: [
-        { id: 'assigned', label: 'Second Hand', kicker: 'THE ROLL' },
+        { id: 'assigned', label: 'Second Hand', kicker: 'THE  
+' },
         { id: 'challenger-b', label: 'Alt Two' },
       ],
-      reroll: true, steer: true,
+      re 
+: true, steer: true,
     };
     await startDaemon(cwd, payload1, key);
     try {
-      // Bot drives the whole page: re-roll (with steer) then, after the page
+      // Bot drives the whole page: re- 
+ (with steer) then, after the page
       // reloads into the next hand, pick the assigned card.
       const botPromise = runUserBot({
         workspaceDir: cwd, key, browser,
-        policy: [{ reroll: true, steer: 'colder, more restraint' }, { pick: 'assigned' }],
+        policy: [{ re 
+: true, steer: 'colder, more restraint' }, { pick: 'assigned' }],
       });
 
-      // First answer: the re-roll. Server must stay alive afterwards.
+      // First answer: the re- 
+. Server must stay alive afterwards.
       const first = await waitLoop(cwd, key);
       assert.equal(first.code, 0, first.out);
-      assert.match(first.out, /"optionId":"reroll"/);
+      assert.match(first.out, /"optionId":"re 
+"/);
       assert.match(first.out, /colder, more restraint/);
       assert.ok(existsSync(path.join(cwd, '.impeccable', 'questions', `${key}.state.json`)),
-        'server state file survives a re-roll');
+        'server state file survives a re- 
+');
 
       // Deliver the next hand; the live page reloads itself.
       const nextPayloadPath = path.join(cwd, 'next.json');
@@ -246,7 +264,8 @@ describe('new-work-e2e: serve-question decision page', () => {
       assert.match(second.out, /"optionId":"assigned"/);
 
       const bot = await botPromise;
-      assert.equal(bot.results[0].action, 'reroll');
+      assert.equal(bot.results[0].action, 're 
+');
       assert.ok(bot.results[0].reloaded, 'page reloaded into the next hand');
       assert.equal(bot.results[1].action, 'pick');
 
@@ -264,8 +283,10 @@ describe('new-work-e2e: serve-question decision page', () => {
     const key = 'canon';
     const payload = {
       title: 'Choose the visual world',
-      options: [{ id: 'assigned', label: 'Fillmore Handbill', kicker: 'THE ROLL' }],
-      reroll: true, canon: true, steer: true,
+      options: [{ id: 'assigned', label: 'Fillmore Handbill', kicker: 'THE  
+' }],
+      re 
+: true, canon: true, steer: true,
     };
     await startDaemon(cwd, payload, key);
     try {
@@ -285,8 +306,10 @@ describe('new-work-e2e: serve-question decision page', () => {
     const key = 'close';
     const payload = {
       title: 'Choose the visual world',
-      options: [{ id: 'assigned', label: 'Fillmore Handbill', kicker: 'THE ROLL' }],
-      reroll: true, steer: true,
+      options: [{ id: 'assigned', label: 'Fillmore Handbill', kicker: 'THE  
+' }],
+      re 
+: true, steer: true,
     };
     await startDaemon(cwd, payload, key);
     try {
@@ -316,7 +339,8 @@ describe('new-work-e2e: serve-question decision page', () => {
         },
         { id: 'challenger-hero', label: 'Has A Card', hero },
       ],
-      reroll: true, steer: true,
+      re 
+: true, steer: true,
     };
     const { url } = await startDaemon(cwd, payload, key);
     try {
@@ -359,7 +383,8 @@ describe('new-work-e2e: serve-question decision page', () => {
       title: 'Choose the visual world',
       options: [
         {
-          id: 'assigned', label: 'Shotengai Chalkboard', kicker: 'THE ROLL',
+          id: 'assigned', label: 'Shotengai Chalkboard', kicker: 'THE  
+',
           thesis: 'A hand-lettered neighborhood noticeboard.',
           body: 'Program notes explain how the board changes through the day.',
           palette: ['#18251d', '#f2e8cb'], materials: ['chalk', 'painted timber'],
@@ -391,7 +416,8 @@ describe('new-work-e2e: serve-question decision page', () => {
           comp: path.join(cwd, '.impeccable', 'mocks', 'decision', 'board-missing.webp'),
         },
       ],
-      reroll: true,
+      re 
+: true,
       steer: true,
     };
     const { url } = await startDaemon(cwd, payload, key);
@@ -449,7 +475,8 @@ describe('new-work-e2e: serve-question decision page', () => {
       title: 'Choose the visual world',
       options: [
         {
-          id: 'assigned', label: 'The Seedsman Catalog', kicker: 'THE ROLL', hero: winnerHero,
+          id: 'assigned', label: 'The Seedsman Catalog', kicker: 'THE  
+', hero: winnerHero,
           raised: [{ from: 'challenger-deepsea', raise: 'The catalog now owns its whole viewport.' }],
         },
         // Declined dealt before a competitive card on purpose: the page owns
@@ -465,7 +492,8 @@ describe('new-work-e2e: serve-question decision page', () => {
         },
         { id: 'challenger-waxprint', label: 'Wax Print Market', verdict: 'competitive', hero: winnerHero },
       ],
-      reroll: true, steer: true,
+      re 
+: true, steer: true,
       canon: true,
       canonCard: { label: 'The category standard', thesis: 'What the category ships.' },
     };
@@ -504,13 +532,16 @@ describe('new-work-e2e: serve-question decision page', () => {
     }
   });
 
-  it('(e3) register steers ride the re-roll: the bolder button answers with its register', async () => {
+  it('(e3) register steers ride the re- 
+: the bolder button answers with its register', async () => {
     const cwd = makeWorkspace();
     const key = 'registers';
     const payload = {
       title: 'Choose the visual world',
-      options: [{ id: 'assigned', label: 'The Seedsman Catalog', kicker: 'THE ROLL' }],
-      reroll: { registers: ['safer', 'bolder'] },
+      options: [{ id: 'assigned', label: 'The Seedsman Catalog', kicker: 'THE  
+' }],
+      re 
+: { registers: ['safer', 'bolder'] },
       steer: true,
     };
     const { url } = await startDaemon(cwd, payload, key);
@@ -518,15 +549,21 @@ describe('new-work-e2e: serve-question decision page', () => {
       const context = await browser.newContext();
       const page = await context.newPage();
       await page.goto(url, { waitUntil: 'load' });
-      await page.waitForSelector('#reroll-bolder');
-      assert.ok(await page.$('#reroll-safer'), 'the safer steer renders');
-      assert.ok(await page.$('#reroll'), 'the plain re-roll stays between the registers');
-      await page.click('#reroll-bolder');
+      await page.waitForSelector('#re 
+-bolder');
+      assert.ok(await page.$('#re 
+-safer'), 'the safer steer renders');
+      assert.ok(await page.$('#re 
+'), 'the plain re- 
+ stays between the registers');
+      await page.click('#re 
+-bolder');
       const collected = await waitLoop(cwd, key);
       await context.close();
       assert.equal(collected.code, 0, collected.out);
       const answer = JSON.parse(collected.out.match(/ANSWER: (\{.*\})/)[1]);
-      assert.equal(answer.optionId, 'reroll');
+      assert.equal(answer.optionId, 're 
+');
       assert.equal(answer.register, 'bolder', 'the answer names the requested register');
       assert.match(collected.out, /REGISTER: .*bolder/, 'the register directive tells the agent to re-run the seed');
     } finally {
@@ -540,8 +577,10 @@ describe('new-work-e2e: serve-question decision page', () => {
     const key = 'followup';
     const directionRound = {
       title: 'Choose the visual world',
-      options: [{ id: 'assigned', label: 'The Seedsman Catalog', kicker: 'THE ROLL' }],
-      reroll: true, steer: true,
+      options: [{ id: 'assigned', label: 'The Seedsman Catalog', kicker: 'THE  
+' }],
+      re 
+: true, steer: true,
       followup: true,
     };
     const buildPathRound = {
@@ -605,7 +644,8 @@ describe('new-work-e2e: serve-question decision page', () => {
       steer: true,
       options: [
         {
-          id: 'assigned', label: 'The Ledger Spine', kicker: 'THE ROLL',
+          id: 'assigned', label: 'The Ledger Spine', kicker: 'THE  
+',
           comp: '.impeccable/mocks/decision/assigned.webp',
           wireframe: { regions: [{ label: 'rail', x: 0, y: 0, w: 3, h: 10 }, { label: 'rows', x: 3, y: 0, w: 9, h: 10 }] },
         },
@@ -660,7 +700,8 @@ describe('new-work-e2e: serve-question decision page', () => {
       buildPath: { value: 'code', toggle: true },
       options: [
         {
-          id: 'assigned', label: 'The Ledger Spine', kicker: 'THE ROLL', hero,
+          id: 'assigned', label: 'The Ledger Spine', kicker: 'THE  
+', hero,
           comp: '.impeccable/mocks/decision/assigned.webp',
           viewport: 'A ruled masthead over a dense grid.', risk: 'Reads editorial.',
         },
@@ -738,7 +779,8 @@ describe('new-work-e2e: serve-question decision page', () => {
       title: 'Choose the structure',
       options: [
         {
-          id: 'assigned', label: 'The Ledger Spine', kicker: 'THE ROLL',
+          id: 'assigned', label: 'The Ledger Spine', kicker: 'THE  
+',
           viewport: 'An alphabetical spine with a sticky category rail.',
           wireframe: { cols: 12, rows: 10, regions: [
             { label: 'category rail', x: 0, y: 0, w: 3, h: 10, accent: true },
@@ -747,7 +789,8 @@ describe('new-work-e2e: serve-question decision page', () => {
         },
         { id: 'alt', label: 'The Switchboard', wireframe: { regions: [{ label: 'board', x: 0, y: 0, w: 12, h: 10 }] } },
       ],
-      reroll: true,
+      re 
+: true,
       steer: true,
     };
     await startDaemon(cwd, payload, key);
@@ -793,7 +836,8 @@ describe('new-work-e2e: serve-question decision page', () => {
           hero: 'http://127.0.0.1:1/gone-too.webp',
         },
       ],
-      reroll: true, steer: true,
+      re 
+: true, steer: true,
     };
     const { url } = await startDaemon(cwd, payload, key);
     try {
@@ -834,23 +878,28 @@ describe('new-work-e2e: serve-question decision page', () => {
     const payload = {
       title: 'Choose the visual world',
       options: [
-        { id: 'assigned', label: 'First Hand', kicker: 'THE ROLL' },
+        { id: 'assigned', label: 'First Hand', kicker: 'THE  
+' },
         { id: 'challenger-a', label: 'Alt One' },
       ],
-      reroll: true, steer: true,
+      re 
+: true, steer: true,
     };
     const { url } = await startDaemon(cwd, payload, key);
     const context = await browser.newContext();
     try {
       const page = await context.newPage();
       await page.goto(url, { waitUntil: 'load' });
-      await page.click('#reroll');
+      await page.click('#re 
+');
       await page.waitForSelector('.card.skeleton');
-      // Collect the re-roll answer, then kill the daemon out from under the
+      // Collect the re- 
+ answer, then kill the daemon out from under the
       // still-open page: the poll must stop and say the server is gone
       // instead of spinning skeletons forever.
       const first = await waitLoop(cwd, key);
-      assert.match(first.out, /"optionId":"reroll"/);
+      assert.match(first.out, /"optionId":"re 
+"/);
       await run(['--stop', '--key', key], cwd);
       await page.waitForSelector('.stall', { timeout: 30000 });
       const text = await page.$eval('.stall', (el) => el.textContent);
@@ -868,8 +917,10 @@ describe('new-work-e2e: serve-question decision page', () => {
     const key = 'nodeal';
     const payload = {
       title: 'Choose the visual world',
-      options: [{ id: 'assigned', label: 'First Hand', kicker: 'THE ROLL' }],
-      reroll: true, steer: true, canon: true,
+      options: [{ id: 'assigned', label: 'First Hand', kicker: 'THE  
+' }],
+      re 
+: true, steer: true, canon: true,
     };
     const { url } = await startDaemon(cwd, payload, key);
     const context = await browser.newContext();
@@ -883,11 +934,15 @@ describe('new-work-e2e: serve-question decision page', () => {
       await page.goto(url, { waitUntil: 'load' });
       // Playwright actionability waits on rAF, which the fake clock owns, so
       // dispatch the click directly.
-      await page.$eval('#reroll', (el) => el.click());
+      await page.$eval('#re 
+', (el) => el.click());
       // The controls must go quiet at the click itself: the POST round-trip
       // plus the fly-out used to leave them live, and a second click posted
-      // another re-roll that renewed the delivery deadline.
-      assert.ok(await page.$eval('#reroll', (el) => el.disabled), 'the re-roll goes quiet at the click, not after the fly-out');
+      // another re- 
+ that renewed the delivery deadline.
+      assert.ok(await page.$eval('#re 
+', (el) => el.disabled), 'the re- 
+ goes quiet at the click, not after the fly-out');
       assert.ok(await page.$eval('#canon', (el) => el.disabled), 'the canon exit goes quiet at the click too');
       // Walk the fake clock forward past the fly-out settle and the deadline.
       // page.$ runs over CDP, not in-page timers, so it stays safe to poll.
@@ -901,8 +956,10 @@ describe('new-work-e2e: serve-question decision page', () => {
       const text = await page.$eval('.stall', (el) => el.textContent);
       assert.match(text, /The next hand never arrived/);
       assert.ok(await page.$('.stall .choose'), 'a way out is offered');
-      // The canon exit must go quiet with the re-roll buttons: --wait already
-      // consumed the re-roll, so a canon pick posted now could never be
+      // The canon exit must go quiet with the re- 
+ buttons: --wait already
+      // consumed the re- 
+, so a canon pick posted now could never be
       // collected, only close the table under the agent.
       assert.ok(await page.$eval('#canon', (el) => el.disabled), 'the canon exit is disabled on the stall screen');
       // The stalled page must also stop heartbeating: the beats are what keep
@@ -938,7 +995,8 @@ describe('new-work-e2e: serve-question decision page', () => {
         await new Promise((r) => setTimeout(r, 100));
         waitingAgain = await page.$('.card.skeleton');
       }
-      assert.ok(waitingAgain, 'a native refresh mid re-roll re-enters the shuffle wait, not the answered round');
+      assert.ok(waitingAgain, 'a native refresh mid re- 
+ re-enters the shuffle wait, not the answered round');
       assert.ok(await page.$eval('#canon', (el) => el.disabled), 'the refreshed waiting page serves the canon exit disabled too');
       let restalled = null;
       for (let i = 0; i < 40 && !restalled; i++) {
@@ -957,8 +1015,10 @@ describe('new-work-e2e: serve-question decision page', () => {
       const nextPayloadPath = path.join(cwd, 'next.json');
       writeFileSync(nextPayloadPath, JSON.stringify({
         title: 'Choose the visual world',
-        options: [{ id: 'assigned', label: 'Second Hand', kicker: 'RE-ROLLED' }],
-        reroll: true, steer: true, canon: true,
+        options: [{ id: 'assigned', label: 'Second Hand', kicker: 'RE- 
+ED' }],
+        re 
+: true, steer: true, canon: true,
       }));
       const updated = await run(['--update', '--key', key, '--payload', nextPayloadPath], cwd);
       assert.equal(updated.code, 0, updated.out);
@@ -985,8 +1045,10 @@ describe('new-work-e2e: serve-question decision page', () => {
     const key = 'deadpick';
     const payload = {
       title: 'Choose the visual world',
-      options: [{ id: 'assigned', label: 'First Hand', kicker: 'THE ROLL' }],
-      reroll: true, steer: true,
+      options: [{ id: 'assigned', label: 'First Hand', kicker: 'THE  
+' }],
+      re 
+: true, steer: true,
     };
     const { url } = await startDaemon(cwd, payload, key);
     const context = await browser.newContext();

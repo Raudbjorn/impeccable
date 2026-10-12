@@ -61,7 +61,8 @@
       </div>
     </section>
 
-    <!-- PASS column: no clipping, no positioned child, real scroll region, or contained decorative positioning -->
+    <!-- PASS column: no clipping, no positioned child, real sc 
+ region, or contained decorative positioning -->
     <section class="col pass">
       <div class="box pass-hidden-no-abs" style="overflow: hidden">
         <p style="position: static">Hidden container with only static content.</p>
@@ -70,9 +71,12 @@
         <button>Visible host</button>
         <span class="pop">Positioned child can escape because overflow is visible.</span>
       </div>
-      <div class="box pass-scroll-abs" style="overflow: auto">
-        <button>Scroll host</button>
-        <span class="pop">A genuine scroll region is allowed to contain positioned children.</span>
+      <div class="box pass-sc 
+-abs" style="overflow: auto">
+        <button>Sc 
+ host</button>
+        <span class="pop">A genuine sc 
+ region is allowed to contain positioned children.</span>
       </div>
       <div class="box pass-contained-abs" style="overflow: hidden">
         <p>Positioned decoration remains inside the clipping box.</p>

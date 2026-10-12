@@ -48,7 +48,8 @@ export function buildCopyEditBatchPrompt(batch, { cwd = process.cwd() } = {}) {
     '- Missing sourceHint is not a failure when candidates identify source data.',
     '- When candidate evidence points to a data object or mapped list item, edit the source data that renders the visible copy. Do not hard-code rendered DOM elsewhere.',
     '- Mark an entry applied only after every op in that entry is applied. If one op fails, undo any source edits already made for that entry, report that entry failed, and continue with the next entry.',
-    '- Never leave source changes behind for entries that are failed, omitted, or absent from appliedEntryIds; the server will roll back the batch if a failed/unreported entry appears partially written.',
+    '- Never leave source changes behind for entries that are failed, omitted, or absent from appliedEntryIds; the server will  
+ back the batch if a failed/unreported entry appears partially written.',
     '- If visible text is also a string literal or object key, update clearly coupled lookup keys for counts, animations, icons, images, assets, styles, metadata, or other dependent maps in the same response.',
     '- If candidates.objectKeyMatches points at the old visible text as a key, that key must either be renamed to newText or the entry must fail. Leaving the old key behind can break rendered images, counts, or assets.',
     '- If one op renames a label and another changes a value looked up by that label, update the same lookup/map entry so the key uses the new label and the value uses the exact new display text.',

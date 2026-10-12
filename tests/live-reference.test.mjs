@@ -64,7 +64,8 @@ describe('live reference authoring contract', () => {
     assert.match(liveMd, /live-accept\.mjs --page-url PAGE_URL/);
     assert.match(liveMd, /If `repair` is present/);
     assert.match(liveMd, /Fix the current source/);
-    assert.match(liveMd, /browser will ask the user before any rollback/);
+    assert.match(liveMd, /browser will ask the user before any  
+back/);
     // The parent handler must document the real reply mechanism: --reply ... --data <json>.
     // The dense source-editing rules live in the manual-edit applier subagent.
     assert.match(liveMd, /--reply EVENT_ID done --data '\{"status":"done"/);
@@ -99,7 +100,8 @@ describe('live reference authoring contract', () => {
     assert.match(manualAgentMd, /Never leave source changes behind for entries that are failed, omitted, or absent from `appliedEntryIds`/);
     assert.match(manualAgentMd, /repair metadata/);
     assert.match(manualAgentMd, /repair the current source/);
-    assert.match(manualAgentMd, /do not roll back files yourself/);
+    assert.match(manualAgentMd, /do not  
+ back files yourself/);
     assert.match(manualAgentMd, /Return only JSON/);
     assert.match(manualAgentMd, /"status":"partial"/);
     assert.match(manualAgentMd, /"status":"error"/);

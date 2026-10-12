@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { WELL_TIERS } from './roll-selection.mjs';
+import { WELL_TIERS } from './ 
+-selection.mjs';
 
 export const CONCEPT_STATUSES = new Set(['approved', 'rejected']);
 
@@ -13,11 +14,14 @@ export const CONCEPT_STRENGTHS = new Set(['world', 'composition', 'dual']);
 
 // Challenger tiers, ordered by translation cost: graphic grammars map to
 // interface almost directly, instrument languages carry interaction physics,
-// atmosphere worlds need the largest translation step. Every seed roll draws
+// atmosphere worlds need the largest translation step. Every seed  
+ draws
 // one challenger from each tier so at least one directly-usable graphic
 // system is always on the table.
-// Defined in roll-selection.mjs, the dependency-free leaf both the seeder and
-// the roll API import. It cannot depend on this file: this one reads the
+// Defined in  
+-selection.mjs, the dependency-free leaf both the seeder and
+// the  
+ API import. It cannot depend on this file: this one reads the
 // filesystem, and a Pages Function must not pull node:fs into its bundle.
 // Imported and re-exported rather than re-exported alone: a bare
 // `export { X } from` does not bind X in this module's own scope, and
@@ -26,8 +30,10 @@ export { WELL_TIERS };
 
 // Reviewer axes that gate the challenger draw without touching approval.
 export const CONCEPT_BREADTHS = new Set(['general', 'niche']);
-// The registers of work a roll can be asked for. Kept here beside the review
-// validation that uses it; roll-selection.mjs filters on it and the seeder
+// The registers of work a  
+ can be asked for. Kept here beside the review
+// validation that uses it;  
+-selection.mjs filters on it and the seeder
 // validates the --mode flag against the same four.
 export const SEED_MODES = new Set(['persuade', 'operate', 'read', 'experience']);
 

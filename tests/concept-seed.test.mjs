@@ -71,7 +71,8 @@ describe('concept seed scopes', () => {
   });
 
   // SKIPPED: needs tests/fixtures/concept-catalog/concept-reviews.json, deleted from the repo.
-  it.skip('keeps complete-direction and established-world surface rolls reproducible but independent', () => {
+  it.skip('keeps complete-direction and established-world surface  
+s reproducible but independent', () => {
     const directionA = run('direction');
     const directionB = run('direction');
     const surface = run('surface');
@@ -165,7 +166,8 @@ describe('concept seed scopes', () => {
   it('draws several composition inputs from distinct families when the approved pool allows it', () => {
     const pool = [
       { id: 'a', familyId: 'first', surface: 'persuade', status: 'approved' },
-      { id: 'b', familyId: 'scroll', surface: 'persuade', status: 'approved' },
+      { id: 'b', familyId: 'sc 
+', surface: 'persuade', status: 'approved' },
       { id: 'c', familyId: 'physics', surface: 'persuade', status: 'approved' },
       { id: 'd', familyId: 'first', surface: 'persuade', status: 'approved' },
       { id: 'e', familyId: 'other', surface: 'operate', status: 'approved' },
@@ -183,7 +185,8 @@ describe('concept seed scopes', () => {
     assert.equal(result.stats.approved >= 24, true);
     for (const tier of ['graphic', 'interaction', 'atmosphere']) {
       const approved = fixtureConcepts.filter(concept => concept.status === 'approved' && concept.wellTier === tier);
-      assert.equal(approved.length >= 6, true, `${tier} needs re-roll depth`);
+      assert.equal(approved.length >= 6, true, `${tier} needs re- 
+ depth`);
     }
   });
 
@@ -253,11 +256,17 @@ describe('concept seed scopes', () => {
   });
 
   // SKIPPED: needs tests/fixtures/concept-catalog/concept-reviews.json, deleted from the repo.
-  it.skip('re-rolls draw disjoint challengers and stay reproducible from the base key', () => {
-    const rounds = [0, 1, 2].map(reroll =>
-      selectApprovedChallengers({ scope: 'direction', key: 'reroll-chain', reroll, sourceConcepts: fixtureConcepts })
+  it.skip('re- 
+s draw disjoint challengers and stay reproducible from the base key', () => {
+    const rounds = [0, 1, 2].map(re 
+ =>
+      selectApprovedChallengers({ scope: 'direction', key: 're 
+-chain', re 
+, sourceConcepts: fixtureConcepts })
     );
-    const again = selectApprovedChallengers({ scope: 'direction', key: 'reroll-chain', reroll: 2, sourceConcepts: fixtureConcepts });
+    const again = selectApprovedChallengers({ scope: 'direction', key: 're 
+-chain', re 
+: 2, sourceConcepts: fixtureConcepts });
     assert.deepEqual(again.picks.map(pick => pick.id), rounds[2].picks.map(pick => pick.id));
     const seen = new Set();
     for (const round of rounds) {
@@ -270,29 +279,40 @@ describe('concept seed scopes', () => {
     }
   });
 
-  it('renders re-roll rounds with elimination framing and a chained reproduction key', () => {
+  it('renders re- 
+ rounds with elimination framing and a chained reproduction key', () => {
     const round0 = run('direction');
-    const round1A = run('direction', ['--reroll', '1']);
-    const round1B = run('direction', ['--reroll', '1']);
+    const round1A = run('direction', ['--re 
+', '1']);
+    const round1B = run('direction', ['--re 
+', '1']);
     assert.equal(round1A.status, 0);
     assert.equal(round1A.stdout, round1B.stdout);
     assert.notEqual(round1A.stdout, round0.stdout);
-    assert.match(round1A.stdout, /RE-ROLL ROUND 1/);
+    assert.match(round1A.stdout, /RE- 
+ ROUND 1/);
     assert.match(round1A.stdout, /may not return reworded/);
-    assert.match(round1A.stdout, /--from stable-test --reroll 1/);
-    assert.doesNotMatch(round0.stdout, /RE-ROLL ROUND/);
-    const invalid = run('direction', ['--reroll', 'nope']);
+    assert.match(round1A.stdout, /--from stable-test --re 
+ 1/);
+    assert.doesNotMatch(round0.stdout, /RE- 
+ ROUND/);
+    const invalid = run('direction', ['--re 
+', 'nope']);
     assert.notEqual(invalid.status, 0);
     assert.match(invalid.stderr, /non-negative integer/);
   });
 
   it('registers steer the round presentation without changing the deal', () => {
-    const plain = run('direction', ['--reroll', '1']);
-    const bolder = run('direction', ['--reroll', '1', '--register', 'bolder']);
-    const safer = run('direction', ['--reroll', '1', '--register', 'safer']);
+    const plain = run('direction', ['--re 
+', '1']);
+    const bolder = run('direction', ['--re 
+', '1', '--register', 'bolder']);
+    const safer = run('direction', ['--re 
+', '1', '--register', 'safer']);
     assert.equal(bolder.status, 0);
     assert.equal(safer.status, 0);
-    // A register is presentation-only: the same key and reroll count deal the
+    // A register is presentation-only: the same key and re 
+ count deal the
     // same challengers, so the exclusion chain never forks on register.
     const dealtIds = (out) => [...out.matchAll(/SOURCE ID: ([a-z0-9-]+)/g)].map((m) => m[1]).sort();
     assert.deepEqual(dealtIds(bolder.stdout), dealtIds(plain.stdout), 'bolder presents the same deal the plain round drew');
@@ -310,7 +330,8 @@ describe('concept seed scopes', () => {
     assert.doesNotMatch(safer.stdout, /^CHALLENGERS:/m, 'the safer round spends its hand unseen');
     // Degraded safer must not contradict itself: "the user picks" and a
     // mandatory numbered build order cannot share one output.
-    const degradedSafer = run('direction', ['--reroll', '1', '--register', 'safer'], {
+    const degradedSafer = run('direction', ['--re 
+', '1', '--register', 'safer'], {
       IMPECCABLE_CATALOG_DIR: '/nonexistent-catalog-dir',
       IMPECCABLE_API_URL: 'http://127.0.0.1:1',
     });
@@ -319,19 +340,25 @@ describe('concept seed scopes', () => {
     assert.match(degradedSafer.stdout, /SAFER REGISTER/);
     assert.doesNotMatch(degradedSafer.stdout, /ASSIGNED INDEX/, 'degraded safer suppresses the assignment machinery');
     assert.doesNotMatch(degradedSafer.stdout, /Build candidate/, 'degraded safer mandates no numbered candidate');
-    const degradedBolder = run('direction', ['--reroll', '1', '--register', 'bolder'], {
+    const degradedBolder = run('direction', ['--re 
+', '1', '--register', 'bolder'], {
       IMPECCABLE_CATALOG_DIR: '/nonexistent-catalog-dir',
       IMPECCABLE_API_URL: 'http://127.0.0.1:1',
     });
     assert.equal(degradedBolder.status, 0);
     assert.match(degradedBolder.stdout, /BOLDER REGISTER UNAVAILABLE/);
     assert.match(degradedBolder.stdout, /ASSIGNED INDEX: /, 'degraded bolder falls back to the plain grounded assignment');
-    const invalidRegister = run('direction', ['--reroll', '1', '--register', 'wilder']);
+    const invalidRegister = run('direction', ['--re 
+', '1', '--register', 'wilder']);
     assert.notEqual(invalidRegister.status, 0);
     assert.match(invalidRegister.stderr, /must be safer or bolder/);
-    const noReroll = run('direction', ['--register', 'bolder']);
-    assert.notEqual(noReroll.status, 0);
-    assert.match(noReroll.stderr, /re-roll round/);
+    const noRe 
+ = run('direction', ['--register', 'bolder']);
+    assert.notEqual(noRe 
+.status, 0);
+    assert.match(noRe 
+.stderr, /re- 
+ round/);
   });
 
   it('filters challengers by strength per scope and falls back when a tier has no match', () => {
@@ -548,8 +575,10 @@ describe('init gate', () => {
     assert.match(result.stdout, /NO_PRODUCT_MD/);
     assert.match(result.stdout, /init/);
     assert.doesNotMatch(result.stdout, /ASSIGNED INDEX/);
-    // A refused roll must not leave the pending marker behind: it makes a
-    // later context.mjs/detect.mjs run report COMP_ROUND_OPEN for a roll
+    // A refused  
+ must not leave the pending marker behind: it makes a
+    // later context.mjs/detect.mjs run report COMP_ROUND_OPEN for a  
+
     // that never happened.
     assert.equal(existsSync(path.join(dir, '.impeccable', 'build', 'pending.json')), false);
   });
@@ -573,10 +602,12 @@ describe('init gate', () => {
     assert.doesNotMatch(result.stdout, /NO_PRODUCT_MD/);
   });
 
-  // The seed pause: a direction roll invents the visual world, so a project
+  // The seed pause: a direction  
+ invents the visual world, so a project
   // with PRODUCT.md but no DESIGN.md gets the questionnaire offer before the
   // deal. The refusal is mechanical because prose alone did not stop a real
-  // session from rolling straight after init.
+  // session from  
+ing straight after init.
   const seedGateDir = (design = null) => {
     const dir = mkdtempSync(path.join(tmpdir(), 'concept-seed-seedgate-'));
     writeFileSync(path.join(dir, 'PRODUCT.md'), '# Test Product\n\n## Platform\n\nweb\n');
@@ -584,7 +615,8 @@ describe('init gate', () => {
     return dir;
   };
 
-  it('refuses a direction roll with no DESIGN.md and routes to the seed questionnaire offer', () => {
+  it('refuses a direction  
+ with no DESIGN.md and routes to the seed questionnaire offer', () => {
     const dir = seedGateDir();
     const result = gateRun(dir);
     assert.equal(result.status, 1);
@@ -599,7 +631,8 @@ describe('init gate', () => {
     const dir = seedGateDir();
     // The flag carries evidence: the user's verbatim skip answer. A bare
     // flag refuses (covered by the refusal test above).
-    const result = spawnSync(process.execPath, [SCRIPT, '--scope', 'direction', '--from', 'gate-test', '--seed-declined=Skip it, just roll a direction now.'], {
+    const result = spawnSync(process.execPath, [SCRIPT, '--scope', 'direction', '--from', 'gate-test', '--seed-declined=Skip it, just  
+ a direction now.'], {
       cwd: dir,
       encoding: 'utf-8',
       env: { ...process.env, IMPECCABLE_CATALOG_DIR: FIXTURE_DIR, IMPECCABLE_CONTEXT_DIR: '' },
@@ -627,7 +660,8 @@ describe('init gate', () => {
     assert.doesNotMatch(result.stdout, /NO_DESIGN_MD/);
   });
 
-  it('never seed-gates a surface roll', () => {
+  it('never seed-gates a surface  
+', () => {
     const dir = seedGateDir();
     const result = spawnSync(process.execPath, [SCRIPT, '--scope', 'surface', '--from', 'gate-test'], {
       cwd: dir,
@@ -831,18 +865,22 @@ describe('init gate', () => {
 });
 
 // The Windows abort in issue #504 (nodejs/node#56645) needs three things at
-// once: a successful roll over Node's undici-backed fetch, the keep-alive
+// once: a successful  
+ over Node's undici-backed fetch, the keep-alive
 // socket that success leaves pooled, and the explicit process.exit at the end
 // of the CLI. The suite's other API test exercises only the unreachable-API
 // fallback, which leaves no pooled socket and so never walked the crashing
-// path. This one serves a real roll from a local server and asserts the CLI
+// path. This one serves a real  
+ from a local server and asserts the CLI
 // destroys fetch's global dispatcher before exiting, so the teardown cannot
 // silently regress. The teardown is Node fetch internals, so the CLI is
 // spawned with node even when the suite itself runs under bun.
-describe('API roll path', () => {
+describe('API  
+ path', () => {
   const NODE = process.versions.bun ? 'node' : process.execPath;
 
-  const ROLL_PAYLOAD = {
+  const  
+_PAYLOAD = {
     poolRevision: 'api-test-rev',
     approvedCount: 6,
     catalogCount: 9,
@@ -874,13 +912,16 @@ describe('API roll path', () => {
     '',
   ].join('\n');
 
-  it('resolves a successful roll and destroys the fetch dispatcher before the explicit exit', async () => {
+  it('resolves a successful  
+ and destroys the fetch dispatcher before the explicit exit', async () => {
     const requests = [];
     const server = createServer((req, res) => {
       requests.push(req.url);
-      if (req.url.startsWith('/api/roll?')) {
+      if (req.url.startsWith('/api/ 
+?')) {
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify(ROLL_PAYLOAD));
+        res.end(JSON.stringify( 
+_PAYLOAD));
         return;
       }
       res.statusCode = 404;
@@ -896,7 +937,8 @@ describe('API roll path', () => {
         const child = spawn(NODE, [
           '--import', pathToFileURL(preloadPath).href,
           SCRIPT, '--scope', 'direction', '--mode', 'persuade', '--from', 'api-test',
-          '--seed-declined=Skip it, just roll a direction now.',
+          '--seed-declined=Skip it, just  
+ a direction now.',
         ], {
           cwd: dir,
           env: {
@@ -913,12 +955,15 @@ describe('API roll path', () => {
         child.on('close', status => resolveRun({ status, stdout, stderr }));
       });
       assert.equal(result.status, 0, `stderr: ${result.stderr}`);
-      assert.equal(requests.some(url => url.startsWith('/api/roll?')), true, 'the CLI must hit the roll endpoint');
+      assert.equal(requests.some(url => url.startsWith('/api/ 
+?')), true, 'the CLI must hit the  
+ endpoint');
       assert.match(result.stdout, /source: api/);
       assert.match(result.stdout, /letterpress print shop/);
       // The choice-recording command rides on build-phase start now (the
       // separate TELEMETRY ping was the step every comp-round-skipping run
-      // suppressed); an API roll names it with the --chosen slot.
+      // suppressed); an API  
+ names it with the --chosen slot.
       assert.match(result.stdout, /AFTER THE CHOICE, run exactly one command/);
       assert.match(result.stdout, /build-phase\.mjs start --direction [\w-]+ --kind <assigned\|pick\|challenger\|canon> \[--chosen <challenger-id>\]/);
       assert.match(result.stderr, /DISPATCHER_DESTROY_CALLED/, 'the dispatcher must be destroyed before process.exit');

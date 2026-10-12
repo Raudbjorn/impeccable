@@ -30,10 +30,12 @@ Technically ambitious effects almost never work on the first try. You MUST activ
 The right kind of technical ambition depends entirely on what you're working with. Before choosing a technique, ask: **what would make a user of THIS specific interface say "wow, that's nice"?**
 
 ### For visual/marketing surfaces
-Pages, hero sections, landing pages, portfolios: the "wow" is often sensory: a scroll-driven reveal, a shader background, a cinematic page transition, generative art that responds to the cursor.
+Pages, hero sections, landing pages, portfolios: the "wow" is often sensory: a sc 
+-driven reveal, a shader background, a cinematic page transition, generative art that responds to the cursor.
 
 ### For functional UI
-Tables, forms, dialogs, navigation: the "wow" is in how it FEELS: a dialog that morphs from the button that triggered it via View Transitions, a data table that renders 100k rows at 60fps via virtual scrolling, a form with streaming validation that feels instant, drag-and-drop with spring physics.
+Tables, forms, dialogs, navigation: the "wow" is in how it FEELS: a dialog that morphs from the button that triggered it via View Transitions, a data table that renders 100k rows at 60fps via virtual sc 
+ing, a form with streaming validation that feels instant, drag-and-drop with spring physics.
 
 ### For performance-critical UI
 The "wow" is invisible but felt: a search that filters 50k items without a flicker, a complex form that never blocks the main thread, an image editor that processes in near-real-time. The interface just never hesitates.
@@ -50,10 +52,15 @@ Organized by what you're trying to achieve, not by technology name.
 ### Make transitions feel cinematic
 - **View Transitions API** (same-document: all browsers; cross-document: no Firefox): shared element morphing between states. A list item expanding into a detail page. A button morphing into a dialog. This is the closest thing to native FLIP animations.
 - **`@starting-style`** (all browsers): animate elements from `display: none` to visible with CSS only, including entry keyframes
-- **Spring physics**: natural motion with mass, tension, and damping instead of cubic-bezier. Libraries: motion (formerly Framer Motion), GSAP, or roll your own spring solver.
+- **Spring physics**: natural motion with mass, tension, and damping instead of cubic-bezier. Libraries: motion (formerly Framer Motion), GSAP, or  
+ your own spring solver.
 
-### Tie animation to scroll position
-- **Scroll-driven animations** (`animation-timeline: scroll()`): CSS-only, no JS. Parallax, progress bars, reveal sequences all driven by scroll position. (Chrome/Edge/Safari; Firefox: flag only; always provide a static fallback)
+### Tie animation to sc 
+ position
+- **Sc 
+-driven animations** (`animation-timeline: sc 
+()`): CSS-only, no JS. Parallax, progress bars, reveal sequences all driven by sc 
+ position. (Chrome/Edge/Safari; Firefox: flag only; always provide a static fallback)
 
 ### Render beyond CSS
 - **WebGL** (all browsers): shader effects, post-processing, particle systems. Libraries: Three.js, OGL (lightweight), regl. Use for effects CSS can't express.
@@ -62,7 +69,8 @@ Organized by what you're trying to achieve, not by technology name.
 - **SVG filter chains**: displacement maps, turbulence, morphology for organic distortion effects. CSS-animatable.
 
 ### Make data feel alive
-- **Virtual scrolling**: render only visible rows for tables/lists with tens of thousands of items. No library required for simple cases; TanStack Virtual for complex ones.
+- **Virtual sc 
+ing**: render only visible rows for tables/lists with tens of thousands of items. No library required for simple cases; TanStack Virtual for complex ones.
 - **GPU-accelerated charts**: Canvas or WebGL-rendered data visualization for datasets too large for SVG/DOM. Libraries: deck.gl, regl-based custom renderers.
 - **Animated data transitions**: morph between chart states rather than replacing. D3's `transition()` or View Transitions for DOM-based charts.
 
@@ -88,8 +96,10 @@ Organized by what you're trying to achieve, not by technology name.
 Every technique must degrade gracefully. The experience without the enhancement must still be good.
 
 ```css
-@supports (animation-timeline: scroll()) {
-  .hero { animation-timeline: scroll(); }
+@supports (animation-timeline: sc 
+()) {
+  .hero { animation-timeline: sc 
+(); }
 }
 ```
 

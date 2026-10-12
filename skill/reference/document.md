@@ -64,7 +64,8 @@ Omit irrelevant sections rather than filling them with invented rules. Put respo
 ## When to run
 
 - New-work found a coherent incumbent visual system but no `DESIGN.md`.
-- New-work paused before its direction roll on a project with no `DESIGN.md` and the user accepted the seed questionnaire recommendation; run seed mode.
+- New-work paused before its direction  
+ on a project with no `DESIGN.md` and the user accepted the seed questionnaire recommendation; run seed mode.
 - The first implementation of a new world is complete and its provisional decisions need to be carbonized.
 - An existing `DESIGN.md` is stale (the design has drifted).
 - Before a large redesign, to capture the current state as a reference.
@@ -407,7 +408,8 @@ Group the questions into one `AskUserQuestion` interaction. Options must be conc
 3. **Motion energy.** Pick one:
    - Restrained: state changes only
    - Responsive: feedback + transitions, no choreography
-   - Choreographed: orchestrated entrances, scroll-driven sequences
+   - Choreographed: orchestrated entrances, sc 
+-driven sequences
 
 4. **Three named references.** Brands, products, printed objects. Not adjectives.
 
@@ -457,7 +459,8 @@ This seed writes a minimal frontmatter with `name` and `description` only; no co
 - **Frontmatter**: `name` and `description`, plus real `colors` (the four `palette-*` hex values under descriptive slugs; these are picked, not sampled) and real `typography` (`font-heading` and `font-body` are exact family names; give each role its family and weight intent, leave sizes for implementation). Derive the two text inks and record them under `colors` too: one near-black and one near-white, the pair the questionnaire's previews already set their text in over these exact surfaces, each holding 4.5:1 against the grounds it will carry copy on, so a builder needing body-text contrast finds ink in the system instead of inventing a fifth color. Still no `rounded`, `spacing`, or `components`: the corner and spacing answers are qualitative, and nothing is built.
 - **Overview**: Creative North Star and philosophy phrased from the questionnaire's color-strategy and motion answers plus the chat references; reference the user's anti-reference directly. Name the chosen surfaces (`surface-modes`) and what each is for. Movement stays here, after the North Star, but the questionnaire asks it of a landing page and a portfolio only, so write what the keys support:
   - `motion-energy-<mode>` keys present, all agreeing: one philosophy sentence for the product, as before.
-  - Keys present and disagreeing: one sentence per surface, named (*"The landing page moves on state change only; the portfolio stages entrances and drives sequences on scroll."*). The bare `motion-energy` is the leading one of the two.
+  - Keys present and disagreeing: one sentence per surface, named (*"The landing page moves on state change only; the portfolio stages entrances and drives sequences on sc 
+."*). The bare `motion-energy` is the leading one of the two.
   - **No `motion-energy` key at all**: the run has neither of those surfaces, so movement was never asked. Say nothing about it, and do not fill the gap from the register; this path's chat interview never asked about motion, so there is nothing to borrow. The next Scan-mode run reads the real transitions out of the code.
 - **Colors**: the four roles with their picked hex, noting the cue they came from. Name the chosen cue by its slug; note that the unpicked cue images stay in `.impeccable/visual-cues/` for later art direction. Then branch on whether the kept image is actually on disk:
   - `.impeccable/design-context/cue.png` exists (the import carried it in, or the project's own scan produced one): name its path so a later build opens the picture the palette came from instead of imagining it, then open the kept image and describe it into the same section, three or four sentences under a **Cue, in words:** lead: the physical material each palette role lives on in the picture (cloth, glass, enamel, paper), the light and its temperature, the surface finish and grain, and the one material move that makes the image itself. Name each color as it appears on its material; `#C92823` as soft matte wrapping cloth instructs an image model where the bare hex only tints. Generation prompts on this world restate this passage (new-work.md and visualize.md say where), so a seed that records only the cue's file path leaves the material world to the model's imagination. The **chosen** strategy becomes the Named Rule. When surfaces differ (`color-strategy-<mode>` keys), state each surface's strategy and which surface leads (the bare key's owner).

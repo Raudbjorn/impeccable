@@ -106,7 +106,8 @@ elements.forEach((el, i) => {
 - Minimize DOM depth (flatter is faster)
 - Reduce DOM size (fewer elements)
 - Use `content-visibility: auto` for long lists
-- Virtual scrolling for very long lists (react-window, TanStack Virtual)
+- Virtual sc 
+ing for very long lists (react-window, TanStack Virtual)
 
 **Reduce Paint & Composite**:
 - Use `transform` and `opacity` for reliable movement, but allow blur, filters, masks, clip paths, shadows, and color shifts when they create meaningful polish
@@ -134,7 +135,8 @@ elements.forEach((el, i) => {
 **Smooth 60fps**:
 - Target 16ms per frame (60fps)
 - Use `requestAnimationFrame` for JS animations
-- Debounce/throttle scroll handlers
+- Debounce/throttle sc 
+ handlers
 - Use CSS animations when possible
 - Avoid long-running JavaScript during animations
 

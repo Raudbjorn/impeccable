@@ -3296,13 +3296,15 @@ describe('matchConfiguredExtension()', () => {
       { ext: '.blade.php', engine: 'html' },
     );
     assert.deepEqual(
-      matchConfiguredExtension('/app/Controller.php', overlapping),
+      matchConfiguredExtension('/app/Cont 
+er.php', overlapping),
       { ext: '.php', engine: 'text' },
     );
   });
 
   it('does not match unrelated files or bare dotfile-like names', () => {
-    assert.equal(matchConfiguredExtension('/app/Http/Controller.php', extensions), null);
+    assert.equal(matchConfiguredExtension('/app/Http/Cont 
+er.php', extensions), null);
     assert.equal(matchConfiguredExtension('/views/.blade.php', extensions), null);
     assert.equal(matchConfiguredExtension('/src/Card.tsx', extensions), null);
   });

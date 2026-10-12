@@ -47,7 +47,8 @@ Every interactive component has: default, hover, focus, active, disabled, loadin
 - Decorative motion that doesn't convey state. <!-- rule:product-ban-decorative-motion -->
 - Inconsistent component vocabulary across screens. If the "save" button looks different in two places, one is wrong. <!-- rule:product-ban-inconsistent-components -->
 - Display fonts in UI labels, buttons, data. <!-- rule:product-ban-display-fonts-ui -->
-- Reinventing standard affordances for flavor (custom scrollbars, weird form controls, non-standard modals). <!-- rule:product-ban-reinvented-affordances -->
+- Reinventing standard affordances for flavor (custom sc 
+bars, weird form controls, non-standard modals). <!-- rule:product-ban-reinvented-affordances -->
 - Heavy color or full-saturation accents on inactive states. <!-- rule:product-ban-heavy-inactive-color -->
 - Modal as first thought. Modals are usually laziness. Exhaust inline / progressive alternatives first. <!-- rule:product-ban-modal-first-thought -->
 

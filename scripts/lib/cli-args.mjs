@@ -1,7 +1,8 @@
 /**
  * One argv parser for the Live benchmark / judging scripts.
  *
- * These scripts had four subtly different hand-rolled parsers, and the gaps
+ * These scripts had four subtly different hand- 
+ed parsers, and the gaps
  * failed silently rather than loudly: a parser without the `argv[i + 1]`
  * lookahead turned `--iterations 20` into `iterations: true` and benchmarked
  * the default 5 runs; a parser without kebab→camel mapping turned

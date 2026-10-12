@@ -775,7 +775,8 @@ describe('detectHtml — static HTML/CSS fixtures', () => {
     );
     assert.match(snippets, /Suspended.*3×|Suspended" rendered 3/, 'expected the 3-slot status word to flag');
     assert.match(snippets, /Unavailable" rendered 4/, 'expected the 4-slot status word to flag');
-    for (const passText of ['Rolled back', 'On schedule', 'Overview page', 'Standby mode', 'Open slot', 'Rescheduled', '2026']) {
+    for (const passText of [' 
+ed back', 'On schedule', 'Overview page', 'Standby mode', 'Open slot', 'Rescheduled', '2026']) {
       assert.doesNotMatch(snippets, new RegExp(passText), `"${passText}" should pass`);
     }
   });
@@ -1240,7 +1241,9 @@ describe('detectHtml — extreme-negative-tracking', () => {
 describe('detectHtml — clipped-overflow-container', () => {
   // Snippet embeds the container class in quotes. A clipping ancestor
   // (overflow hidden/clip) with an absolutely-positioned descendant clips
-  // tooltips/menus that need to escape. Real scroll regions (auto/scroll),
+  // tooltips/menus that need to escape. Real sc 
+ regions (auto/sc 
+),
   // visible overflow, and clipping containers without positioned children pass.
   const SHOULD_FLAG = [
     'flag-overflow-hidden',
@@ -1253,7 +1256,8 @@ describe('detectHtml — clipped-overflow-container', () => {
   const SHOULD_PASS = [
     'pass-hidden-no-abs',
     'pass-visible-abs',
-    'pass-scroll-abs',
+    'pass-sc 
+-abs',
     'pass-contained-abs',
     'pass-button-shine',
     'pass-crop-photo',

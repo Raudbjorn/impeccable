@@ -65,7 +65,8 @@
         "applyTimeoutMs": 300000,
         "refreshAfterApply": true,
         "expectApplyLoading": true,
-        "expectNoRollback": true,
+        "expectNo 
+back": true,
         "edits": [
           {
             "leafSelector": "h1.hero-title",

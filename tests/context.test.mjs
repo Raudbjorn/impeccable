@@ -1668,7 +1668,8 @@ related_targets: []
 describe('context.mjs update check', () => {
   // The script reads its own version from a sibling SKILL.md (resolved via
   // import.meta.url, not cwd). The source tree has no SKILL.md, so we copy the
-  // script into a scratch skill dir with a controlled version and run that.
+  // script into a scratch skill dir with a cont 
+ed version and run that.
   // Local version is pinned to 1.0.0; "newer" = 2.0.0, "older" = 0.0.1.
   const LOCAL_VERSION = '1.0.0';
 

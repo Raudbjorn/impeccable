@@ -93,7 +93,8 @@ export function score(items, { center = 50, scale = 8, densityDenom = 20 } = {})
 }
 
 function breakdownBy(items, keyOf) {
-  // Object.create(null) rather than {}: keyOf() returns caller-controlled
+  // Object.create(null) rather than {}: keyOf() returns caller-cont 
+ed
   // strings (heuristic_id/source), and a plain-object bucket map lets a key
   // like "__proto__" or "constructor" resolve to an inherited Object.prototype
   // member instead of a fresh bucket -- silently dropping that item from the

@@ -4,9 +4,11 @@
  * Given a workspace directory, it discovers a running serve-question daemon
  * from `.impeccable/questions/<key>.state.json`, opens the served page in a
  * real browser, and drives it through a scripted policy: it clicks the real
- * `button.choose`, `#reroll`, and `#canon` controls, types into `#steer`, and
+ * `button.choose`, `#re 
+`, and `#canon` controls, types into `#steer`, and
  * closes the tab for the exit-4 path. Because a real page runs the page's own
- * JS, heartbeats fire and re-roll reloads behave exactly as a user's would.
+ * JS, heartbeats fire and re- 
+ reloads behave exactly as a user's would.
  *
  * The deterministic tier passes an already-launched Playwright browser in.
  * Run as a CLI (`--workspace DIR --policy '<json>'`) it launches its own
@@ -15,12 +17,15 @@
  *   { "pick": "assigned" }                    click the assigned card
  *   { "pick": "challenger-*" }                click the first matching card
  *   { "pickIndex": 1 }                        click the Nth choose button
- *   { "reroll": true, "steer": "warmer" }     type the steer, click Re-roll
+ *   { "re 
+": true, "steer": "warmer" }     type the steer, click Re- 
+
  *   { "canon": true }                         click Play it straight
  *   { "close": true }                         close the tab (stops heartbeats)
  *
  * A `steer` on any action is typed into `#steer` first when the field exists.
- * After a re-roll the bot waits for the page to reload into the next hand
+ * After a re- 
+ the bot waits for the page to reload into the next hand
  * (delivered out of band by `serve-question --update`) before the next action.
  */
 
@@ -79,14 +84,17 @@ function chooseSelector(pick) {
 async function runAction(page, action, { workspaceDir, key }) {
   await typeSteer(page, action);
 
-  if (action.reroll) {
+  if (action.re 
+) {
     await Promise.all([
       page.waitForNavigation({ waitUntil: 'load', timeout: 60000 }).catch(() => {}),
-      page.click('#reroll'),
+      page.click('#re 
+'),
     ]);
     // Fresh hand loaded: wait for the interactive controls of the next round.
     await page.waitForSelector('button.choose', { timeout: 30000 });
-    return { action: 'reroll', reloaded: true };
+    return { action: 're 
+', reloaded: true };
   }
 
   if (action.canon) {

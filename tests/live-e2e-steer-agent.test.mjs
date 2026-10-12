@@ -24,7 +24,8 @@ describe('live-e2e steer agent handler', () => {
     const fixture = JSON.parse(readFileSync(join(FIXTURES_DIR, FIXTURE_NAME, 'fixture.json'), 'utf-8'));
     tmp = stageFixture(FIXTURE_NAME, fixture);
     live = startLiveServer(tmp);
-    abort = new AbortController();
+    abort = new AbortCont 
+er();
     loopDone = runAgentLoop({
       tmp,
       scriptsDir: SCRIPTS_DIR,

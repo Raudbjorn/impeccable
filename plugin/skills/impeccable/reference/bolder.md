@@ -17,7 +17,8 @@ A section usually reads flat for reasons its neighbors have already solved. Look
 - **Amplify what the system already owns.** Reuse its motif and its type scale at full strength, turned up for this section rather than invented for it. The bolder version should look more like the same brand, not less.
 - **Keep content true.** Existing claims are part of the scope: preserve them unless the user supplies replacements. If real evidence is essential to the direction but absent, ask for it.
 - **Commit, then clarify.** Half-measures read as noise. Make the one decisive move completely, then quiet everything around it so the move is legible. If every element got louder, the section got flatter.
-- **Give it its own rhythm.** The target should read as a peak in the scroll, a shift in density or pace from what surrounds it, not simply more of the same.
+- **Give it its own rhythm.** The target should read as a peak in the sc 
+, a shift in density or pace from what surrounds it, not simply more of the same.
 
 ## The skeleton test
 

@@ -12,7 +12,8 @@ const MAX_MANUAL_EDIT_APPLY_CHUNK_SIZE = 20;
 const MANUAL_APPLY_COMPACT_TEXT_LIMIT = 240;
 const MANUAL_APPLY_COMPACT_NEARBY_LIMIT = 4;
 
-export function createManualApplyController({
+export function createManualApplyCont 
+er({
   pendingEvents,
   pendingApplyDeferreds,
   timedOutApplyIds,
@@ -48,7 +49,8 @@ export function createManualApplyController({
     };
     if (chunk) event.chunk = chunk;
     if (repair) event.repair = repair;
-    const rollbackSnapshot = snapshotApplyEventFiles(batch, cwdValue);
+    const  
+backSnapshot = snapshotApplyEventFiles(batch, cwdValue);
     recordManualEditActivity('manual_edit_apply_dispatched', {
       id: eventId,
       pageUrl,
@@ -61,7 +63,8 @@ export function createManualApplyController({
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         pendingApplyDeferreds.delete(eventId);
-        tombstoneTimedOutApplyId(eventId, { batch, rollbackSnapshot, cwd: cwdValue });
+        tombstoneTimedOutApplyId(eventId, { batch,  
+backSnapshot, cwd: cwdValue });
         acknowledgePendingEvent(eventId);
         removeManualApplyEvidence(evidencePath, cwdValue);
         recordManualEditActivity('manual_edit_apply_timeout', {
@@ -73,7 +76,8 @@ export function createManualApplyController({
         });
         reject(new Error('chat_agent_timeout'));
       }, APPLY_EVENT_HARD_TIMEOUT_MS);
-      pendingApplyDeferreds.set(eventId, { resolve, reject, timer, event, batch, pageUrl, rollbackSnapshot, cwd: cwdValue });
+      pendingApplyDeferreds.set(eventId, { resolve, reject, timer, event, batch, pageUrl,  
+backSnapshot, cwd: cwdValue });
       enqueueEvent(event);
     });
   }
@@ -226,13 +230,18 @@ export function createManualApplyController({
     return removed;
   }
 
-  function rollbackTimedOutReply(msg) {
+  function  
+backTimedOutReply(msg) {
     const details = timedOutApplyIds.get(msg.id);
-    if (!details) return { rolledBackFiles: [], rollbackFailures: [] };
+    if (!details) return {  
+edBackFiles: [],  
+backFailures: [] };
     timedOutApplyIds.delete(msg.id);
-    return rollbackApplySnapshot(
+    return  
+backApplySnapshot(
       details.batch,
-      details.rollbackSnapshot,
+      details. 
+backSnapshot,
       msg.data?.files || [],
       'stale_manual_edit_apply_reply',
       details.cwd || projectCwd(),
@@ -260,10 +269,15 @@ export function createManualApplyController({
       pendingApplyDeferreds.delete(eventId);
       clearTimeout(deferred.timer);
       const cwdValue = deferred.cwd || projectCwd();
-      const rollback = rollbackApplySnapshot(deferred.batch, deferred.rollbackSnapshot, [], reason, cwdValue);
+      const  
+back =  
+backApplySnapshot(deferred.batch, deferred. 
+backSnapshot, [], reason, cwdValue);
       tombstoneTimedOutApplyId(eventId, {
         batch: deferred.batch,
-        rollbackSnapshot: deferred.rollbackSnapshot,
+         
+backSnapshot: deferred. 
+backSnapshot,
         reason,
         cwd: cwdValue,
       });
@@ -272,8 +286,14 @@ export function createManualApplyController({
         id: eventId,
         pageUrl: deferred.pageUrl,
         entryCount: deferred.batch?.entries?.length || 0,
-        rolledBackFiles: rollback.rolledBackFiles,
-        rollbackFailures: rollback.rollbackFailures,
+         
+edBackFiles:  
+back. 
+edBackFiles,
+         
+backFailures:  
+back. 
+backFailures,
       });
       deferred.reject(new Error(reason));
     }
@@ -295,8 +315,11 @@ export function createManualApplyController({
     readTransaction: () => readManualApplyTransaction(projectCwd()),
     rejectDeferred,
     resolveDeferred,
-    rollbackTimedOutReply,
-    rollbackTransaction: (opts = {}) => rollbackManualApplyTransaction({
+     
+backTimedOutReply,
+     
+backTransaction: (opts = {}) =>  
+backManualApplyTransaction({
       cwd: projectCwd(),
       recordManualEditActivity,
       ...opts,
@@ -704,7 +727,8 @@ export function snapshotApplyEventFiles(batch, cwd = process.cwd()) {
         content: fs.existsSync(absolute) ? fs.readFileSync(absolute, 'utf-8') : '',
       });
     } catch {
-      // If a file cannot be read before dispatch, do not attempt late rollback.
+      // If a file cannot be read before dispatch, do not attempt late  
+back.
     }
   }
   return snapshot;
@@ -764,10 +788,12 @@ export function clearManualApplyTransaction(cwd = process.cwd(), transactionId =
   }
 }
 
-export function rollbackManualApplyTransaction({
+export function  
+backManualApplyTransaction({
   cwd = process.cwd(),
   pageUrl = null,
-  reason = 'manual_edit_transaction_rollback',
+  reason = 'manual_edit_transaction_ 
+back',
   recordManualEditActivity = null,
 } = {}) {
   const transaction = readManualApplyTransaction(cwd);
@@ -781,14 +807,20 @@ export function rollbackManualApplyTransaction({
   } catch {
     pendingIds = new Set(transaction.entryIds || []);
   }
-  const shouldRollback = (transaction.entryIds || []).some((id) => pendingIds.has(id));
-  if (!shouldRollback) {
+  const should 
+back = (transaction.entryIds || []).some((id) => pendingIds.has(id));
+  if (!should 
+back) {
     clearManualApplyTransaction(cwd, transaction.id);
-    return { id: transaction.id, reason, rolledBackFiles: [], rollbackFailures: [], skipped: 'entries_not_pending' };
+    return { id: transaction.id, reason,  
+edBackFiles: [],  
+backFailures: [], skipped: 'entries_not_pending' };
   }
 
-  const rolledBackFiles = [];
-  const rollbackFailures = [];
+  const  
+edBackFiles = [];
+  const  
+backFailures = [];
   for (const item of transaction.files || []) {
     const relativeFile = normalizeProjectFile(item.file, cwd);
     if (!relativeFile) continue;
@@ -800,21 +832,30 @@ export function rollbackManualApplyTransaction({
       } else if (fs.existsSync(absolute)) {
         fs.rmSync(absolute);
       }
-      rolledBackFiles.push(relativeFile);
+       
+edBackFiles.push(relativeFile);
     } catch (err) {
-      rollbackFailures.push({ file: relativeFile, reason: 'restore_failed', message: err.message || String(err) });
+       
+backFailures.push({ file: relativeFile, reason: 'restore_failed', message: err.message || String(err) });
     }
   }
   clearManualApplyTransaction(cwd, transaction.id);
-  recordManualEditActivity?.('manual_edit_transaction_rolled_back', {
+  recordManualEditActivity?.('manual_edit_transaction_ 
+ed_back', {
     id: transaction.id,
     pageUrl: transaction.pageUrl || null,
     reason,
     entryIds: transaction.entryIds || [],
-    rolledBackFiles: rolledBackFiles.map((file) => summarizeManualLogFile(file, cwd)).filter(Boolean),
-    rollbackFailures: summarizeManualDiagnostics(rollbackFailures, cwd),
+     
+edBackFiles:  
+edBackFiles.map((file) => summarizeManualLogFile(file, cwd)).filter(Boolean),
+     
+backFailures: summarizeManualDiagnostics( 
+backFailures, cwd),
   });
-  return { id: transaction.id, reason, rolledBackFiles, rollbackFailures };
+  return { id: transaction.id, reason,  
+edBackFiles,  
+backFailures };
 }
 
 export function collectManualApplyFiles(batch, extraFiles = [], cwd = process.cwd()) {
@@ -872,18 +913,24 @@ function normalizeProjectFile(file, cwd = process.cwd()) {
   return relative;
 }
 
-export function rollbackApplySnapshot(
+export function  
+backApplySnapshot(
   batch,
-  rollbackSnapshot,
+   
+backSnapshot,
   extraFiles = [],
-  _reason = 'manual_edit_apply_snapshot_rollback',
+  _reason = 'manual_edit_apply_snapshot_ 
+back',
   cwd = process.cwd(),
 ) {
   const scope = collectManualApplyFiles(batch, extraFiles, cwd);
-  const rolledBackFiles = [];
-  const rollbackFailures = [];
+  const  
+edBackFiles = [];
+  const  
+backFailures = [];
   for (const relativeFile of scope) {
-    const before = rollbackSnapshot?.get(relativeFile);
+    const before =  
+backSnapshot?.get(relativeFile);
     if (!before) continue;
     const absolute = path.resolve(cwd, relativeFile);
     try {
@@ -893,12 +940,16 @@ export function rollbackApplySnapshot(
       } else if (fs.existsSync(absolute)) {
         fs.rmSync(absolute);
       }
-      rolledBackFiles.push(relativeFile);
+       
+edBackFiles.push(relativeFile);
     } catch (err) {
-      rollbackFailures.push({ file: relativeFile, reason: 'restore_failed', message: err.message || String(err) });
+       
+backFailures.push({ file: relativeFile, reason: 'restore_failed', message: err.message || String(err) });
     }
   }
-  return { rolledBackFiles, rollbackFailures };
+  return {  
+edBackFiles,  
+backFailures };
 }
 
 function manualApplyReplyCommand(eventOrId = 'EVENT_ID') {

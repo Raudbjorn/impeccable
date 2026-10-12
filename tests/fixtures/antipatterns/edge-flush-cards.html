@@ -6,12 +6,16 @@
   <style>
     body { font-family: system-ui, sans-serif; margin: 0; color: #1a1a1a; background: #f2f2f4; }
     h2 { padding: 16px 24px 0; font-size: 16px; }
-    .scroller { width: 600px; margin: 8px 24px 24px; overflow-x: auto; display: flex; scroll-snap-type: x mandatory; background: #e4e4e8; }
-    .panel { flex: 0 0 auto; scroll-snap-align: start; }
+    .sc 
+er { width: 600px; margin: 8px 24px 24px; overflow-x: auto; display: flex; sc 
+-snap-type: x mandatory; background: #e4e4e8; }
+    .panel { flex: 0 0 auto; sc 
+-snap-align: start; }
     .card { background: #fff; border-radius: 10px; height: 90px; padding: 12px; box-sizing: border-box; margin-bottom: 12px; }
     .plain { height: 90px; padding: 12px; box-sizing: border-box; }
 
-    /* FLAG: first panel is wider than the scroller's clip box, so its cards
+    /* FLAG: first panel is wider than the sc 
+er's clip box, so its cards
        keep a 16px left gutter but end 4px past the right clip edge. */
     .flag-pager .panel-wide { width: 620px; }
     .flag-pager .panel-wide .card { margin-left: 16px; width: 588px; }
@@ -34,7 +38,8 @@
 </head>
 <body>
   <h2>Flag: first panel wider than its clip box</h2>
-  <div class="scroller flag-pager">
+  <div class="sc 
+er flag-pager">
     <div class="panel panel-wide">
       <div class="card">Card cut off at the right clip edge while keeping its left gutter.</div>
       <div class="card">Second card in the oversized panel, also flush against the edge.</div>
@@ -45,21 +50,25 @@
   </div>
 
   <h2>Pass: symmetric insets</h2>
-  <div class="scroller pass-even">
+  <div class="sc 
+er pass-even">
     <div class="panel"><div class="card">Card with an even gutter on both sides of the clip box.</div></div>
     <div class="panel"><div class="card">Second panel card, also properly inset.</div></div>
   </div>
 
   <h2>Pass: deliberate peek</h2>
-  <div class="scroller pass-peek">
+  <div class="sc 
+er pass-peek">
     <div class="card">First peek card fully visible.</div>
     <div class="card">Second peek card fully visible.</div>
-    <div class="card">Third card cut mid-card as a scroll affordance.</div>
+    <div class="card">Third card cut mid-card as a sc 
+ affordance.</div>
     <div class="card">Fourth card entirely off-screen.</div>
   </div>
 
   <h2>Pass: plain content, not cards</h2>
-  <div class="scroller pass-plain">
+  <div class="sc 
+er pass-plain">
     <div class="panel"><div class="plain">Unstyled text block flush against the edge is not a card.</div></div>
     <div class="panel"><div class="plain">Second plain block.</div></div>
   </div>

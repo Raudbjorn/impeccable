@@ -24,7 +24,8 @@ rounded:
 
 ## 1. Overview
 
-A single scrolling page on a paper-white ground. Hairline borders carry the structure; no fills, no shadows.
+A single sc 
+ing page on a paper-white ground. Hairline borders carry the structure; no fills, no shadows.
 
 ## 2. Color
 

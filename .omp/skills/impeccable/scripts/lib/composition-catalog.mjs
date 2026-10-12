@@ -1,10 +1,13 @@
 import crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { CONCEPT_STATUSES, normalizeConceptForm } from './concept-catalog.mjs';
-// Defined in roll-selection.mjs for the same reason WELL_TIERS is: this file
-// reads the filesystem, and the roll API imports the taxonomy to validate its
+// Defined in  
+-selection.mjs for the same reason WELL_TIERS is: this file
+// reads the filesystem, and the  
+ API imports the taxonomy to validate its
 // grain and platform parameters. Re-exported so importers have one place to look.
-import { COMPOSITION_GRAINS, COMPOSITION_PLATFORMS, isGrain, isPlatform } from './roll-selection.mjs';
+import { COMPOSITION_GRAINS, COMPOSITION_PLATFORMS, isGrain, isPlatform } from './ 
+-selection.mjs';
 export { COMPOSITION_GRAINS, COMPOSITION_PLATFORMS, isGrain, isPlatform };
 
 // Catalog B: compositions rather than styles. A composition organizes attention,
@@ -70,7 +73,8 @@ export function validateCompositionEntry(composition, { existingForms = new Map(
   }
   // Platforms this composition survives. Absence means all of them, so listing
   // every platform is the same as omitting the field and is rejected in favour of
-  // leaving it out; an empty array would exclude the entry from every roll.
+  // leaving it out; an empty array would exclude the entry from every  
+.
   if (composition?.platforms !== undefined && composition.platforms !== null) {
     const list = composition.platforms;
     if (!Array.isArray(list) || list.length === 0) {

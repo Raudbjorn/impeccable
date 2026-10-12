@@ -1681,7 +1681,8 @@ export function setDetectorForTesting(impl) {
 // env before emitting #2 or #3.
 //
 // Why not stay silent on dedup-clean? Earlier versions did. The model
-// quickly forgets the prior reminder once tool output scrolls past it, so
+// quickly forgets the prior reminder once tool output sc 
+s past it, so
 // re-nudging on the same file with a short "still pending" line keeps the
 // pressure on. The wording deliberately points back to "earlier this
 // session" so the model knows it's a re-mind, not a new finding.

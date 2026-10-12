@@ -2,9 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Working reveal-on-scroll fixture (browser-only pass case)</title>
+  <title>Working reveal-on-sc 
+ fixture (browser-only pass case)</title>
   <style>
-    html { scroll-behavior: smooth; }
+    html { sc 
+-behavior: smooth; }
     body { font-family: system-ui, sans-serif; margin: 0; color: #1a1a1a; background: #fff; }
     main { max-width: 640px; margin: 0 auto; padding: 32px 24px; }
     section { margin: 0 0 480px; }
@@ -17,7 +19,8 @@
   <main>
     <h1>Visible hero headline stays readable</h1>
     <p>Identical markup to the broken fixture, but the script parses and runs, so every
-    reveal section becomes visible once the detector's reveal sweep scrolls it into view.
+    reveal section becomes visible once the detector's reveal sweep sc 
+s it into view.
     Nothing on this page may produce a script-error or content-hidden finding.</p>
 
     <!-- Legitimately hidden UI: excluded from the measurement entirely -->
@@ -37,14 +40,17 @@
     </section>
     <section class="reveal" id="two">
       <h2>Second revealed section</h2>
-      <p>More reveal-on-scroll copy that carries a meaningful share of the page's
+      <p>More reveal-on-sc 
+ copy that carries a meaningful share of the page's
       character count. If the sweep or the exclusion rules regress, this fixture is the
       page that starts producing a false content-hidden-at-rest finding.</p>
     </section>
     <section class="reveal">
       <h2>Third revealed section</h2>
-      <p>The smooth scroll-behavior on the root element is deliberate: the sweep must
-      use instant scrolling or it never actually reaches these sections before it
+      <p>The smooth sc 
+-behavior on the root element is deliberate: the sweep must
+      use instant sc 
+ing or it never actually reaches these sections before it
       measures, which was the first false-positive mode found while calibrating.</p>
     </section>
   </main>

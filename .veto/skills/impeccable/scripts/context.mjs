@@ -1317,7 +1317,8 @@ function readBuildPathAt(root) {
 // A direction was dealt for a comp-led build and the phase machine never
 // started, or stopped short of the hero gate: the comp round is open. Said
 // here because every model in the corpus ran context.mjs unprompted, and
-// the run that skipped the round did so between the roll and the first
+// the run that skipped the round did so between the  
+ and the first
 // write; a boot that names the open round is a boot the write cannot claim
 // it never saw. Reads build-phase's own helper so the two agree.
 async function appendCompRoundOpenDirective(parts, ctx) {

@@ -101,7 +101,8 @@ Collapse Branch S and Branch H into one flow: **splice markup → reconcile CSS 
 
 ### 3.6 Server-first browser rehydration
 
-- On SSE `connected`, if localStorage has no session but the server reports active sessions for this page URL, **rehydrate from the server snapshot**: session id, phase, variant count, mount states, preview manifest, param values. localStorage becomes a cache for browser-only extras (scroll, picked-anchor viewport hint), not the source of truth.
+- On SSE `connected`, if localStorage has no session but the server reports active sessions for this page URL, **rehydrate from the server snapshot**: session id, phase, variant count, mount states, preview manifest, param values. localStorage becomes a cache for browser-only extras (sc 
+, picked-anchor viewport hint), not the source of truth.
 - The snapshot already carries almost everything (`summarizeActiveSessionForClient`); add the picked-element anchor descriptor to the `generate` event payload so it is journaled and replayable.
 - Result: closed tab, cleared storage, different browser profile, or the mount-failure wipe all recover to the same comparison. `live-resume.mjs`'s "tell the user to re-click Go" era ends.
 

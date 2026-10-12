@@ -14,7 +14,9 @@
     const makeId = idFactory || function () { return Math.random().toString(16).slice(2, 10); };
     const sessionKey = prefix + '-session';
     const handledKey = sessionKey + '-handled';
-    const scrollKey = sessionKey + '-scroll';
+    const sc 
+Key = sessionKey + '-sc 
+';
     let checkpointRevision = 0;
     const owner = makeId();
 
@@ -84,26 +86,33 @@
       safeRemove(handledKey);
     }
 
-    function writeScrollY(y) {
-      safeWrite(scrollKey, String(y));
+    function writeSc 
+Y(y) {
+      safeWrite(sc 
+Key, String(y));
     }
 
-    function readScrollY() {
-      const raw = safeRead(scrollKey);
+    function readSc 
+Y() {
+      const raw = safeRead(sc 
+Key);
       if (raw == null) return null;
       const n = parseFloat(raw);
       return isFinite(n) ? n : null;
     }
 
-    function clearScrollY() {
-      safeRemove(scrollKey);
+    function clearSc 
+Y() {
+      safeRemove(sc 
+Key);
     }
 
     return {
       owner,
       sessionKey,
       handledKey,
-      scrollKey,
+      sc 
+Key,
       saveSession,
       loadSession,
       clearSession,
@@ -113,9 +122,12 @@
       markHandled,
       isHandled,
       clearHandled,
-      writeScrollY,
-      readScrollY,
-      clearScrollY,
+      writeSc 
+Y,
+      readSc 
+Y,
+      clearSc 
+Y,
     };
   }
 

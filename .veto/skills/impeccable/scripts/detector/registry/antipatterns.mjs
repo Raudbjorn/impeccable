@@ -169,11 +169,14 @@ const ANTIPATTERNS = [
   {
     id: 'marquee',
     category: 'slop',
-    name: 'Auto-scrolling marquee',
+    name: 'Auto-sc 
+ing marquee',
     description:
-      'Continuously auto-scrolling content demands attention it has not earned and hides half its content at any moment. Reserve motion for content that changes; let readers move at their own pace.',
+      'Continuously auto-sc 
+ing content demands attention it has not earned and hides half its content at any moment. Reserve motion for content that changes; let readers move at their own pace.',
     skillSection: 'Motion',
-    skillGuideline: 'auto-scrolling marquee',
+    skillGuideline: 'auto-sc 
+ing marquee',
   },
   {
     id: 'icon-tile-stack',
@@ -310,9 +313,11 @@ const ANTIPATTERNS = [
     id: 'edge-flush-cards',
     category: 'quality',
     scopes: ['layout'],
-    name: 'Cards flush against the scroller edge',
+    name: 'Cards flush against the sc 
+er edge',
     description:
-      'Cards inside a horizontal scroller or tab panel sit flush against the container edge at rest while keeping a gutter on the other side, so their edges and rounded corners get cut off. Usually the panel is sized wider than its clip box. Keep a consistent inset on both sides.',
+      'Cards inside a horizontal sc 
+er or tab panel sit flush against the container edge at rest while keeping a gutter on the other side, so their edges and rounded corners get cut off. Usually the panel is sized wider than its clip box. Keep a consistent inset on both sides.',
   },
   {
     id: 'text-occlusion',
@@ -458,7 +463,9 @@ const ANTIPATTERNS = [
     scopes: ['layout'],
     name: 'Content overflowing its container',
     description:
-      'Content renders wider than its container, spilling out or forcing a horizontal scrollbar. Let text wrap, constrain widths, or give the region a deliberate scroll affordance.',
+      'Content renders wider than its container, spilling out or forcing a horizontal sc 
+bar. Let text wrap, constrain widths, or give the region a deliberate sc 
+ affordance.',
     skillSection: 'Layout & Space',
     skillGuideline: 'content wider than its container',
   },

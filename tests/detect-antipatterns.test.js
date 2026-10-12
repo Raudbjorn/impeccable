@@ -825,7 +825,8 @@ describe('checkElementTextOverflowDOM', () => {
     style = baseTextStyle(),
     clientWidth = 24,
     clientHeight = 20,
-    scrollWidth = 80,
+    sc 
+Width = 80,
     rectWidth = clientWidth,
     rectHeight = clientHeight,
   } = {}) {
@@ -836,7 +837,8 @@ describe('checkElementTextOverflowDOM', () => {
       parentElement: null,
       clientWidth,
       clientHeight,
-      scrollWidth,
+      sc 
+Width,
       __style: style,
       getAttribute(name) {
         return name === 'class' ? className : null;
@@ -925,7 +927,8 @@ describe('checkElementTextOverflowDOM', () => {
       }),
       clientWidth: 1,
       clientHeight: 1,
-      scrollWidth: 240,
+      sc 
+Width: 240,
       rectWidth: 1,
       rectHeight: 1,
     });
@@ -1773,7 +1776,8 @@ describe('numbered-section-labels — pure helpers', () => {
   test('parseNumberedLabelText accepts zero-padded and separator forms only', () => {
     expect(parseNumberedLabelText('01')).toEqual({ index: 1, text: '01' });
     expect(parseNumberedLabelText('12')).toEqual({ index: 12, text: '12' });
-    expect(parseNumberedLabelText('04 / rollout')).toMatchObject({ index: 4 });
+    expect(parseNumberedLabelText('04 /  
+out')).toMatchObject({ index: 4 });
     expect(parseNumberedLabelText('6 · getting started')).toMatchObject({ index: 6 });
     expect(parseNumberedLabelText('7')).toBeNull();
     expect(parseNumberedLabelText('Step 3')).toBeNull();
@@ -1996,7 +2000,8 @@ describe('hover contrast + color-mix', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Auto-scrolling marquee
+// Auto-sc 
+ing marquee
 // ---------------------------------------------------------------------------
 
 describe('marquee', () => {

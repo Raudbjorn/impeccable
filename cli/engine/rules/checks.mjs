@@ -1118,7 +1118,8 @@ function collectMarqueeKeyframes(content) {
   return names;
 }
 
-// Auto-scrolling marquee: a <marquee> element, or an infinite animation
+// Auto-sc 
+ing marquee: a <marquee> element, or an infinite animation
 // bound to a keyframe loop that travels a large horizontal distance.
 // Rotation/opacity animations never qualify (no X travel); JS-driven
 // carousels with user controls have no infinite CSS X-loop to match.
@@ -1721,7 +1722,8 @@ function checkHtmlPatterns(html, corpora) {
   findings.push(...scanCssTextForOrganicClipPath(styleText));
   findings.push(...scanCssTextForBuriedRaster(styleText));
 
-  // Auto-scrolling marquees (<marquee> or infinite horizontal loop animations)
+  // Auto-sc 
+ing marquees (<marquee> or infinite horizontal loop animations)
   findings.push(...scanCssTextForMarquee(styleText, html));
 
   // --- Dark glow / chromatic halo shadows ---
@@ -4610,7 +4612,8 @@ function checkElementGptBorderShadowDOM(el) {
 }
 
 // ─── Clipped overflow container ───────────────────────────────────────────────
-// A clipping container (overflow hidden/clip, not a scroll region) wrapping an
+// A clipping container (overflow hidden/clip, not a sc 
+ region) wrapping an
 // absolutely/fixed-positioned descendant clips popovers/menus that must escape.
 function classSelector(el) {
   const cls = (el.getAttribute ? el.getAttribute('class') : el.className) || '';
@@ -4675,7 +4678,8 @@ function clippingContainerIsIntentionalViewport(el) {
   const roleDescription = (el.getAttribute('aria-roledescription') || '').toLowerCase();
   if (/\b(carousel|slider)\b/.test(roleDescription)) return true;
   const ident = `${el.getAttribute('class') || ''} ${el.getAttribute('id') || ''}`.toLowerCase();
-  return /\b(carousel|comparison|compare|fisheye|marquee|preview|scroller|slider|slideshow|split|viewport)\b/.test(ident) ||
+  return /\b(carousel|comparison|compare|fisheye|marquee|preview|sc 
+er|slider|slideshow|split|viewport)\b/.test(ident) ||
     /\b(demo-area|demo-stage|demo-viewport)\b/.test(ident);
 }
 
@@ -4727,13 +4731,20 @@ function positionedChildEscapesClip(el, child, clipX, clipY) {
 
 function checkClippedOverflow(el, style, getStyle) {
   const clips = (v) => v === 'hidden' || v === 'clip';
-  const scrolls = (v) => v === 'auto' || v === 'scroll';
+  const sc 
+s = (v) => v === 'auto' || v === 'sc 
+';
   const ox = style.overflowX || '', oy = style.overflowY || '', ov = style.overflow || '';
   const clipX = clips(ox) || clips(ov);
   const clipY = clips(oy) || clips(ov);
   const anyClip = clipX || clipY;
-  const anyScroll = scrolls(ox) || scrolls(oy) || scrolls(ov);
-  if (!anyClip || anyScroll) return [];
+  const anySc 
+ = sc 
+s(ox) || sc 
+s(oy) || sc 
+s(ov);
+  if (!anyClip || anySc 
+) return [];
   if (clippingContainerIsIntentionalViewport(el)) return [];
   if (!el.querySelectorAll) return [];
   for (const child of el.querySelectorAll('*')) {
@@ -4759,7 +4770,8 @@ function checkElementClippedOverflowDOM(el) {
   return checkClippedOverflow(el, style, (n) => getComputedStyle(n));
 }
 
-// ─── Text overflow (browser-only: needs scrollWidth/clientWidth) ──────────────
+// ─── Text overflow (browser-only: needs sc 
+Width/clientWidth) ──────────────
 const TEXT_OVERFLOW_SKIP_TAGS = new Set(['pre', 'code', 'textarea', 'svg', 'canvas', 'select', 'option', 'marquee']);
 
 function metricLengthPx(value, fontSizePx = 16) {
@@ -4837,14 +4849,16 @@ function isRenderedForBrowserRule(el) {
 function checkElementTextOverflowDOM(el) {
   const tag = el.tagName.toLowerCase();
   if (TEXT_OVERFLOW_SKIP_TAGS.has(tag)) return [];
-  // scrollWidth/clientWidth are CSS box-model metrics; on SVG content Chrome
+  // sc 
+Width/clientWidth are CSS box-model metrics; on SVG content Chrome
   // returns arbitrary non-zero values for both (a <text> reported 78/48 while
   // its rendered length sat comfortably inside its box), so the delta is
   // noise, not overflow. SVG clips to its own viewport anyway.
   if (el.namespaceURI === 'http://www.w3.org/2000/svg') return [];
   if (!isRenderedForBrowserRule(el)) return [];
   // Only the element that actually owns overflowing text — not its ancestors,
-  // which inherit a wider scrollWidth from the spilling descendant.
+  // which inherit a wider sc 
+Width from the spilling descendant.
   const hasDirectText = [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim().length > 0);
   if (!hasDirectText) return [];
   const style = getComputedStyle(el);
@@ -4855,19 +4869,29 @@ function checkElementTextOverflowDOM(el) {
     clientWidth: el.clientWidth,
     clientHeight: el.clientHeight,
   })) return [];
-  const isScrollRegion = (s) => /(auto|scroll)/.test(s.overflowX || '') || /(auto|scroll)/.test(s.overflow || '');
-  if (isScrollRegion(style)) return [];
-  // A scrollable ancestor means this overflow is intentional and scrollable.
+  const isSc 
+Region = (s) => /(auto|sc 
+)/.test(s.overflowX || '') || /(auto|sc 
+)/.test(s.overflow || '');
+  if (isSc 
+Region(style)) return [];
+  // A sc 
+able ancestor means this overflow is intentional and sc 
+able.
   for (let p = el.parentElement; p; p = p.parentElement) {
-    if (isScrollRegion(getComputedStyle(p))) return [];
+    if (isSc 
+Region(getComputedStyle(p))) return [];
   }
-  const delta = el.scrollWidth - el.clientWidth;
+  const delta = el.sc 
+Width - el.clientWidth;
   if (el.clientWidth > 0 && delta >= 16) {
     return [{ id: 'text-overflow', snippet: `${classSelector(el)} overflows its box by ${Math.round(delta)}px` }];
   }
 
-  // Inline text owners have no client geometry (clientWidth/scrollWidth are
-  // both 0), so the scrollWidth path above never sees them. Their overflow
+  // Inline text owners have no client geometry (clientWidth/sc 
+Width are
+  // both 0), so the sc 
+Width path above never sees them. Their overflow
   // registers only on a block ancestor, and that ancestor has no direct text
   // so the ownership gate skips it. (The shipped miss: a nowrap inline
   // <span> spilling 45px past its fixed-width grid cell.) Measure the inline
@@ -4963,7 +4987,8 @@ function checkElementBlinkingCursorDOM(el) {
   if (rect.width <= 0 || rect.height <= 0) return [];
 
   // First-viewport gate: the hero cliché, not a footer terminal.
-  const pageTop = rect.top + (window.scrollY || 0);
+  const pageTop = rect.top + (window.sc 
+Y || 0);
   if (pageTop > CURSOR_FIRST_VIEWPORT_PX) return [];
 
   // Cursor shape: a lone block/underscore glyph, or an empty solid
@@ -5075,9 +5100,12 @@ function measureHiddenTextDOM() {
 }
 
 // Pure threshold check over a measureHiddenTextDOM() result. The URL engine
-// calls it AFTER a reveal sweep (scroll through the document so every
-// IntersectionObserver / scroll reveal had its chance to fire, then back to
-// the top): a healthy reveal-on-scroll page drops to ~0 invisible text after
+// calls it AFTER a reveal sweep (sc 
+ through the document so every
+// IntersectionObserver / sc 
+ reveal had its chance to fire, then back to
+// the top): a healthy reveal-on-sc 
+ page drops to ~0 invisible text after
 // the sweep, while a page whose reveal script died keeps most of its text at
 // opacity 0 forever. Fires only when the invisible share stays above 30%
 // with a real amount of text behind it.
@@ -5093,42 +5121,69 @@ function checkContentHiddenAtRest({ totalChars = 0, hiddenChars = 0, hiddenSampl
 }
 
 // ---------------------------------------------------------------------------
-// Edge-flush cards in horizontal scrollers (browser-only)
+// Edge-flush cards in horizontal sc 
+ers (browser-only)
 // ---------------------------------------------------------------------------
 
 // A visually-defined card (own opaque background, or borders on 2+ sides)
-// inside a horizontal scroller, sitting flush against one edge of the
-// scroller's clip box at rest while keeping a clear gutter on the other
+// inside a horizontal sc 
+er, sitting flush against one edge of the
+// sc 
+er's clip box at rest while keeping a clear gutter on the other
 // side. The canonical bug: the first snap panel is sized wider than the
-// scroller, so its cards end exactly at the clip edge with their rounded
+// sc 
+er, so its cards end exactly at the clip edge with their rounded
 // corners cut, while every sibling panel keeps its inset. Cards that extend
 // far past the edge are deliberate peeks and stay exempt.
 function checkEdgeFlushCardsDOM() {
   const findings = [];
   const vh = window.innerHeight || 800;
-  const isScroller = (s) => /(auto|scroll)/.test(s.overflowX || '') || /(auto|scroll)/.test(s.overflow || '');
+  const isSc 
+er = (s) => /(auto|sc 
+)/.test(s.overflowX || '') || /(auto|sc 
+)/.test(s.overflow || '');
 
-  for (const scroller of document.querySelectorAll('*')) {
-    const style = getComputedStyle(scroller);
-    if (!isScroller(style)) continue;
-    if (scroller.scrollWidth <= scroller.clientWidth + 8) continue;
-    // At rest only: a user-scrolled or snapped-forward scroller legitimately
+  for (const sc 
+er of document.querySelectorAll('*')) {
+    const style = getComputedStyle(sc 
+er);
+    if (!isSc 
+er(style)) continue;
+    if (sc 
+er.sc 
+Width <= sc 
+er.clientWidth + 8) continue;
+    // At rest only: a user-sc 
+ed or snapped-forward sc 
+er legitimately
     // shows cut cards at both edges.
-    if (scroller.scrollLeft > 4) continue;
-    const scRect = scroller.getBoundingClientRect();
+    if (sc 
+er.sc 
+Left > 4) continue;
+    const scRect = sc 
+er.getBoundingClientRect();
     if (scRect.width < 120 || scRect.height < 60) continue;
     // Landing-region gate: the defect matters where the page opens.
-    if (scRect.top + (window.scrollY || 0) > 2 * vh) continue;
-    const contentLeft = scRect.left + scroller.clientLeft;
-    const contentRight = contentLeft + scroller.clientWidth;
+    if (scRect.top + (window.sc 
+Y || 0) > 2 * vh) continue;
+    const contentLeft = scRect.left + sc 
+er.clientLeft;
+    const contentRight = contentLeft + sc 
+er.clientWidth;
 
     const flush = [];
-    for (const card of scroller.querySelectorAll('*')) {
+    for (const card of sc 
+er.querySelectorAll('*')) {
       if (!isRenderedForBrowserRule(card)) continue;
-      // Attribute cards to their nearest scroller only (nested scrollers).
+      // Attribute cards to their nearest sc 
+er only (nested sc 
+ers).
       let owner = card.parentElement;
-      while (owner && owner !== scroller && !isScroller(getComputedStyle(owner))) owner = owner.parentElement;
-      if (owner !== scroller) continue;
+      while (owner && owner !== sc 
+er && !isSc 
+er(getComputedStyle(owner))) owner = owner.parentElement;
+      if (owner !== sc 
+er) continue;
       const cs = getComputedStyle(card);
       const rect = card.getBoundingClientRect();
       if (rect.width < 80 || rect.height < 40) continue;
@@ -5149,9 +5204,11 @@ function checkEdgeFlushCardsDOM() {
     if (flush.length === 0) continue;
     const worst = flush.reduce((a, b) => (b.gap < a.gap ? b : a));
     findings.push({
-      el: scroller,
+      el: sc 
+er,
       type: 'edge-flush-cards',
-      detail: `${flush.length} card${flush.length === 1 ? '' : 's'} flush against the ${worst.edge} edge of ${classSelector(scroller)} at rest (${worst.gap}px gap, e.g. ${classSelector(worst.card)})`,
+      detail: `${flush.length} card${flush.length === 1 ? '' : 's'} flush against the ${worst.edge} edge of ${classSelector(sc 
+er)} at rest (${worst.gap}px gap, e.g. ${classSelector(worst.card)})`,
     });
   }
   return findings;
@@ -5221,7 +5278,8 @@ function isPaintedForOcclusion(el) {
 // class-name-collision bug) covers a sibling.
 //
 // The occlusion probe is viewport-bound: elementFromPoint only answers for the
-// scan's current viewport (scroll 0), so the ground-truth paths cover the
+// scan's current viewport (sc 
+ 0), so the ground-truth paths cover the
 // first-viewport composition where collisions matter most. The inline-leak
 // path is pure geometry and runs anywhere on the page.
 const OCCLUSION_TEXT_SKIP_TAGS = new Set(['script', 'style', 'noscript', 'template', 'title']);
@@ -5255,12 +5313,16 @@ function checkTextOcclusionDOM() {
   const isMarqueeish = (el, cs) => {
     if (el.tagName === 'MARQUEE') return true;
     const ident = `${el.getAttribute?.('class') || ''} ${el.getAttribute?.('id') || ''}`;
-    if (/\b(marquee|ticker|scroller|carousel|conveyor)\b/i.test(ident)) return true;
+    if (/\b(marquee|ticker|sc 
+er|carousel|conveyor)\b/i.test(ident)) return true;
     const anim = String(cs.animationName || '').toLowerCase();
-    return /marquee|ticker|scroll/.test(anim);
+    return /marquee|ticker|sc 
+/.test(anim);
   };
   // A fixed or sticky overlay (status bar, toolbar, sticky header) floats above
-  // scrolling content by design — whatever sits under it at rest scrolls clear,
+  // sc 
+ing content by design — whatever sits under it at rest sc 
+s clear,
   // so it is not occluding the page.
   const isPinnedOverlay = (el) => {
     for (let cur = el; cur && cur.nodeType === 1 && cur !== document.body; cur = cur.parentElement) {
@@ -5275,21 +5337,26 @@ function checkTextOcclusionDOM() {
   // reads as an opaque box.
   const effectiveOpacity = effectiveOpacityDOM;
 
-  // The part of an element that is actually painted, after every scrolling or
+  // The part of an element that is actually painted, after every sc 
+ing or
   // clipping ancestor has had its say.
   //
   // getBoundingClientRect reports where a box would be if nothing cut it off,
-  // so a paragraph half scrolled out of a panel still reports its full height,
+  // so a paragraph half sc 
+ed out of a panel still reports its full height,
   // and the half that is clipped away lands wherever the page continues below
   // the panel. The elementFromPoint probe then samples coordinates the text is
   // not painted at, finds whatever genuinely is painted there, and reports the
-  // text as buried under it. Any sticky footer or toolbar beneath a scroll
+  // text as buried under it. Any sticky footer or toolbar beneath a sc 
+
   // region produces this, and it is the shape most likely to be waved off as
   // noise, which costs the rule its credibility on the findings that are real.
   //
   // Border box rather than padding box on purpose: it errs toward probing, and
-  // giving up a scrollbar gutter's width would drop true findings at the right
-  // edge of a scroller.
+  // giving up a sc 
+bar gutter's width would drop true findings at the right
+  // edge of a sc 
+er.
   const paintedRect = (el, rect) => {
     let left = rect.left, top = rect.top, right = rect.right, bottom = rect.bottom;
     for (let cur = el.parentElement; cur && cur !== document.documentElement; cur = cur.parentElement) {
@@ -5472,7 +5539,8 @@ function checkTextOcclusionDOM() {
     if (rect.height < 2.2 * lineHeight) continue;
     if (seenVictims.has(el)) continue;
     // Name a neighbour the fill lands on, if one is nearby (paint state aside,
-    // reveal-on-scroll siblings still occupy the space it covers).
+    // reveal-on-sc 
+ siblings still occupy the space it covers).
     let overlaps = null;
     for (const other of el.parentElement ? el.parentElement.children : []) {
       if (other === el || el.contains(other) || other.contains(el)) continue;
@@ -5515,7 +5583,8 @@ function checkFirstViewportColumnOverflowDOM() {
     if (!isMultiCol(style)) continue;
     let rect; try { rect = el.getBoundingClientRect(); } catch { continue; }
     if (rect.width < 0.5 * vw) continue;
-    const pageTop = rect.top + (window.scrollY || 0);
+    const pageTop = rect.top + (window.sc 
+Y || 0);
     const pageBottom = pageTop + rect.height;
     // The fold must fall inside this container: it opens within the first
     // viewport and runs past it.

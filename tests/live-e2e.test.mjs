@@ -1873,10 +1873,15 @@ async function runManualEditStage(page, stage, { t, fixture, session, agentMode,
     }
   }
 
-  if (stage.expectNoRollback) {
+  if (stage.expectNo 
+back) {
     const status = await getServerManualEditStatus(session.live);
-    const rolledBackFiles = status.manualEdits?.lastActivity?.rolledBackFiles || [];
-    assert.deepEqual(rolledBackFiles, [], 'manual Apply should not report rolled-back files');
+    const  
+edBackFiles = status.manualEdits?.lastActivity?. 
+edBackFiles || [];
+    assert.deepEqual( 
+edBackFiles, [], 'manual Apply should not report  
+ed-back files');
     assert.notEqual(status.manualEdits?.lastActivity?.reason, 'manual_edit_repair_needs_decision');
   }
 

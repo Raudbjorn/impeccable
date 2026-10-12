@@ -14,7 +14,8 @@
  *                     warnings to delete rules the accepted markup no longer
  *                     references
  *
- * The parser is hand-rolled on purpose: skill scripts run standalone inside
+ * The parser is hand- 
+ed on purpose: skill scripts run standalone inside
  * user projects and cannot rely on this repo's node_modules. It is a small
  * recursive block parser (comment- and string-aware), not a spec-complete
  * CSS parser; everything it emits round-trips byte-for-byte through raw

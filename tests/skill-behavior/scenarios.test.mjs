@@ -1,6 +1,7 @@
 /**
  * Skill-behavior scenarios — verify how the agent loads PRODUCT.md / DESIGN.md
- * across a controlled matrix of starting states.
+ * across a cont 
+ed matrix of starting states.
  *
  * Refactors that touch the Setup section of SKILL.md should keep these
  * assertions green. If you change Setup intentionally and the assertions
